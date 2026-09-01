@@ -25,7 +25,9 @@ setup/schema.mjs            Legt alle Sammlungen an, wiederholbar
 app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
 app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
 app/src/ui.jsx               Formatierung, Farben, gemeinsame Bausteine
-app/src/App.jsx              Login, Datenladung, Monatswechsel, Tabs
+app/src/App.jsx              Login, Datenladung, Monatswechsel, Tabs,
+                              responsive Shell (Sidebar ab `md`,
+                              sonst Bottom-Nav + FAB)
 app/src/screens/             Buchungen, Auswertung, Budgets, Konten,
                               NewEntry, Import
 ```
@@ -59,6 +61,8 @@ Die App-Version folgt echtem `MAJOR.MINOR.PATCH`-Semver, kein einzelner, immer n
 - **MAJOR** (z. B. → `1.0.0`) → nie eigenständig erhöhen, immer vorher fragen
 
 Die Version wird unaufgefordert im selben Commit wie die Codeänderung erhöht, nicht in einem separaten Folge-Commit — und vor einem Rebuild/Neustart (z. B. `docker compose up --build`), damit die laufende Instanz die neue Version sofort zeigt. Gibt es noch keinen Versions-Identifier im Code, wird das angesprochen, sobald echter Feature-Code committet werden soll, statt stillschweigend einen Ort dafür festzulegen.
+
+Der Identifier liegt in `app/package.json` (`version`), wird über `vite.config.js` (`define: { __APP_VERSION__ }`) in den Build eingebunden und erscheint unten in der Desktop-Sidebar (`App.jsx`). Im mobilen Layout ist er nicht sichtbar, dort ist kein Platz dafür vorgesehen.
 
 ## Bewusst nicht gebaut
 

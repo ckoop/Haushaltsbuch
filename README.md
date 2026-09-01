@@ -48,7 +48,7 @@ Girokonto anzulegen.
 
 ## CSV-Import
 
-Unter *Mehr → CSV-Datei importieren*, in drei Schritten: Datei wählen,
+Unter *Konten → CSV-Datei importieren*, in drei Schritten: Datei wählen,
 Spalten zuordnen, Vorschau prüfen. Kodierung, Trennzeichen, Kopfzeile und
 Spaltenzuordnung werden geraten — bei den meisten deutschen Bank-Exporten
 musst du nichts anfassen.

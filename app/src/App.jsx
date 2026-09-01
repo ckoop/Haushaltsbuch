@@ -128,68 +128,94 @@ function Shell() {
     balances, acc, setAcc, monthKey: key, reload: load, flash, setError,
   };
 
+  const navItems = [
+    { id: "buchungen", label: "Buchungen", Icon: List },
+    { id: "auswertung", label: "Auswertung", Icon: PieChart },
+    { id: "budgets", label: "Budgets", Icon: Target },
+    { id: "konten", label: "Konten", Icon: Settings },
+  ];
+
   return (
     <div className="min-h-full bg-stone-100 flex justify-center">
-      <div className="w-full max-w-md bg-[#FAFAF8] min-h-full flex flex-col relative overflow-hidden">
-        <header className="pt-5 pb-3 border-b border-stone-200 px-5">
-          <div className="flex items-center justify-between">
-            <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
-              <ChevronLeft size={20} />
+      <div className="w-full max-w-md md:max-w-5xl bg-[#FAFAF8] min-h-full flex flex-col md:flex-row relative overflow-hidden">
+
+        <aside className="hidden md:flex md:w-56 md:shrink-0 md:flex-col md:border-r md:border-stone-200 md:py-6 md:px-3">
+          <h1 className="text-base font-medium px-2.5 mb-6">Haushaltsbuch</h1>
+          <nav className="flex flex-col gap-1">
+            {navItems.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left ${
+                  tab === id ? "bg-emerald-700/10 text-emerald-800 font-medium" : "text-stone-600 hover:bg-stone-100"}`}>
+                <Icon size={18} strokeWidth={tab === id ? 2.1 : 1.6} />
+                {label}
+              </button>
+            ))}
+          </nav>
+          {!needsSetup && accounts.length > 0 && (
+            <button onClick={() => setSheet(true)}
+              className="mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-700 text-white text-sm font-medium active:scale-[0.98] transition-transform">
+              <Plus size={17} /> Neue Buchung
             </button>
-            <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
-            <button onClick={() => shift(1)} className="p-1.5 -mr-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto pb-24">
-          {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
-          {loading && <Spinner />}
-
-          {needsSetup && <FirstRun onDone={load} setError={setError} />}
-
-          {!loading && !needsSetup && (
-            <>
-              {tab === "buchungen" && <Buchungen {...shared} />}
-              {tab === "auswertung" && <Auswertung {...shared} />}
-              {tab === "budgets" && <BudgetScreen {...shared} />}
-              {tab === "konten" && <Konten {...shared} />}
-            </>
           )}
-        </main>
+          <p className="mt-auto pt-6 px-2.5 text-xs text-stone-400">v{__APP_VERSION__}</p>
+        </aside>
 
-        {!needsSetup && accounts.length > 0 && (
-          <button onClick={() => setSheet(true)}
-            className="absolute bottom-24 right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
-            aria-label="Neue Buchung">
-            <Plus size={26} />
-          </button>
-        )}
+        <div className="flex-1 min-w-0 flex flex-col relative overflow-hidden">
+          <header className="pt-5 pb-3 border-b border-stone-200 px-5">
+            <div className="flex items-center justify-between">
+              <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
+                <ChevronLeft size={20} />
+              </button>
+              <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
+              <button onClick={() => shift(1)} className="p-1.5 -mr-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </header>
 
-        <nav className="absolute bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4">
-          {[
-            { id: "buchungen", label: "Buchungen", Icon: List },
-            { id: "auswertung", label: "Auswertung", Icon: PieChart },
-            { id: "budgets", label: "Budgets", Icon: Target },
-            { id: "konten", label: "Mehr", Icon: Settings },
-          ].map(({ id, label, Icon }) => (
-            <button key={id} onClick={() => setTab(id)}
-              className={`py-2.5 flex flex-col items-center gap-0.5 ${tab === id ? "text-stone-900" : "text-stone-400"}`}>
-              <Icon size={21} strokeWidth={tab === id ? 2 : 1.6} />
-              <span className="text-[11px]">{label}</span>
+          <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
+            {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
+            {loading && <Spinner />}
+
+            {needsSetup && <FirstRun onDone={load} setError={setError} />}
+
+            {!loading && !needsSetup && (
+              <>
+                {tab === "buchungen" && <Buchungen {...shared} />}
+                {tab === "auswertung" && <Auswertung {...shared} />}
+                {tab === "budgets" && <BudgetScreen {...shared} />}
+                {tab === "konten" && <Konten {...shared} />}
+              </>
+            )}
+          </main>
+
+          {!needsSetup && accounts.length > 0 && (
+            <button onClick={() => setSheet(true)}
+              className="md:hidden absolute bottom-24 right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
+              aria-label="Neue Buchung">
+              <Plus size={26} />
             </button>
-          ))}
-        </nav>
+          )}
 
-        <Toast text={toast} />
+          <nav className="md:hidden absolute bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4">
+            {navItems.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`py-2.5 flex flex-col items-center gap-0.5 ${tab === id ? "text-stone-900" : "text-stone-400"}`}>
+                <Icon size={21} strokeWidth={tab === id ? 2 : 1.6} />
+                <span className="text-[11px]">{label}</span>
+              </button>
+            ))}
+          </nav>
 
-        {sheet && (
-          <NewEntry accounts={accounts} categories={categories}
-            defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
-            onClose={() => setSheet(false)}
-            onSaved={(msg) => { flash(msg); load(); }} />
-        )}
+          <Toast text={toast} />
+
+          {sheet && (
+            <NewEntry accounts={accounts} categories={categories}
+              defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
+              onClose={() => setSheet(false)}
+              onSaved={(msg) => { flash(msg); load(); }} />
+          )}
+        </div>
       </div>
     </div>
   );
