@@ -50,6 +50,16 @@ Löschen eines Kontos ist gesperrt, solange Buchungen daran hängen. Sonst entst
 
 Budgets gelten kontoübergreifend. `budgets.month` ist Text: `"2026-08"` für einen Monat, `"*"` als Dauerbudget. Ein Monatsbudget schlägt das Dauerbudget derselben Kategorie.
 
+## Versionierung
+
+Die App-Version folgt echtem `MAJOR.MINOR.PATCH`-Semver, kein einzelner, immer nur hochzählender Zähler:
+
+- **Neues Feature** → MINOR erhöhen, PATCH auf 0 zurücksetzen (z. B. `0.1.13` → `0.2.0`)
+- **Fix/kleine Anpassung, kein neues Feature** → nur PATCH erhöhen (z. B. `0.2.0` → `0.2.1`)
+- **MAJOR** (z. B. → `1.0.0`) → nie eigenständig erhöhen, immer vorher fragen
+
+Die Version wird unaufgefordert im selben Commit wie die Codeänderung erhöht, nicht in einem separaten Folge-Commit — und vor einem Rebuild/Neustart (z. B. `docker compose up --build`), damit die laufende Instanz die neue Version sofort zeigt. Gibt es noch keinen Versions-Identifier im Code, wird das angesprochen, sobald echter Feature-Code committet werden soll, statt stillschweigend einen Ort dafür festzulegen.
+
 ## Bewusst nicht gebaut
 
 Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das war eine ausdrückliche Entscheidung gegen Komplexität: die Daten liegen an genau einem Ort, damit fallen `dirty`-Flags, Grabsteine, Cursor, Zeitstempel-Konflikte und UUID-Kollisionen alle weg.
