@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Delete } from "lucide-react";
 import * as api from "../pb.js";
 import { catIcon, colorOf, typeIcon, todayISO, inputCls, ErrorNote, Button, RECURRING } from "../ui.jsx";
+
+const TEXT_FIELDS = ["INPUT", "TEXTAREA", "SELECT"];
 
 export default function NewEntry({ accounts, categories, defaultAcc, onClose, onSaved }) {
   const expenses = categories.filter((c) => c.kind === "expense" && !c.archived);
@@ -24,6 +26,20 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const press = (d) => { setError(null); setDigits((s) => (s.length > 8 ? s : (s + d).replace(/^0+/, ""))); };
+
+  // Betrag ist auch per echter Tastatur eingebbar (Desktop) — nur wenn kein
+  // Text-/Datumsfeld fokussiert ist, sonst würde z. B. Tippen im Empfänger-Feld
+  // Ziffern ins Numpad mitreißen.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (TEXT_FIELDS.includes(document.activeElement?.tagName)) return;
+      if (e.key >= "0" && e.key <= "9") press(e.key);
+      else if (e.key === "Backspace") setDigits((s) => s.slice(0, -1));
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const commit = async (keepOpen) => {
     if (cents === 0) return setError("Betrag eingeben");
