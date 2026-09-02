@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Delete } from "lucide-react";
 import * as api from "../pb.js";
-import { catIcon, colorOf, typeIcon, todayISO, inputCls, ErrorNote, Button, RECURRING } from "../ui.jsx";
+import { catIcon, colorOf, typeIcon, todayISO, inputCls, ErrorNote, Button, Sheet, RECURRING } from "../ui.jsx";
 
 const TEXT_FIELDS = ["INPUT", "TEXTAREA", "SELECT"];
 
@@ -20,6 +20,7 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const cents = Number(digits || "0");
   const display = (cents / 100).toLocaleString("de-DE",
@@ -27,19 +28,24 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
 
   const press = (d) => { setError(null); setDigits((s) => (s.length > 8 ? s : (s + d).replace(/^0+/, ""))); };
 
+  // Betrag oder Empfänger eingetragen, aber noch nicht gesichert — beim
+  // Schließen erst nachfragen, statt die Eingabe stillschweigend zu verwerfen.
+  const hasDraft = cents > 0 || payee.trim() !== "";
+  const attemptClose = () => (hasDraft ? setConfirmClose(true) : onClose());
+
   // Betrag ist auch per echter Tastatur eingebbar (Desktop) — nur wenn kein
   // Text-/Datumsfeld fokussiert ist, sonst würde z. B. Tippen im Empfänger-Feld
-  // Ziffern ins Numpad mitreißen.
+  // Ziffern ins Numpad mitreißen. Escape schließt immer, unabhängig vom Fokus.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (e.key === "Escape") return attemptClose();
       if (TEXT_FIELDS.includes(document.activeElement?.tagName)) return;
       if (e.key >= "0" && e.key <= "9") press(e.key);
       else if (e.key === "Backspace") setDigits((s) => s.slice(0, -1));
-      else if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [hasDraft]);
 
   const commit = async (keepOpen) => {
     if (cents === 0) return setError("Betrag eingeben");
@@ -65,7 +71,7 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
   return (
     <div className="absolute inset-0 bg-[#FAFAF8] dark:bg-stone-900 flex flex-col z-20">
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-stone-200 dark:border-stone-700">
-        <button onClick={onClose} className="p-1 -ml-1 text-stone-500 dark:text-stone-400"><X size={20} /></button>
+        <button onClick={attemptClose} className="p-1 -ml-1 text-stone-500 dark:text-stone-400"><X size={20} /></button>
         <span className="text-[15px] font-medium">Neue Buchung</span>
         <span className="w-6" />
       </div>
@@ -163,6 +169,18 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
         <Button onClick={() => commit(false)} disabled={busy}>Sichern</Button>
         <Button variant="ghost" onClick={() => commit(true)} disabled={busy}>Sichern und weiter</Button>
       </div>
+
+      {confirmClose && (
+        <Sheet title="Buchung verwerfen?" onClose={() => setConfirmClose(false)}>
+          <p className="text-sm text-stone-600 dark:text-stone-300 mb-4">
+            Die Buchung ist noch nicht gespeichert. Wenn du jetzt schließt, gehen die Eingaben verloren.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="ghost" onClick={() => setConfirmClose(false)}>Weiter bearbeiten</Button>
+            <Button variant="danger" onClick={onClose}>Verwerfen</Button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

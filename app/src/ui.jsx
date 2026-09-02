@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   ShoppingCart, UtensilsCrossed, Bus, Home, Zap, Film, HeartPulse, Shirt,
   Smartphone, MoreHorizontal, ArrowDownLeft, Landmark, Wallet, PiggyBank,
@@ -95,6 +96,12 @@ export const inputCls =
   "w-full text-sm bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 dark:text-stone-100 rounded-lg px-3 py-2.5 focus:outline-none focus:border-emerald-600 dark:focus:border-emerald-500 dark:placeholder:text-stone-500";
 
 export function Sheet({ title, onClose, children }) {
+  useEffect(() => {
+    const onKeyDown = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div className="absolute inset-0 z-30 flex items-end" onClick={onClose}>
       <div className="absolute inset-0 bg-stone-900/40 dark:bg-black/60" />
