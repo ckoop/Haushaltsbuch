@@ -26,8 +26,9 @@ app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
 app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
 app/src/ui.jsx               Formatierung, Farben, gemeinsame Bausteine
 app/src/App.jsx              Login, Datenladung, Monatswechsel, Tabs,
-                              responsive Shell (Sidebar ab `md`,
-                              sonst Bottom-Nav + FAB)
+                              responsive Shell (Sidebar ab 860px,
+                              sonst Bottom-Nav + FAB), Kontext-Badges
+                              je Nav-Eintrag (Kontofilter, Kontoanzahl)
 app/src/screens/             Buchungen, Auswertung, Budgets, Konten,
                               NewEntry, Import
 ```

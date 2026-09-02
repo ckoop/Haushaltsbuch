@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  /* Ab hier zeigt die App-Shell eine Sidebar statt Bottom-Nav (wie im epoch-Projekt) */
+  --breakpoint-sidebar: 860px;
+}
+
 html, body, #root { height: 100%; }
 body {
   background: #f5f5f4;

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
-import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls } from "./ui.jsx";
+import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC } from "./ui.jsx";
 import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
@@ -135,21 +135,38 @@ function Shell() {
     { id: "konten", label: "Konten", Icon: Settings },
   ];
 
+  // Kontextinfo je Tab, analog zu den Sidebar-/Bottom-Nav-Badges im epoch-Projekt.
+  const navBadges = accounts.length > 0 ? {
+    buchungen: acc === "alle" ? "Alle Konten" : byId(accounts, acc, UNKNOWN_ACC).name,
+    konten: `${accounts.length} ${accounts.length === 1 ? "Konto" : "Konten"}`,
+  } : {};
+  const iconStroke = (active) => (active ? 2.1 : 1.6);
+
   return (
     <div className="min-h-full bg-stone-100 flex justify-center">
-      <div className="w-full max-w-md md:max-w-5xl bg-[#FAFAF8] min-h-full flex flex-col md:flex-row relative overflow-hidden">
+      <div className="w-full max-w-md sidebar:max-w-5xl bg-[#FAFAF8] min-h-full flex flex-col sidebar:flex-row relative overflow-hidden">
 
-        <aside className="hidden md:flex md:w-56 md:shrink-0 md:flex-col md:border-r md:border-stone-200 md:py-6 md:px-3">
-          <h1 className="text-base font-medium px-2.5 mb-6">Haushaltsbuch</h1>
+        <aside className="hidden sidebar:flex sidebar:w-60 sidebar:shrink-0 sidebar:flex-col sidebar:border-r sidebar:border-stone-200 sidebar:py-6 sidebar:px-3">
+          <h1 className="text-base font-medium px-2.5 mb-0.5">Haushaltsbuch</h1>
+          <p className="px-2.5 mb-6 text-xs text-emerald-700/70 font-mono">v{__APP_VERSION__}</p>
           <nav className="flex flex-col gap-1">
-            {navItems.map(({ id, label, Icon }) => (
-              <button key={id} onClick={() => setTab(id)}
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-left ${
-                  tab === id ? "bg-emerald-700/10 text-emerald-800 font-medium" : "text-stone-600 hover:bg-stone-100"}`}>
-                <Icon size={18} strokeWidth={tab === id ? 2.1 : 1.6} />
-                {label}
-              </button>
-            ))}
+            {navItems.map(({ id, label, Icon }) => {
+              const active = tab === id;
+              return (
+                <button key={id} onClick={() => setTab(id)}
+                  className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-left ${
+                    active ? "bg-emerald-700/10 text-emerald-800 font-medium" : "text-stone-600 hover:bg-stone-100"}`}>
+                  <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 border ${
+                    active ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-stone-100 border-stone-200 text-stone-500"}`}>
+                    <Icon size={15} strokeWidth={iconStroke(active)} />
+                  </span>
+                  <span className="shrink-0">{label}</span>
+                  {navBadges[id] && (
+                    <span className="flex-1 min-w-0 text-xs text-stone-400 truncate text-right font-mono">{navBadges[id]}</span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
           {!needsSetup && accounts.length > 0 && (
             <button onClick={() => setSheet(true)}
@@ -157,7 +174,6 @@ function Shell() {
               <Plus size={17} /> Neue Buchung
             </button>
           )}
-          <p className="mt-auto pt-6 px-2.5 text-xs text-stone-400">v{__APP_VERSION__}</p>
         </aside>
 
         <div className="flex-1 min-w-0 flex flex-col relative overflow-hidden">
@@ -173,7 +189,7 @@ function Shell() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
+          <main className="flex-1 overflow-y-auto pb-28 sidebar:pb-8">
             {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
             {loading && <Spinner />}
 
@@ -191,20 +207,26 @@ function Shell() {
 
           {!needsSetup && accounts.length > 0 && (
             <button onClick={() => setSheet(true)}
-              className="md:hidden absolute bottom-24 right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
+              className="sidebar:hidden absolute bottom-28 right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
               aria-label="Neue Buchung">
               <Plus size={26} />
             </button>
           )}
 
-          <nav className="md:hidden absolute bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4">
-            {navItems.map(({ id, label, Icon }) => (
-              <button key={id} onClick={() => setTab(id)}
-                className={`py-2.5 flex flex-col items-center gap-0.5 ${tab === id ? "text-stone-900" : "text-stone-400"}`}>
-                <Icon size={21} strokeWidth={tab === id ? 2 : 1.6} />
-                <span className="text-[11px]">{label}</span>
-              </button>
-            ))}
+          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4">
+            {navItems.map(({ id, label, Icon }) => {
+              const active = tab === id;
+              return (
+                <button key={id} onClick={() => setTab(id)}
+                  className={`py-2.5 flex flex-col items-center gap-0.5 ${active ? "text-stone-900" : "text-stone-400"}`}>
+                  <Icon size={21} strokeWidth={iconStroke(active)} />
+                  <span className="text-[11px]">{label}</span>
+                  {navBadges[id] && (
+                    <span className="text-[9px] text-stone-400 truncate max-w-[68px] font-mono">{navBadges[id]}</span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
 
           <Toast text={toast} />
