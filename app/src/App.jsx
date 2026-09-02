@@ -30,10 +30,10 @@ function Login() {
   };
 
   return (
-    <div className="min-h-full bg-stone-100 flex justify-center">
-      <div className="w-full max-w-md bg-[#FAFAF8] min-h-full px-6 pt-24">
+    <div className="min-h-full bg-stone-100 dark:bg-stone-950 flex justify-center">
+      <div className="w-full max-w-md bg-[#FAFAF8] dark:bg-stone-900 min-h-full px-6 pt-24">
         <h1 className="text-2xl font-medium mb-1">Haushaltsbuch</h1>
-        <p className="text-sm text-stone-500 mb-8">Melde dich an, um weiterzumachen.</p>
+        <p className="text-sm text-stone-500 dark:text-stone-400 mb-8">Melde dich an, um weiterzumachen.</p>
         <form onSubmit={submit}>
           <Field label="E-Mail">
             <input type="email" value={email} autoComplete="username"
@@ -143,26 +143,28 @@ function Shell() {
   const iconStroke = (active) => (active ? 2.1 : 1.6);
 
   return (
-    <div className="min-h-full bg-stone-100 flex justify-center">
-      <div className="w-full max-w-md sidebar:max-w-5xl bg-[#FAFAF8] min-h-full flex flex-col sidebar:flex-row relative overflow-hidden">
+    <div className="min-h-full bg-stone-100 dark:bg-stone-950 flex justify-center">
+      <div className="w-full max-w-md sidebar:max-w-5xl bg-[#FAFAF8] dark:bg-stone-900 min-h-full flex flex-col sidebar:flex-row relative overflow-hidden">
 
-        <aside className="hidden sidebar:flex sidebar:w-60 sidebar:shrink-0 sidebar:flex-col sidebar:border-r sidebar:border-stone-200 sidebar:py-6 sidebar:px-3">
+        <aside className="hidden sidebar:flex sidebar:w-60 sidebar:shrink-0 sidebar:flex-col sidebar:border-r sidebar:border-stone-200 dark:sidebar:border-stone-700 sidebar:py-6 sidebar:px-3">
           <h1 className="text-base font-medium px-2.5 mb-0.5">Haushaltsbuch</h1>
-          <p className="px-2.5 mb-6 text-xs text-emerald-700/70 font-mono">v{__APP_VERSION__}</p>
+          <p className="px-2.5 mb-6 text-xs text-emerald-700/70 dark:text-emerald-400/70 font-mono">v{__APP_VERSION__}</p>
           <nav className="flex flex-col gap-1">
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (
                 <button key={id} onClick={() => setTab(id)}
                   className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-left ${
-                    active ? "bg-emerald-700/10 text-emerald-800 font-medium" : "text-stone-600 hover:bg-stone-100"}`}>
+                    active ? "bg-emerald-700/10 dark:bg-emerald-400/10 text-emerald-800 dark:text-emerald-400 font-medium"
+                      : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}>
                   <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 border ${
-                    active ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-stone-100 border-stone-200 text-stone-500"}`}>
+                    active ? "bg-emerald-50 dark:bg-emerald-400/10 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400"
+                      : "bg-stone-100 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400"}`}>
                     <Icon size={15} strokeWidth={iconStroke(active)} />
                   </span>
                   <span className="shrink-0">{label}</span>
                   {navBadges[id] && (
-                    <span className="flex-1 min-w-0 text-xs text-stone-400 truncate text-right font-mono">{navBadges[id]}</span>
+                    <span className="flex-1 min-w-0 text-xs text-stone-400 dark:text-stone-500 truncate text-right font-mono">{navBadges[id]}</span>
                   )}
                 </button>
               );
@@ -170,20 +172,20 @@ function Shell() {
           </nav>
           {!needsSetup && accounts.length > 0 && (
             <button onClick={() => setSheet(true)}
-              className="mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-700 text-white text-sm font-medium active:scale-[0.98] transition-transform">
+              className="mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-700 dark:bg-emerald-600 text-white text-sm font-medium active:scale-[0.98] transition-transform">
               <Plus size={17} /> Neue Buchung
             </button>
           )}
         </aside>
 
         <div className="flex-1 min-w-0 flex flex-col relative overflow-hidden">
-          <header className="pt-5 pb-3 border-b border-stone-200 px-5">
+          <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5">
             <div className="flex items-center justify-between">
-              <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
+              <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
                 <ChevronLeft size={20} />
               </button>
               <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
-              <button onClick={() => shift(1)} className="p-1.5 -mr-1.5 rounded-lg text-stone-500 hover:bg-stone-200/70">
+              <button onClick={() => shift(1)} className="p-1.5 -mr-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
                 <ChevronRight size={20} />
               </button>
             </div>
@@ -213,16 +215,17 @@ function Shell() {
             </button>
           )}
 
-          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4">
+          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid grid-cols-4">
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (
                 <button key={id} onClick={() => setTab(id)}
-                  className={`py-2.5 flex flex-col items-center gap-0.5 ${active ? "text-stone-900" : "text-stone-400"}`}>
+                  className={`py-2.5 flex flex-col items-center gap-0.5 ${
+                    active ? "text-stone-900 dark:text-stone-50" : "text-stone-400 dark:text-stone-500"}`}>
                   <Icon size={21} strokeWidth={iconStroke(active)} />
                   <span className="text-[11px]">{label}</span>
                   {navBadges[id] && (
-                    <span className="text-[9px] text-stone-400 truncate max-w-[68px] font-mono">{navBadges[id]}</span>
+                    <span className="text-[9px] text-stone-400 dark:text-stone-500 truncate max-w-[68px] font-mono">{navBadges[id]}</span>
                   )}
                 </button>
               );
@@ -254,7 +257,7 @@ function FirstRun({ onDone, setError }) {
   return (
     <div className="px-6 py-16 text-center">
       <h2 className="text-lg font-medium mb-2">Noch nichts da</h2>
-      <p className="text-sm text-stone-500 mb-6">
+      <p className="text-sm text-stone-500 dark:text-stone-400 mb-6">
         Ich lege dir elf übliche Kategorien und ein Girokonto an. Beides kannst du danach ändern.
       </p>
       <Button onClick={go} disabled={busy} className="w-full">

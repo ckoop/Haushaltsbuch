@@ -117,6 +117,17 @@ statt 200 Zeilen einzeln zu suchen.
 **`budgets.month` ist Text.** `"2026-08"` für einen einzelnen Monat, `"*"` als
 Dauerbudget. So musst du nicht jeden Monat alles neu anlegen.
 
+**`transactions.recurring` markiert Wiederkehrendes** (`monthly`/`quarterly`/
+`yearly`, leer = nein). Erzeugt keine künftigen Buchungen automatisch, macht
+nur bereits erfasste Zeilen in der Buchungsliste und in der Auswertung
+kenntlich.
+
+⚠️ Auf einer bestehenden Instanz legt `setup/schema.mjs` dieses Feld **nicht**
+automatisch nach — das Skript überspringt Sammlungen, die schon existieren.
+Einmalig manuell ergänzen: Admin-Oberfläche → *Collections* → `transactions`
+→ Feld hinzufügen → *Select*, Name `recurring`, Werte `monthly`/`quarterly`/
+`yearly`, nicht required.
+
 ## Sicherung
 
 PocketBase bringt eigene Sicherungen mit: *Settings → Backups*, dort einen

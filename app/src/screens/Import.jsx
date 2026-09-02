@@ -144,15 +144,15 @@ export default function Import({ accounts, categories, onBack, flash }) {
 
   return (
     <div className="px-5 py-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-stone-500 mb-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-stone-500 dark:text-stone-400 mb-4">
         <ChevronLeft size={16} /> Zurück
       </button>
 
       <div className="flex gap-1.5 mb-5">
         {STEPS.map((s, i) => (
           <div key={s} className="flex-1">
-            <div className={`h-1 rounded-full ${i <= step ? "bg-emerald-600" : "bg-stone-200"}`} />
-            <p className={`text-[11px] mt-1 ${i === step ? "text-stone-900" : "text-stone-400"}`}>{s}</p>
+            <div className={`h-1 rounded-full ${i <= step ? "bg-emerald-600 dark:bg-emerald-500" : "bg-stone-200 dark:bg-stone-700"}`} />
+            <p className={`text-[11px] mt-1 ${i === step ? "text-stone-900 dark:text-stone-50" : "text-stone-400 dark:text-stone-500"}`}>{s}</p>
           </div>
         ))}
       </div>
@@ -161,23 +161,23 @@ export default function Import({ accounts, categories, onBack, flash }) {
 
       {step === 0 && (
         <>
-          <label className="block border border-dashed border-stone-300 rounded-xl px-4 py-10 text-center cursor-pointer active:bg-stone-100">
-            <FileUp size={22} className="mx-auto text-stone-400 mb-2" />
+          <label className="block border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-10 text-center cursor-pointer active:bg-stone-100 dark:active:bg-stone-800">
+            <FileUp size={22} className="mx-auto text-stone-400 dark:text-stone-500 mb-2" />
             <span className="block text-sm">CSV-Datei auswählen</span>
-            <span className="block text-xs text-stone-500 mt-1">Export aus dem Online-Banking</span>
+            <span className="block text-xs text-stone-500 dark:text-stone-400 mt-1">Export aus dem Online-Banking</span>
             <input type="file" accept=".csv,text/csv,text/plain" className="hidden"
               onChange={(e) => pickFile(e.target.files?.[0])} />
           </label>
 
           {profiles.length > 0 && (
             <>
-              <p className="text-xs text-stone-500 mt-6 mb-2">Gespeicherte Profile</p>
-              <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-6 mb-2">Gespeicherte Profile</p>
+              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
                 {profiles.map((p) => (
                   <div key={p.id} className="px-4 py-2.5 text-sm">{p.name}</div>
                 ))}
               </div>
-              <p className="text-xs text-stone-400 mt-2">
+              <p className="text-xs text-stone-400 dark:text-stone-500 mt-2">
                 Wird nach dem Auswählen der Datei angewendet.
               </p>
             </>
@@ -185,18 +185,18 @@ export default function Import({ accounts, categories, onBack, flash }) {
 
           {runs.length > 0 && (
             <>
-              <p className="text-xs text-stone-500 mt-8 mb-2">Frühere Importe</p>
-              <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2">Frühere Importe</p>
+              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
                 {runs.slice(0, 6).map((r) => (
                   <div key={r.id} className="flex items-center gap-3 px-3.5 py-2.5">
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm truncate">{r.filename || "Import"}</span>
-                      <span className="block text-xs text-stone-500">
+                      <span className="block text-xs text-stone-500 dark:text-stone-400">
                         {new Date(r.created).toLocaleDateString("de-DE")} · {r.row_count} Buchungen
                       </span>
                     </span>
                     <button onClick={() => undo(r.id)} disabled={busy}
-                      className="text-xs text-red-600 flex items-center gap-1 disabled:opacity-50">
+                      className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1 disabled:opacity-50">
                       <Undo2 size={13} /> zurücknehmen
                     </button>
                   </div>
@@ -209,7 +209,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
 
       {step === 1 && (
         <>
-          <p className="text-sm text-stone-600 mb-4">
+          <p className="text-sm text-stone-600 dark:text-stone-300 mb-4">
             {file?.name} · {parsed.length} Zeilen erkannt
           </p>
 
@@ -230,7 +230,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
             </select>
           </Field>
           {csv.looksMisdecoded(text) && (
-            <p className="text-xs text-amber-700 flex items-start gap-1.5 -mt-2 mb-4">
+            <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5 -mt-2 mb-4">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               Umlaute sehen falsch aus. Wechsle die Kodierung.
             </p>
@@ -269,7 +269,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
             Komma als Dezimaltrennzeichen (−1.234,56)
           </label>
 
-          <p className="text-xs text-stone-500 mb-2">Spalten zuordnen</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">Spalten zuordnen</p>
           {[
             ["col_date", "Datum", true],
             ["col_amount", "Betrag", true],
@@ -300,47 +300,47 @@ export default function Import({ accounts, categories, onBack, flash }) {
       {step === 2 && (
         <>
           <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-            <Stat n={fresh.length} label="neu" tone="text-emerald-700" />
-            <Stat n={dupes.length} label="schon da" tone="text-stone-500" />
-            <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600" : "text-stone-400"} />
+            <Stat n={fresh.length} label="neu" tone="text-emerald-700 dark:text-emerald-400" />
+            <Stat n={dupes.length} label="schon da" tone="text-stone-500 dark:text-stone-400" />
+            <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600 dark:text-red-400" : "text-stone-400 dark:text-stone-500"} />
           </div>
 
           {dupes.length > 0 && (
-            <p className="text-xs text-stone-500 mb-3">
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
               Doppelte Zeilen werden übersprungen — erkannt an Datum, Betrag und Zweck.
             </p>
           )}
           {bad.length > 0 && (
-            <p className="text-xs text-red-600 mb-3 flex items-start gap-1.5">
+            <p className="text-xs text-red-600 dark:text-red-400 mb-3 flex items-start gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               {bad.length} Zeilen konnten nicht gelesen werden. Meist stimmt das Datumsformat
               oder das Dezimaltrennzeichen nicht — geh einen Schritt zurück.
             </p>
           )}
 
-          <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100 mb-4 max-h-80 overflow-y-auto">
+          <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-4 max-h-80 overflow-y-auto">
             {fresh.slice(0, 40).map((r, i) => (
               <div key={i} className="flex items-center gap-3 px-3.5 py-2.5">
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm truncate">{r.payee || r.purpose || "—"}</span>
-                  <span className="block text-xs text-stone-500 truncate">
+                  <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">
                     {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
                     {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
                   </span>
                 </span>
                 <span className={`text-sm font-medium tabular-nums ${
-                  r.cents > 0 ? "text-emerald-700" : ""}`}>{eur(r.cents)}</span>
+                  r.cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{eur(r.cents)}</span>
               </div>
             ))}
             {fresh.length > 40 && (
-              <p className="px-3.5 py-2.5 text-xs text-stone-500">
+              <p className="px-3.5 py-2.5 text-xs text-stone-500 dark:text-stone-400">
                 … und {fresh.length - 40} weitere
               </p>
             )}
           </div>
 
           {progress && (
-            <p className="text-xs text-stone-500 mb-2 tabular-nums">
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-2 tabular-nums">
               {progress.done} von {progress.total} geschrieben …
             </p>
           )}
@@ -359,9 +359,9 @@ export default function Import({ accounts, categories, onBack, flash }) {
 
 function Stat({ n, label, tone }) {
   return (
-    <div className="bg-white rounded-xl border border-stone-200 py-3">
+    <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 py-3">
       <p className={`text-xl font-medium tabular-nums ${tone}`}>{n}</p>
-      <p className="text-xs text-stone-500">{label}</p>
+      <p className="text-xs text-stone-500 dark:text-stone-400">{label}</p>
     </div>
   );
 }

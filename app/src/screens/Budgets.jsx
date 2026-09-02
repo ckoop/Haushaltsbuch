@@ -18,24 +18,25 @@ export default function BudgetScreen({ categories, budgets, spentByCat, monthKey
 
   return (
     <div className="px-5 py-4">
-      <p className="text-sm text-stone-600 mb-3">
+      <p className="text-sm text-stone-600 dark:text-stone-300 mb-3">
         Monatslimit pro Kategorie, kontoübergreifend. 0 entfernt das Budget.
       </p>
 
-      <div className="inline-flex mb-4 rounded-lg border border-stone-300 overflow-hidden text-[13px]">
+      <div className="inline-flex mb-4 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
         <button onClick={() => setDauer(true)}
-          className={`px-3.5 py-1.5 ${dauer ? "bg-stone-900 text-white" : "text-stone-600"}`}>
+          className={`px-3.5 py-1.5 ${dauer ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
           Jeden Monat
         </button>
         <button onClick={() => setDauer(false)}
-          className={`px-3.5 py-1.5 border-l border-stone-300 ${!dauer ? "bg-stone-900 text-white" : "text-stone-600"}`}>
+          className={`px-3.5 py-1.5 border-l border-stone-300 dark:border-stone-600 ${
+            !dauer ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
           Nur {monthKey}
         </button>
       </div>
 
       <ErrorNote error={error} />
 
-      <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
         {categories.filter((c) => c.kind === "expense" && !c.archived).map((c) => {
           const Icon = catIcon(c.icon);
           const [bg, fg] = colorOf(c.color);
@@ -46,7 +47,7 @@ export default function BudgetScreen({ categories, budgets, spentByCat, monthKey
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm">{c.name}</span>
-                <span className="block text-xs text-stone-400 tabular-nums">
+                <span className="block text-xs text-stone-400 dark:text-stone-500 tabular-nums">
                   bisher {eur(spentByCat[c.id] ?? 0)}
                 </span>
               </span>
@@ -55,13 +56,13 @@ export default function BudgetScreen({ categories, budgets, spentByCat, monthKey
                   defaultValue={limitOf(c.id) ? limitOf(c.id) / 100 : ""}
                   onBlur={(e) => save(c.id, e.target.value)}
                   className={`${inputCls} w-20 text-right tabular-nums`} />
-                <span className="text-sm text-stone-400">€</span>
+                <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
               </span>
             </div>
           );
         })}
       </div>
-      <p className="text-xs text-stone-400 mt-3">
+      <p className="text-xs text-stone-400 dark:text-stone-500 mt-3">
         Ein Budget für einen einzelnen Monat schlägt das Dauerbudget derselben Kategorie.
       </p>
     </div>

@@ -68,6 +68,7 @@ export function listTransactionsUntil(y, m) {
 }
 
 export const createTransaction = (t) => pb.collection("transactions").create(t);
+export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
 export const deleteTransaction = (id) => pb.collection("transactions").delete(id);
 
 export const countByAccount = async (accountId) => {

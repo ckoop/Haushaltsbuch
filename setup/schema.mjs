@@ -125,6 +125,7 @@ await ensure({
     num("amount_cents", { required: true, onlyInt: true }),
     text("payee", { max: 120 }),
     text("note", { max: 500 }),
+    sel("recurring", ["monthly", "quarterly", "yearly"]),
     text("import_hash", { max: 64 }),
     rel("import_batch", importsId),
     { type: "autodate", name: "created", onCreate: true },

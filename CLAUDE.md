@@ -37,6 +37,12 @@ app/src/screens/             Buchungen, Auswertung, Budgets, Konten,
 
 `accounts`, `categories`, `transactions`, `budgets`, `import_profiles`, `imports`, `rules`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
 
+`transactions.recurring` markiert eine Buchung als wiederkehrend (`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage (`NewEntry.jsx`) und nachträglich im Detail-Sheet (`Buchungen.jsx`). Kein Auto-Generieren künftiger Buchungen, nur eine Markierung auf manuell erfassten Zeilen, sichtbar in der Buchungsliste (Frequenz-Suffix + Repeat-Icon über `TxRow` in `ui.jsx`) und als eigener Abschnitt in `Auswertung.jsx`. `setup/schema.mjs` legt das Feld nur bei einer Neuinstallation an (`ensure()` patcht keine Felder auf bereits existierenden Sammlungen) — auf einer laufenden Instanz muss es einmalig manuell in der PocketBase-Admin-Oberfläche ergänzt werden.
+
+### Darstellung
+
+Hell/Dunkel ist in den Einstellungen (Konten-Tab) umschaltbar, reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage` (`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. Umsetzung über Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in `index.css`, `.dark`-Klasse auf `<html>`), ein Inline-Script in `index.html` verhindert Hell-Flackern beim Laden. Neue Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte erfinden).
+
 ## Feste Regeln — nicht ohne Rückfrage ändern
 
 Beträge sind ganzzahlige Cent in `amount_cents` und `start_cents`. Niemals Fließkomma für Geld. 34,82 € ist `3482`.

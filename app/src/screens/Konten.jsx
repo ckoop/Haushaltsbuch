@@ -4,12 +4,14 @@ import * as api from "../pb.js";
 import {
   eur, typeIcon, ACCOUNT_TYPES, shortName, inputCls, Field, Sheet, Button, ErrorNote,
 } from "../ui.jsx";
+import { useTheme } from "../theme.js";
 import Import from "./Import.jsx";
 
 export default function Konten({ accounts, categories, balances, reload, flash }) {
   const [editing, setEditing] = useState(null);
   const [view, setView] = useState("liste");
   const [error, setError] = useState(null);
+  const { theme, setTheme } = useTheme();
 
   if (view === "import") {
     return <Import accounts={accounts} categories={categories}
@@ -18,27 +20,27 @@ export default function Konten({ accounts, categories, balances, reload, flash }
 
   return (
     <div className="px-5 py-4">
-      <p className="text-xs text-stone-500 mb-2.5">Konten</p>
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-2.5">Konten</p>
       <ErrorNote error={error} />
 
-      <div className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
         {accounts.map((a) => {
           const Icon = typeIcon(a.type);
           return (
             <button key={a.id} onClick={() => setEditing(a)}
-              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50">
-              <span className="w-9 h-9 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center shrink-0">
+              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+              <span className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-700 text-stone-500 dark:text-stone-400 flex items-center justify-center shrink-0">
                 <Icon size={17} />
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm truncate">{a.name}</span>
-                <span className="block text-xs text-stone-500 tabular-nums">
+                <span className="block text-xs text-stone-500 dark:text-stone-400 tabular-nums">
                   Anfangssaldo {eur(a.start_cents ?? 0)}
                 </span>
               </span>
               <span className={`text-sm font-medium tabular-nums ${
-                (balances[a.id] ?? 0) < 0 ? "text-red-600" : ""}`}>{eur(balances[a.id] ?? 0)}</span>
-              <ChevronRight size={16} className="text-stone-300 shrink-0" />
+                (balances[a.id] ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(balances[a.id] ?? 0)}</span>
+              <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
             </button>
           );
         })}
@@ -50,14 +52,25 @@ export default function Konten({ accounts, categories, balances, reload, flash }
         <Plus size={16} /> Konto hinzufügen
       </Button>
 
-      <p className="text-xs text-stone-500 mt-8 mb-2.5">Daten</p>
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daten</p>
       <Button variant="ghost" onClick={() => setView("import")}
         className="w-full flex items-center justify-center gap-2">
         <Upload size={16} /> CSV-Datei importieren
       </Button>
 
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Darstellung</p>
+      <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {[["light", "Hell"], ["dark", "Dunkel"]].map(([v, label], i) => (
+          <button key={v} onClick={() => setTheme(v)}
+            className={`px-3.5 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              theme === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <button onClick={api.logout}
-        className="w-full mt-8 py-3 text-sm text-stone-500 flex items-center justify-center gap-2">
+        className="w-full mt-8 py-3 text-sm text-stone-500 dark:text-stone-400 flex items-center justify-center gap-2">
         <LogOut size={15} /> Abmelden
       </button>
 
@@ -111,7 +124,7 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
           placeholder="Girokonto, Haushaltskasse …" className={inputCls} />
       </Field>
 
-      <p className="text-xs text-stone-500 mb-1.5">Art</p>
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Art</p>
       <div className="grid grid-cols-2 gap-2 mb-4">
         {ACCOUNT_TYPES.map((t) => {
           const Icon = t.icon;
@@ -119,8 +132,9 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
           return (
             <button key={t.id} onClick={() => setType(t.id)}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left ${
-                on ? "bg-stone-900 border-stone-900 text-white" : "bg-white border-stone-200"}`}>
-              <Icon size={16} className={on ? "text-stone-300" : "text-stone-400"} />
+                on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
+                  : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"}`}>
+              <Icon size={16} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />
               <span className="text-[13px]">{t.label}</span>
             </button>
           );
@@ -131,7 +145,7 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
         <div className="flex items-center gap-2">
           <input type="number" step="10" value={start} onChange={(e) => setStart(e.target.value)}
             className={`${inputCls} tabular-nums`} />
-          <span className="text-sm text-stone-400">€</span>
+          <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
         </div>
       </Field>
 
@@ -139,7 +153,7 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
       <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
 
       {!isNew && (usage > 0 ? (
-        <p className="mt-3 text-xs text-stone-500 flex items-start gap-1.5 px-1">
+        <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
           Löschen geht erst, wenn die {usage} Buchungen auf diesem Konto weg oder umgebucht sind.
         </p>
