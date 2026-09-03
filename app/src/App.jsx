@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
-import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC } from "./ui.jsx";
+import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
 import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
@@ -59,6 +59,7 @@ function Shell() {
   const [tab, setTab] = useState("buchungen");
   const [acc, setAcc] = useState("alle");
   const [sheet, setSheet] = useState(false);
+  const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
   const [toast, setToast] = useState("");
   const [error, setError] = useState(null);
 
@@ -88,10 +89,16 @@ function Shell() {
   useEffect(() => { load(); }, [load]);
 
   // Faellige Daueraufträge einmal pro Sitzung nachbuchen - nicht Teil von
-  // load(), das feuert bei jedem Monatswechsel neu.
+  // load(), das feuert bei jedem Monatswechsel neu. Zeigt danach, welche
+  // Buchungen konkret automatisch entstanden sind (nicht nur die Anzahl im
+  // Toast, der laengst wieder verschwunden waere, wenn man's verpasst).
   useEffect(() => {
     api.runDueRecurringRules()
-      .then((n) => { if (n > 0) { flash(`${n} wiederkehrende Buchung${n === 1 ? "" : "en"} automatisch gebucht`); load(); } })
+      .then(async (rows) => {
+        if (rows.length === 0) return;
+        await load();
+        setAutoBooked(rows);
+      })
       .catch(console.error);
   }, []);
 
@@ -247,6 +254,19 @@ function Shell() {
               defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
               onClose={() => setSheet(false)}
               onSaved={(msg) => { flash(msg); load(); }} />
+          )}
+
+          {autoBooked && (
+            <Sheet title="Automatisch gebucht" onClose={() => setAutoBooked(null)}>
+              <p className="text-sm text-stone-600 dark:text-stone-300 mb-4">
+                {autoBooked.length} {autoBooked.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
+              </p>
+              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+                {autoBooked.map((t) => (
+                  <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+                ))}
+              </div>
+            </Sheet>
           )}
         </div>
       </div>

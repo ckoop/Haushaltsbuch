@@ -78,7 +78,11 @@ beim Mount einmalig `api.runDueRecurringRules()` auf (nicht Teil von
 nicht öffnet, bekommt die fälligen Perioden beim nächsten Öffnen gesammelt
 nachgebucht (Catch-up, kalendertag-sicher über `addMonths()` in `pb.js`)
 — kein "läuft im Hintergrund", das war eine bewusste Abwägung gegen die
-zusätzliche Server-Infrastruktur. Dedup läuft über den bestehenden
+zusätzliche Server-Infrastruktur. Nach dem Nachbuchen zeigt ein Sheet
+"Automatisch gebucht" (`App.jsx`) konkret, welche Buchungen entstanden
+sind — `runDueRecurringRules()` gibt dafür die erzeugten Zeilen zurück,
+nicht nur eine Anzahl; ein Toast allein wäre schon wieder verschwunden,
+bevor man ihn liest. Dedup läuft über den bestehenden
 `import_hash`-Unique-Index (`import_hash = "rule:<ruleId>:<datum>"`),
 damit zwei gleichzeitig geöffnete Sessions sich nicht doppelt buchen —
 deshalb bewusst kein `createBatch()` für die Erzeugung, PocketBase-Batches

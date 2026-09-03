@@ -132,24 +132,26 @@ export function addMonths(iso, months) {
 // import_hash-Unique-Index, falls zwei Geraete gleichzeitig pruefen. Bewusst
 // kein createBatch(): PocketBase-Batches sind atomar, ein Dedup-Konflikt
 // wuerde sonst auch alle anderen faelligen Regeln blockieren.
+// Gibt die neu erzeugten Buchungen zurueck (nicht nur die Anzahl), damit die
+// UI zeigen kann, was konkret automatisch gebucht wurde.
 export async function runDueRecurringRules() {
   const today = todayISO();
   const due = await pb.collection("recurring_rules").getFullList({
     filter: pb.filter("active = true && next_due <= {:today}", { today }),
   });
-  let created = 0;
+  const createdRows = [];
   for (const rule of due) {
     try {
       let next = dateOnly(rule.next_due);
       while (next <= today) {
         try {
-          await pb.collection("transactions").create({
+          const row = await pb.collection("transactions").create({
             date: next, type: rule.type, account: rule.account,
             to_account: rule.to_account || undefined, category: rule.category || undefined,
             amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
             recurring: rule.frequency, import_hash: `rule:${rule.id}:${next}`,
           });
-          created++;
+          createdRows.push(row);
         } catch (e) {
           // Unique-Verletzung = ein anderes Geraet hat diese Periode schon gebucht - ok.
           if (e?.response?.data?.import_hash?.code !== "validation_not_unique") throw e;
@@ -165,7 +167,7 @@ export async function runDueRecurringRules() {
       console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
     }
   }
-  return created;
+  return createdRows;
 }
 
 // ------------------------------------------------------------------- Budgets
