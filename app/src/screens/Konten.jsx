@@ -278,29 +278,29 @@ function CategoryEditor({ draft, onClose, onSaved, onError }) {
       </div>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Symbol</p>
-      <div className="grid grid-cols-6 gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {CAT_ICON_KEYS.map((k) => {
           const Icon = catIcon(k);
           const on = icon === k;
           return (
             <button key={k} onClick={() => setIcon(k)}
-              className={`aspect-square rounded-lg border flex items-center justify-center ${
+              className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
                 on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
                   : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400"}`}>
-              <Icon size={16} />
+              <Icon size={15} />
             </button>
           );
         })}
       </div>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Farbe</p>
-      <div className="grid grid-cols-6 gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {COLOR_KEYS.map((k) => {
           const bar = colorOf(k)[2];
           const on = color === k;
           return (
             <button key={k} onClick={() => setColor(k)}
-              className={`aspect-square rounded-lg ${bar} flex items-center justify-center ${
+              className={`w-9 h-9 rounded-lg shrink-0 ${bar} flex items-center justify-center ${
                 on ? "ring-2 ring-offset-2 ring-stone-900 dark:ring-emerald-400 dark:ring-offset-stone-900" : ""}`}>
               {on && <Check size={14} className="text-white" />}
             </button>
