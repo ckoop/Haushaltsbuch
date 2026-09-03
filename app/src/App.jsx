@@ -209,7 +209,7 @@ function Shell() {
 
           {!needsSetup && accounts.length > 0 && (
             <button onClick={() => setSheet(true)}
-              className="sidebar:hidden absolute bottom-28 right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
+              className="sidebar:hidden absolute bottom-[calc(var(--nav-h)+12px)] right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
               aria-label="Neue Buchung">
               <Plus size={26} />
             </button>

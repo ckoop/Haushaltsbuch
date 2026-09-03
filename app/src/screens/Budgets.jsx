@@ -51,11 +51,11 @@ export default function BudgetScreen({ categories, budgets, spentByCat, monthKey
                   bisher {eur(spentByCat[c.id] ?? 0)}
                 </span>
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1 shrink-0">
                 <input type="number" min="0" step="10" placeholder="—"
                   defaultValue={limitOf(c.id) ? limitOf(c.id) / 100 : ""}
                   onBlur={(e) => save(c.id, e.target.value)}
-                  className={`${inputCls} w-20 text-right tabular-nums`} />
+                  className={`${inputCls} w-20! shrink-0 text-right tabular-nums`} />
                 <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
               </span>
             </div>

@@ -107,10 +107,10 @@ export function Sheet({ title, onClose, children }) {
   }, [onClose]);
 
   return (
-    // Endet auf Mobile oberhalb der Bottom-Nav (bottom-28, gleiche Reserve wie
-    // main.pb-28 in App.jsx), statt sie zu verdecken. Auf dem Desktop-Sidebar-
-    // Layout gibt es keine Bottom-Nav, dort wieder volle Höhe.
-    <div className="absolute top-0 inset-x-0 bottom-28 sidebar:bottom-0 z-30 flex items-end" onClick={onClose}>
+    // Endet auf Mobile exakt oberhalb der Bottom-Nav (--nav-h, siehe index.css),
+    // statt sie zu verdecken. Auf dem Desktop-Sidebar-Layout gibt es keine
+    // Bottom-Nav, dort wieder volle Höhe.
+    <div className="absolute top-0 inset-x-0 bottom-[var(--nav-h)] sidebar:bottom-0 z-30 flex items-end" onClick={onClose}>
       <div className="absolute inset-0 bg-stone-900/40 dark:bg-black/60" />
       <div className="relative w-full max-h-[88%] overflow-y-auto bg-[#FAFAF8] dark:bg-stone-900 rounded-t-2xl p-5"
         onClick={(e) => e.stopPropagation()}>

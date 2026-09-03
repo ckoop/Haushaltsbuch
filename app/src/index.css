@@ -9,6 +9,12 @@
    Umgeschaltet über die .dark-Klasse auf <html>, gesetzt von app/src/theme.js. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  /* Tatsächliche Höhe der mobilen Bottom-Nav (App.jsx) — an einer Stelle
+     gepflegt, damit Sheet/FAB/main.padding nie auseinanderlaufen. */
+  --nav-h: 76px;
+}
+
 html, body, #root { height: 100%; }
 body {
   background: #f5f5f4;
