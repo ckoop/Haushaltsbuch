@@ -143,8 +143,8 @@ function Shell() {
   const iconStroke = (active) => (active ? 2.1 : 1.6);
 
   return (
-    <div className="min-h-full bg-stone-100 dark:bg-stone-950 flex justify-center">
-      <div className="w-full max-w-md sidebar:max-w-5xl bg-[#FAFAF8] dark:bg-stone-900 min-h-full flex flex-col sidebar:flex-row relative overflow-hidden">
+    <div className="h-full bg-stone-100 dark:bg-stone-950 flex justify-center">
+      <div className="w-full max-w-md sidebar:max-w-5xl bg-[#FAFAF8] dark:bg-stone-900 h-full flex flex-col sidebar:flex-row relative overflow-hidden">
 
         <aside className="hidden sidebar:flex sidebar:w-60 sidebar:shrink-0 sidebar:flex-col sidebar:border-r sidebar:border-stone-200 dark:sidebar:border-stone-700 sidebar:py-6 sidebar:px-3">
           <h1 className="text-base font-medium px-2.5 mb-0.5">Haushaltsbuch</h1>
@@ -178,7 +178,7 @@ function Shell() {
           )}
         </aside>
 
-        <div className="flex-1 min-w-0 flex flex-col relative overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden">
           <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5">
             <div className="flex items-center justify-between">
               <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
@@ -191,7 +191,7 @@ function Shell() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto pb-28 sidebar:pb-8">
+          <main className="flex-1 min-h-0 overflow-y-auto pb-28 sidebar:pb-8">
             {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
             {loading && <Spinner />}
 
