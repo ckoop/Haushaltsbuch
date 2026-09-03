@@ -152,4 +152,23 @@ await ensure({
   ],
 });
 
+// ------------------------------------------------------------- Daueraufträge
+
+await ensure({
+  name: "recurring_rules", type: "base", ...rules,
+  fields: [
+    sel("type", ["tx", "transfer"], { required: true }),
+    rel("account", accountsId, { required: true }),
+    rel("to_account", accountsId),
+    rel("category", categoriesId),
+    num("amount_cents", { required: true, onlyInt: true }), // bereits vorzeichenrichtig
+    text("payee", { max: 120 }),
+    text("note", { max: 500 }),
+    sel("frequency", ["monthly", "quarterly", "yearly"], { required: true }),
+    { type: "date", name: "next_due", required: true },
+    bool("active"),
+    { type: "autodate", name: "created", onCreate: true },
+  ],
+});
+
 console.log("\nFertig.");

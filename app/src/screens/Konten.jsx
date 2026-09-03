@@ -1,22 +1,29 @@
 import { useState, useEffect } from "react";
-import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check } from "lucide-react";
+import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check, Repeat, ArrowLeftRight } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, typeIcon, ACCOUNT_TYPES, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
-  inputCls, Field, Sheet, Button, ErrorNote,
+  eur, eurAbs, typeIcon, ACCOUNT_TYPES, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
+  inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT,
+  RECURRING, recurringLabel, todayISO,
 } from "../ui.jsx";
 import { useTheme } from "../theme.js";
 import Import from "./Import.jsx";
 
 const CAT_LIST_COLLAPSED = 5;
+const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
 export default function Konten({ accounts, categories, balances, reload, flash }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
+  const [editingRule, setEditingRule] = useState(null);
+  const [rules, setRules] = useState([]);
   const [catsExpanded, setCatsExpanded] = useState(false);
   const [view, setView] = useState("liste");
   const [error, setError] = useState(null);
   const { theme, setTheme } = useTheme();
+
+  const loadRules = () => api.listRecurringRules().then(setRules).catch(setError);
+  useEffect(() => { loadRules(); }, []);
 
   if (view === "import") {
     return <Import accounts={accounts} categories={categories}
@@ -103,6 +110,51 @@ export default function Konten({ accounts, categories, balances, reload, flash }
         <Plus size={16} /> Kategorie hinzufügen
       </Button>
 
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daueraufträge</p>
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+        {rules.map((r) => {
+          const isTransfer = r.type === "transfer";
+          const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
+          const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
+          const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
+          const from = byId(accounts, r.account, { name: "?" });
+          const sub = (isTransfer ? `${from.name} → ${byId(accounts, r.to_account, { name: "?" }).name}` : `${cat.name} · ${from.name}`)
+            + ` · ${recurringLabel(r.frequency)}`
+            + (r.active ? ` · ab ${new Date(api.dateOnly(r.next_due) + "T12:00:00").toLocaleDateString("de-DE")}` : " · pausiert");
+          return (
+            <button key={r.id} onClick={() => setEditingRule(r)}
+              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+              <span className={`w-9 h-9 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0 ${!r.active ? "opacity-40" : ""}`}>
+                <Icon size={17} />
+              </span>
+              <span className={`flex-1 min-w-0 ${!r.active ? "opacity-40" : ""}`}>
+                <span className="flex items-center gap-1 text-sm truncate">
+                  <Repeat size={11} className="text-stone-400 dark:text-stone-500 shrink-0" />
+                  <span className="truncate">{r.payee || (isTransfer ? "Umbuchung" : cat.name)}</span>
+                </span>
+                <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{sub}</span>
+              </span>
+              <span className={`text-sm font-medium tabular-nums ${!r.active ? "opacity-40" : ""} ${
+                isTransfer ? "text-stone-400 dark:text-stone-500" : r.amount_cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
+                {isTransfer ? "" : r.amount_cents > 0 ? "+" : "−"}{eurAbs(r.amount_cents)}
+              </span>
+            </button>
+          );
+        })}
+        {rules.length === 0 && (
+          <p className="px-3.5 py-3 text-sm text-stone-500 dark:text-stone-400">Noch keine Daueraufträge.</p>
+        )}
+      </div>
+
+      <Button variant="ghost"
+        onClick={() => setEditingRule({
+          id: "", type: "tx", account: accounts[0]?.id ?? "", to_account: "", category: "",
+          amount_cents: 0, payee: "", note: "", frequency: "monthly", next_due: todayISO(), active: true,
+        })}
+        className="w-full mt-3 flex items-center justify-center gap-2">
+        <Plus size={16} /> Dauerauftrag hinzufügen
+      </Button>
+
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daten</p>
       <Button variant="ghost" onClick={() => setView("import")}
         className="w-full flex items-center justify-center gap-2">
@@ -136,6 +188,13 @@ export default function Konten({ accounts, categories, balances, reload, flash }
           onSaved={(m) => { setEditingCat(null); flash(m); reload(); }}
           onError={setError} />
       )}
+
+      {editingRule && (
+        <RuleEditor draft={editingRule} accounts={accounts} categories={categories}
+          onClose={() => setEditingRule(null)}
+          onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); }}
+          onError={setError} />
+      )}
     </div>
   );
 }
@@ -150,7 +209,9 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!isNew) api.countByAccount(draft.id).then(setUsage).catch(() => setUsage(null));
+    if (!isNew) Promise.all([api.countByAccount(draft.id), api.countRecurringRulesByAccount(draft.id)])
+      .then(([tx, rules]) => setUsage({ tx, rules }))
+      .catch(() => setUsage(null));
   }, [draft.id, isNew]);
 
   const submit = async () => {
@@ -209,17 +270,20 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
       <ErrorNote error={error} />
       <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
 
-      {!isNew && (usage > 0 ? (
+      {!isNew && usage && (usage.tx + usage.rules > 0 ? (
         <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          Löschen geht erst, wenn die {usage} Buchungen auf diesem Konto weg oder umgebucht sind.
+          Löschen geht erst, wenn {[
+            usage.tx > 0 && `${usage.tx} Buchung${usage.tx === 1 ? "" : "en"}`,
+            usage.rules > 0 && `${usage.rules} ${usage.rules === 1 ? "Dauerauftrag" : "Daueraufträge"}`,
+          ].filter(Boolean).join(" und ")} auf diesem Konto weg, umgebucht oder gelöscht sind.
         </p>
-      ) : usage === 0 ? (
+      ) : (
         <Button variant="danger" onClick={remove} disabled={busy}
           className="w-full mt-3 flex items-center justify-center gap-2">
           <Trash2 size={16} /> Konto löschen
         </Button>
-      ) : null)}
+      ))}
     </Sheet>
   );
 }
@@ -235,7 +299,9 @@ function CategoryEditor({ draft, onClose, onSaved, onError }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!isNew) api.countByCategory(draft.id).then(setUsage).catch(() => setUsage(null));
+    if (!isNew) Promise.all([api.countByCategory(draft.id), api.countRecurringRulesByCategory(draft.id)])
+      .then(([tx, rules]) => setUsage({ tx, rules }))
+      .catch(() => setUsage(null));
   }, [draft.id, isNew]);
 
   const submit = async () => {
@@ -311,17 +377,147 @@ function CategoryEditor({ draft, onClose, onSaved, onError }) {
       <ErrorNote error={error} />
       <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
 
-      {!isNew && (usage > 0 ? (
+      {!isNew && usage && (usage.tx + usage.rules > 0 ? (
         <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          Löschen geht erst, wenn die {usage} Buchungen mit dieser Kategorie eine andere bekommen oder weg sind.
+          Löschen geht erst, wenn {[
+            usage.tx > 0 && `${usage.tx} Buchung${usage.tx === 1 ? "" : "en"}`,
+            usage.rules > 0 && `${usage.rules} ${usage.rules === 1 ? "Dauerauftrag" : "Daueraufträge"}`,
+          ].filter(Boolean).join(" und ")} eine andere Kategorie bekommen oder weg sind.
         </p>
-      ) : usage === 0 ? (
+      ) : (
         <Button variant="danger" onClick={remove} disabled={busy}
           className="w-full mt-3 flex items-center justify-center gap-2">
           <Trash2 size={16} /> Kategorie löschen
         </Button>
-      ) : null)}
+      ))}
+    </Sheet>
+  );
+}
+
+function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) {
+  const isNew = !draft.id;
+  const expenses = categories.filter((c) => c.kind === "expense" && !c.archived);
+  const incomeCat = categories.find((c) => c.kind === "income");
+
+  const [kind, setKind] = useState(() => draft.type === "transfer" ? "um"
+    : byId(categories, draft.category, {}).kind === "income" ? "ein" : "aus");
+  const [account, setAccount] = useState(draft.account || accounts[0]?.id);
+  const [toAccount, setToAccount] = useState(() => draft.to_account || (accounts.find((a) => a.id !== draft.account) ?? accounts[0])?.id);
+  const [cat, setCat] = useState(draft.type === "tx" && kind === "aus" ? draft.category : (expenses[0]?.id ?? ""));
+  const [amount, setAmount] = useState(draft.amount_cents ? Math.abs(draft.amount_cents) / 100 : "");
+  const [payee, setPayee] = useState(draft.payee ?? "");
+  const [frequency, setFrequency] = useState(draft.frequency || "monthly");
+  const [nextDue, setNextDue] = useState(draft.next_due ? api.dateOnly(draft.next_due) : todayISO());
+  const [active, setActive] = useState(draft.active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    const cents = Math.round((Number(amount) || 0) * 100);
+    if (cents <= 0) return setError("Betrag eingeben");
+    if (kind === "um" && account === toAccount) return setError("Quelle und Ziel müssen sich unterscheiden");
+    setBusy(true); setError(null);
+    try {
+      const base = kind === "um"
+        ? { type: "transfer", account, to_account: toAccount, category: "", amount_cents: cents }
+        : { type: "tx", account, to_account: "", category: kind === "ein" ? incomeCat?.id : cat,
+            amount_cents: kind === "ein" ? cents : -cents };
+      await api.saveRecurringRule({
+        id: draft.id || undefined, ...base,
+        payee: payee.trim(), note: "", frequency, next_due: nextDue, active,
+      });
+      onSaved("Dauerauftrag gesichert");
+    } catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try { await api.deleteRecurringRule(draft.id); onSaved("Dauerauftrag gelöscht"); }
+    catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Sheet title={isNew ? "Neuer Dauerauftrag" : "Dauerauftrag bearbeiten"} onClose={onClose}>
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Art</p>
+      <div className="inline-flex mb-4 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {[["aus", "Ausgabe"], ["ein", "Einnahme"], ["um", "Umbuchung"]].map(([v, label], i) => (
+          <button key={v} onClick={() => setKind(v)}
+            className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              kind === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">{kind === "um" ? "Von Konto" : "Konto"}</p>
+      <div className="mb-4"><AccountPicker accounts={accounts} value={account} onChange={setAccount} /></div>
+
+      {kind === "um" && (
+        <>
+          <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Auf Konto</p>
+          <div className="mb-4"><AccountPicker accounts={accounts} value={toAccount} onChange={setToAccount} disabledId={account} /></div>
+        </>
+      )}
+
+      {kind === "aus" && (
+        <Field label="Kategorie">
+          <select value={cat} onChange={(e) => setCat(e.target.value)} className={inputCls}>
+            {expenses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <Field label="Betrag">
+        <div className="flex items-center gap-2">
+          <input type="number" min="0" step="10" value={amount} onChange={(e) => setAmount(e.target.value)}
+            className={`${inputCls} tabular-nums`} />
+          <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
+        </div>
+      </Field>
+
+      <Field label="Empfänger/Bezeichnung (optional)">
+        <input value={payee} onChange={(e) => setPayee(e.target.value)}
+          placeholder="Sparrate, Miete …" className={inputCls} />
+      </Field>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Häufigkeit</p>
+      <div className="inline-flex mb-4 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {RULE_FREQUENCIES.map(([v, label], i) => (
+          <button key={v} onClick={() => setFrequency(v)}
+            className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              frequency === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <Field label="Nächste Buchung">
+        <input type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} className={inputCls} />
+      </Field>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Status</p>
+      <div className="inline-flex mb-4 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {[[true, "Aktiv"], [false, "Pausiert"]].map(([v, label], i) => (
+          <button key={String(v)} onClick={() => setActive(v)}
+            className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              active === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <ErrorNote error={error} />
+      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+
+      {!isNew && (
+        <Button variant="danger" onClick={remove} disabled={busy}
+          className="w-full mt-3 flex items-center justify-center gap-2">
+          <Trash2 size={16} /> Dauerauftrag löschen
+        </Button>
+      )}
     </Sheet>
   );
 }

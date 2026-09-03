@@ -87,6 +87,14 @@ function Shell() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Faellige Daueraufträge einmal pro Sitzung nachbuchen - nicht Teil von
+  // load(), das feuert bei jedem Monatswechsel neu.
+  useEffect(() => {
+    api.runDueRecurringRules()
+      .then((n) => { if (n > 0) { flash(`${n} wiederkehrende Buchung${n === 1 ? "" : "en"} automatisch gebucht`); load(); } })
+      .catch(console.error);
+  }, []);
+
   const balances = useMemo(() => {
     const b = {};
     for (const a of accounts) {

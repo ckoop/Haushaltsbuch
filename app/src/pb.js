@@ -1,4 +1,5 @@
 import PocketBase from "pocketbase";
+import { todayISO } from "./ui.jsx";
 
 // Keine feste Adresse: die App spricht mit dem Server, von dem sie geladen wurde.
 // Damit funktioniert sie im WLAN und im WireGuard-Tunnel gleichermassen.
@@ -86,6 +87,86 @@ export const countByAccount = async (accountId) => {
   });
   return r.totalItems;
 };
+
+// ------------------------------------------------------------- Daueraufträge
+
+export const listRecurringRules = () =>
+  pb.collection("recurring_rules").getFullList({ sort: "next_due" });
+
+export const saveRecurringRule = (r) =>
+  r.id
+    ? pb.collection("recurring_rules").update(r.id, r)
+    : pb.collection("recurring_rules").create(r);
+
+export const deleteRecurringRule = (id) => pb.collection("recurring_rules").delete(id);
+
+export const countRecurringRulesByAccount = async (accountId) => {
+  const r = await pb.collection("recurring_rules").getList(1, 1, {
+    filter: pb.filter("account = {:id} || to_account = {:id}", { id: accountId }),
+  });
+  return r.totalItems;
+};
+
+export const countRecurringRulesByCategory = async (categoryId) => {
+  const r = await pb.collection("recurring_rules").getList(1, 1, {
+    filter: pb.filter("category = {:id}", { id: categoryId }),
+  });
+  return r.totalItems;
+};
+
+const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
+
+// Naechstes Datum nach n Monaten, auf gueltigen Kalendertag begrenzt -
+// 31. Jan + 1 Monat -> 28./29. Feb, nicht 3. Maerz.
+export function addMonths(iso, months) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const total = m - 1 + months;
+  const ny = y + Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  const lastDay = new Date(ny, nm, 0).getDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}
+
+// Faellige Daueraufträge nachbuchen - client-getriggert beim App-Start,
+// kein Server-Cron (siehe CLAUDE.md). Dedup ueber den bestehenden
+// import_hash-Unique-Index, falls zwei Geraete gleichzeitig pruefen. Bewusst
+// kein createBatch(): PocketBase-Batches sind atomar, ein Dedup-Konflikt
+// wuerde sonst auch alle anderen faelligen Regeln blockieren.
+export async function runDueRecurringRules() {
+  const today = todayISO();
+  const due = await pb.collection("recurring_rules").getFullList({
+    filter: pb.filter("active = true && next_due <= {:today}", { today }),
+  });
+  let created = 0;
+  for (const rule of due) {
+    try {
+      let next = dateOnly(rule.next_due);
+      while (next <= today) {
+        try {
+          await pb.collection("transactions").create({
+            date: next, type: rule.type, account: rule.account,
+            to_account: rule.to_account || undefined, category: rule.category || undefined,
+            amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
+            recurring: rule.frequency, import_hash: `rule:${rule.id}:${next}`,
+          });
+          created++;
+        } catch (e) {
+          // Unique-Verletzung = ein anderes Geraet hat diese Periode schon gebucht - ok.
+          if (e?.response?.data?.import_hash?.code !== "validation_not_unique") throw e;
+        }
+        next = addMonths(next, MONTHS_PER[rule.frequency]);
+      }
+      if (next !== dateOnly(rule.next_due)) {
+        await pb.collection("recurring_rules").update(rule.id, { next_due: next });
+      }
+    } catch (e) {
+      // Eine kaputte Regel (z. B. Konto zwischenzeitlich geloescht) soll die
+      // anderen nicht blockieren - naechster Versuch beim naechsten App-Start.
+      console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
+    }
+  }
+  return created;
+}
 
 // ------------------------------------------------------------------- Budgets
 

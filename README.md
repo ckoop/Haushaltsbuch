@@ -95,6 +95,7 @@ Hostnamen mit gültigem Zertifikat, ohne selbst etwas auszustellen.
 | `import_profiles` | Spaltenzuordnung je Bank, einmal einrichten |
 | `imports` | Protokoll je Importlauf, macht Rückgängigmachen möglich |
 | `rules` | Textmuster → Kategorie, für automatische Zuordnung |
+| `recurring_rules` | Daueraufträge, erzeugen künftige Buchungen automatisch |
 
 ### Entscheidungen, die im Schema stecken
 
@@ -127,6 +128,23 @@ automatisch nach — das Skript überspringt Sammlungen, die schon existieren.
 Einmalig manuell ergänzen: Admin-Oberfläche → *Collections* → `transactions`
 → Feld hinzufügen → *Select*, Name `recurring`, Werte `monthly`/`quarterly`/
 `yearly`, nicht required.
+
+**`recurring_rules` erzeugt echte Buchungen automatisch**, anders als das
+`recurring`-Feld oben. Client-getriggert: Beim Öffnen der App wird geprüft,
+ob fällige Daueraufträge offen sind, und nachgebucht — kein Server-Cron,
+die App muss also ab und zu geöffnet werden. Wer länger nicht öffnet, bekommt
+die fehlenden Perioden beim nächsten Mal gesammelt nachgetragen.
+
+⚠️ Da `recurring_rules` eine **komplett neue Sammlung** ist (nicht nur ein
+Feld), lohnt sich hier statt manueller Admin-UI-Klickerei das Setup-Skript
+erneut auszuführen — es überspringt automatisch alles Bestehende und legt
+nur die fehlende Sammlung neu an:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/schema.mjs
+```
 
 ## Sicherung
 

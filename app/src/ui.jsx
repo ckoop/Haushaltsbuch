@@ -195,3 +195,27 @@ export function TxRow({ tx, accounts, categories, showAccount, onClick }) {
     </button>
   );
 }
+
+// Konto-Auswahlraster, geteilt zwischen NewEntry.jsx (Buchung erfassen) und
+// Konten.jsx (Dauerauftrag-Editor).
+export function AccountPicker({ accounts, value, onChange, disabledId }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {accounts.map((a) => {
+        const Icon = typeIcon(a.type);
+        const on = value === a.id;
+        const off = disabledId === a.id;
+        return (
+          <button key={a.id} disabled={off} onClick={() => onChange(a.id)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left ${
+              off ? "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700 opacity-40"
+                : on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
+                  : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"}`}>
+            <Icon size={16} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />
+            <span className="text-[13px] truncate">{a.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

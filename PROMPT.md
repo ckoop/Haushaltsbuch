@@ -47,7 +47,8 @@ app/src/screens/            Buchungen, Auswertung, Budgets, Konten,
 **Sammlungen**
 
 `accounts`, `categories`, `transactions`, `budgets`, `import_profiles`,
-`imports`, `rules`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
+`imports`, `rules`, `recurring_rules`. Zugriffsregel überall identisch:
+`@request.auth.id != ""`.
 
 `transactions.recurring` markiert eine Buchung als wiederkehrend
 (`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage
@@ -68,6 +69,34 @@ Muster wie `countByAccount`). Die Liste zeigt standardmäßig die ersten 5
 Kategorien, darunter ein Ausklapp-Link für den Rest
 (`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die
 Kategorie-Auswahl in `NewEntry.jsx`.
+
+**Daueraufträge** (`recurring_rules`, ab `0.5.0`) erzeugen anders als
+`transactions.recurring` echte künftige Buchungen — bewusst
+**client-getriggert, kein PocketBase-Cron/`pb_hooks`**: `App.jsx` ruft
+beim Mount einmalig `api.runDueRecurringRules()` auf (nicht Teil von
+`load()`, das feuert bei jedem Monatswechsel neu). Wer die App eine Weile
+nicht öffnet, bekommt die fälligen Perioden beim nächsten Öffnen gesammelt
+nachgebucht (Catch-up, kalendertag-sicher über `addMonths()` in `pb.js`)
+— kein "läuft im Hintergrund", das war eine bewusste Abwägung gegen die
+zusätzliche Server-Infrastruktur. Dedup läuft über den bestehenden
+`import_hash`-Unique-Index (`import_hash = "rule:<ruleId>:<datum>"`),
+damit zwei gleichzeitig geöffnete Sessions sich nicht doppelt buchen —
+deshalb bewusst kein `createBatch()` für die Erzeugung, PocketBase-Batches
+sind atomar und ein Dedup-Konflikt würde sonst auch andere fällige Regeln
+blockieren. Zwei Einstiege: direkt beim Erfassen einer Buchung
+(`NewEntry.jsx`, Checkbox "Automatisch weiterbuchen" bei gesetzter
+Wiederholung — die Regel greift erst ab der *nächsten* Periode, die
+gerade gesicherte Buchung deckt die aktuelle ab) und im Konten-Tab
+(eigene Sektion "Daueraufträge", `RuleEditor`, gleiches Muster wie
+`AccountEditor`/`CategoryEditor`). Löschen eines Kontos/einer Kategorie
+ist zusätzlich gesperrt, solange ein aktiver Dauerauftrag darauf zeigt
+(`countRecurringRulesByAccount`/`ByCategory` in `pb.js`, kombiniert mit
+der Buchungs-Zählung) — sonst bricht die Regel beim nächsten Lauf still.
+`setup/schema.mjs` legt die Sammlung nur bei einer Neuinstallation an;
+auf einer laufenden Instanz per `node setup/schema.mjs` mit
+Superuser-Zugangsdaten nachziehen (idempotent, überspringt alles
+Bestehende) — für eine neue Sammlung mit vielen Feldern einfacher als
+einzelne Felder von Hand in der Admin-UI anzulegen.
 
 **Darstellung**
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Delete } from "lucide-react";
 import * as api from "../pb.js";
-import { catIcon, colorOf, typeIcon, todayISO, inputCls, ErrorNote, Button, Sheet, RECURRING } from "../ui.jsx";
+import { catIcon, colorOf, todayISO, inputCls, ErrorNote, Button, Sheet, RECURRING, AccountPicker } from "../ui.jsx";
 
 const TEXT_FIELDS = ["INPUT", "TEXTAREA", "SELECT"];
 
@@ -17,6 +17,7 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
   const [payee, setPayee] = useState("");
   const [date, setDate] = useState(todayISO());
   const [recurring, setRecurring] = useState("");
+  const [autoRepeat, setAutoRepeat] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -52,13 +53,20 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
     if (kind === "um" && from === to) return setError("Quelle und Ziel müssen sich unterscheiden");
     setBusy(true); setError(null);
     try {
-      await api.createTransaction(kind === "um"
-        ? { date, type: "transfer", account: from, to_account: to,
-            amount_cents: cents, payee: payee.trim(), note: "", import_hash: "", recurring }
-        : { date, type: "tx", account: from,
-            category: kind === "ein" ? incomeCat?.id : cat,
-            amount_cents: kind === "ein" ? cents : -cents,
-            payee: payee.trim(), note: "", import_hash: "", recurring });
+      const base = kind === "um"
+        ? { type: "transfer", account: from, to_account: to, amount_cents: cents }
+        : { type: "tx", account: from, category: kind === "ein" ? incomeCat?.id : cat,
+            amount_cents: kind === "ein" ? cents : -cents };
+      await api.createTransaction({ ...base, date, payee: payee.trim(), note: "", import_hash: "", recurring });
+      if (recurring && autoRepeat) {
+        // Die gerade gesicherte Buchung deckt die aktuelle Periode ab, der
+        // Dauerauftrag greift erst ab der naechsten.
+        await api.saveRecurringRule({
+          ...base, payee: payee.trim(), note: "", frequency: recurring,
+          next_due: api.addMonths(date, { monthly: 1, quarterly: 3, yearly: 12 }[recurring]),
+          active: true,
+        });
+      }
       onSaved(kind === "um" ? "Umbuchung gesichert" : "Buchung gesichert");
       if (keepOpen) { setDigits(""); setPayee(""); }
       else onClose();
@@ -94,12 +102,12 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
         <ErrorNote error={error} />
 
         <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">{kind === "um" ? "Von Konto" : "Konto"}</p>
-        <AccPicker accounts={accounts} value={from} onChange={setFrom} />
+        <AccountPicker accounts={accounts} value={from} onChange={setFrom} />
 
         {kind === "um" && (
           <>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-4 mb-2">Auf Konto</p>
-            <AccPicker accounts={accounts} value={to} onChange={setTo} disabledId={from} />
+            <AccountPicker accounts={accounts} value={to} onChange={setTo} disabledId={from} />
           </>
         )}
 
@@ -144,13 +152,19 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
           <p className="text-[13px] text-stone-500 dark:text-stone-400 mb-2">Wiederholt sich</p>
           <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
             {RECURRING.map(([v, label], i) => (
-              <button key={v || "none"} onClick={() => setRecurring(v)}
+              <button key={v || "none"} onClick={() => { setRecurring(v); if (!v) setAutoRepeat(false); }}
                 className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
                   recurring === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
                 {label}
               </button>
             ))}
           </div>
+          {recurring && (
+            <label className="flex items-center gap-2 mt-3 text-[13px] text-stone-600 dark:text-stone-300">
+              <input type="checkbox" checked={autoRepeat} onChange={(e) => setAutoRepeat(e.target.checked)} />
+              Automatisch weiterbuchen (Dauerauftrag)
+            </label>
+          )}
         </div>
       </div>
 
@@ -181,28 +195,6 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
           </div>
         </Sheet>
       )}
-    </div>
-  );
-}
-
-function AccPicker({ accounts, value, onChange, disabledId }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {accounts.map((a) => {
-        const Icon = typeIcon(a.type);
-        const on = value === a.id;
-        const off = disabledId === a.id;
-        return (
-          <button key={a.id} disabled={off} onClick={() => onChange(a.id)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left ${
-              off ? "bg-stone-50 dark:bg-stone-800/50 border-stone-200 dark:border-stone-700 opacity-40"
-                : on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
-                  : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"}`}>
-            <Icon size={16} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />
-            <span className="text-[13px] truncate">{a.name}</span>
-          </button>
-        );
-      })}
     </div>
   );
 }
