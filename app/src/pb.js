@@ -45,6 +45,15 @@ export const saveCategory = (c) =>
     ? pb.collection("categories").update(c.id, c)
     : pb.collection("categories").create(c);
 
+export const deleteCategory = (id) => pb.collection("categories").delete(id);
+
+export const countByCategory = async (categoryId) => {
+  const r = await pb.collection("transactions").getList(1, 1, {
+    filter: pb.filter("category = {:id}", { id: categoryId }),
+  });
+  return r.totalItems;
+};
+
 export const listRules = () =>
   pb.collection("rules").getFullList({ sort: "-priority" });
 

@@ -39,9 +39,11 @@ app/src/screens/             Buchungen, Auswertung, Budgets, Konten,
 
 `transactions.recurring` markiert eine Buchung als wiederkehrend (`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage (`NewEntry.jsx`) und nachträglich im Detail-Sheet (`Buchungen.jsx`). Kein Auto-Generieren künftiger Buchungen, nur eine Markierung auf manuell erfassten Zeilen, sichtbar in der Buchungsliste (Frequenz-Suffix + Repeat-Icon über `TxRow` in `ui.jsx`) und als eigener Abschnitt in `Auswertung.jsx`. `setup/schema.mjs` legt das Feld nur bei einer Neuinstallation an (`ensure()` patcht keine Felder auf bereits existierenden Sammlungen) — auf einer laufenden Instanz muss es einmalig manuell in der PocketBase-Admin-Oberfläche ergänzt werden.
 
+Kategorien lassen sich seit `0.4.0` vollständig im UI verwalten (Konten-Tab, `CategoryEditor` in `Konten.jsx`) — anlegen, Name/Art/Symbol/Farbe bearbeiten, löschen. Löschen ist wie bei Konten gesperrt, solange Buchungen die Kategorie referenzieren (`api.countByCategory`, gleiches Muster wie `countByAccount`). Die Liste zeigt standardmäßig die ersten 5 Kategorien, darunter ein Ausklapp-Link für den Rest (`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die Kategorie-Auswahl in `NewEntry.jsx`.
+
 ### Darstellung
 
-Hell/Dunkel ist in den Einstellungen (Konten-Tab) umschaltbar, reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage` (`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. Umsetzung über Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in `index.css`, `.dark`-Klasse auf `<html>`), ein Inline-Script in `index.html` verhindert Hell-Flackern beim Laden. Neue Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte erfinden).
+Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar, reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage` (`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System" folgt `prefers-color-scheme` live per `matchMedia`-Listener, auch wenn sich die Geräteeinstellung ändert, während die App offen ist — Standard ohne eigene Wahl ist ebenfalls "System", nicht mehr fest "Hell". Umsetzung über Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in `index.css`, `.dark`-Klasse auf `<html>`), ein Inline-Script in `index.html` verhindert Hell-Flackern beim Laden (berücksichtigt dort ebenfalls "System"). Neue Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte erfinden).
 
 ## Feste Regeln — nicht ohne Rückfrage ändern
 
@@ -71,13 +73,24 @@ Die Version wird unaufgefordert im selben Commit wie die Codeänderung erhöht, 
 
 Der Identifier liegt in `app/package.json` (`version`), wird über `vite.config.js` (`define: { __APP_VERSION__ }`) in den Build eingebunden und erscheint unten in der Desktop-Sidebar (`App.jsx`). Im mobilen Layout ist er nicht sichtbar, dort ist kein Platz dafür vorgesehen.
 
+## Änderungsprotokoll
+
+Wird ab `0.4.0` bei jedem Versions-Bump um einen neuen Eintrag ergänzt (neueste zuerst), nicht rückwirkend über die Git-Historie hinaus vervollständigt. Lebt bewusst nur hier, nicht in `PROMPT.md` — das bleibt eine kompakte, einfügbare Kopie ohne wachsenden Verlauf.
+
+- `0.4.0` (2026-09-03) — Kategorien vollständig im UI verwaltbar (anlegen/bearbeiten/löschen, löschgesperrt bei Verwendung), Kategorienliste einklappbar (erste 5 + Ausklapp-Link), Hell/Dunkel/System-Theme (System folgt live der Geräteeinstellung, jetzt auch Standard ohne eigene Wahl), Kurzname-Kappung von 8 auf 14 Zeichen (verhinderte vorher z. B. "Girokonto" → "Girokont" ohne Auslassungspunkte).
+- `0.3.2` (2026-09-02) — Escape schließt Buchungen-Detail, Konto-Bearbeiten und das Neue-Buchung-Formular; Warnhinweis, wenn eine Buchung mit Betrag/Empfänger noch nicht gesichert ist.
+- `0.3.1` (2026-09-02) — Betrag im Neue-Buchung-Formular auch per Tastatur eingebbar (Ziffern, Backspace), Numpad bleibt für Touch erhalten.
+- `0.3.0` (2026-09-02) — Hell/Dunkel-Design (Umschalter in den Einstellungen), wiederkehrende Buchungen (monatlich/quartalsweise/jährlich, markierbar bei Neuanlage und nachträglich).
+- `0.2.1` (2026-09-02) — Nav-Shell an Struktur/UX-Mustern des epoch-Projekts orientiert (Kontext-Badges neben Nav-Einträgen, Icon-Kacheln, Sidebar-Breakpoint bei 860px statt Tailwind-`md`).
+- `0.2.0` (2026-09-01) — Responsive Desktop-Sidebar statt mobiler Navigation ab 860px Breite, Favicon, App-Version sichtbar in der Sidebar.
+
 ## Bewusst nicht gebaut
 
 Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das war eine ausdrückliche Entscheidung gegen Komplexität: die Daten liegen an genau einem Ort, damit fallen `dirty`-Flags, Grabsteine, Cursor, Zeitstempel-Konflikte und UUID-Kollisionen alle weg.
 
 Falls Offline später doch gefordert wird, ist der richtige nächste Schritt nicht ein vollständiger Sync, sondern eine Warteschlange nur für neu erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Kategorien im UI verwalten (bisher nur über die Admin-Oberfläche), Regeln für die automatische Kategoriezuordnung bearbeiten, Datenexport, Mehrwährungsfähigkeit.
+Ebenfalls offen: Regeln für die automatische Kategoriezuordnung im UI bearbeiten (bisher nur über die Admin-Oberfläche), Datenexport, Mehrwährungsfähigkeit.
 
 ## CSV-Import: der heikelste Teil
 

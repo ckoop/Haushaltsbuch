@@ -60,16 +60,29 @@ Neuinstallation an (`ensure()` patcht keine Felder auf bereits
 existierenden Sammlungen) — auf einer laufenden Instanz muss es einmalig
 manuell in der PocketBase-Admin-Oberfläche ergänzt werden.
 
+Kategorien lassen sich seit `0.4.0` vollständig im UI verwalten
+(Konten-Tab, `CategoryEditor` in `Konten.jsx`) — anlegen, Name/Art/Symbol/
+Farbe bearbeiten, löschen. Löschen ist wie bei Konten gesperrt, solange
+Buchungen die Kategorie referenzieren (`api.countByCategory`, gleiches
+Muster wie `countByAccount`). Die Liste zeigt standardmäßig die ersten 5
+Kategorien, darunter ein Ausklapp-Link für den Rest
+(`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die
+Kategorie-Auswahl in `NewEntry.jsx`.
+
 **Darstellung**
 
-Hell/Dunkel ist in den Einstellungen (Konten-Tab) umschaltbar, reines
-Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
-(`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. Umsetzung über
+Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,
+reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
+(`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System" folgt
+`prefers-color-scheme` live per `matchMedia`-Listener, auch wenn sich die
+Geräteeinstellung ändert, während die App offen ist — Standard ohne eigene
+Wahl ist ebenfalls "System", nicht mehr fest "Hell". Umsetzung über
 Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in `index.css`,
 `.dark`-Klasse auf `<html>`), ein Inline-Script in `index.html` verhindert
-Hell-Flackern beim Laden. Neue Farben grundsätzlich mit `dark:`-Variante
-nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen
-(stone/emerald-Skala, keine neuen Farbwerte erfinden).
+Hell-Flackern beim Laden (berücksichtigt dort ebenfalls "System"). Neue
+Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx`
+etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte
+erfinden).
 
 ## Feste Regeln — nicht ohne Rückfrage ändern
 
@@ -137,9 +150,9 @@ Falls Offline später doch gefordert wird, ist der richtige nächste Schritt
 **nicht** ein vollständiger Sync, sondern eine Warteschlange nur für neu
 erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Kategorien im UI verwalten (bisher nur über die
-Admin-Oberfläche), Regeln für die automatische Kategoriezuordnung bearbeiten,
-Datenexport, Mehrwährungsfähigkeit.
+Ebenfalls offen: Regeln für die automatische Kategoriezuordnung im UI
+bearbeiten (bisher nur über die Admin-Oberfläche), Datenexport,
+Mehrwährungsfähigkeit.
 
 ## CSV-Import: der heikelste Teil
 

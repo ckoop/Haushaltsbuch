@@ -10,10 +10,15 @@
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>Haushaltsbuch</title>
     <script>
-      if (localStorage.getItem("haushaltsbuch-theme") === "dark") {
-        document.documentElement.classList.add("dark");
-        document.querySelector('meta[name="theme-color"]').setAttribute("content", "#1c1917");
-      }
+      (function () {
+        var pref = localStorage.getItem("haushaltsbuch-theme") || "system";
+        var dark = pref === "dark" || (pref === "system"
+          && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) {
+          document.documentElement.classList.add("dark");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#1c1917");
+        }
+      })();
     </script>
   </head>
   <body>

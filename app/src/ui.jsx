@@ -29,6 +29,7 @@ const CAT_ICONS = {
   dots: MoreHorizontal, income: ArrowDownLeft,
 };
 export const catIcon = (name) => CAT_ICONS[name] ?? MoreHorizontal;
+export const CAT_ICON_KEYS = Object.keys(CAT_ICONS);
 
 export const ACCOUNT_TYPES = [
   { id: "giro", label: "Girokonto", icon: Landmark },
@@ -52,11 +53,14 @@ const COLORS = {
   stone:   ["bg-stone-100 dark:bg-stone-500/15", "text-stone-600 dark:text-stone-400", "bg-stone-400 dark:bg-stone-500"],
 };
 export const colorOf = (name) => COLORS[name] ?? COLORS.stone;
+export const COLOR_KEYS = Object.keys(COLORS);
 
 export const UNKNOWN_ACC = { id: "?", name: "Gelöschtes Konto", short: "?", type: "giro" };
 export const UNKNOWN_CAT = { id: "?", name: "Ohne Kategorie", icon: "dots", color: "stone" };
 export const byId = (list, id, fallback) => list.find((x) => x.id === id) ?? fallback;
-export const shortName = (n) => (n ?? "").trim().split(/\s+/)[0].slice(0, 8) || "Konto";
+// 14 statt 8 Zeichen, sonst kappt das gängige Wörter wie "Girokonto" (9) oder
+// "Kreditkarte" (11) mitten im Wort ab, ohne Auslassungspunkte anzuzeigen.
+export const shortName = (n) => (n ?? "").trim().split(/\s+/)[0].slice(0, 14) || "Konto";
 
 export const RECURRING = [
   ["", "Nie"], ["monthly", "Monatlich"], ["quarterly", "Quartalsweise"], ["yearly", "Jährlich"],
