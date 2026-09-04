@@ -112,7 +112,7 @@ function Shell() {
       .then(async (rows) => {
         if (rows.length === 0) return;
         await load();
-        setAutoBooked(rows);
+        setAutoBooked({ rows, checkedAt: new Date() });
       })
       .catch(console.error);
   }, []);
@@ -331,11 +331,14 @@ function Shell() {
 
           {autoBooked && (
             <Sheet title="Automatisch gebucht" onClose={() => setAutoBooked(null)}>
-              <p className="text-sm text-stone-600 dark:text-stone-300 mb-4">
-                {autoBooked.length} {autoBooked.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
+              <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
+                {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
+              </p>
+              <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
+                Geprüft: {autoBooked.checkedAt.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
               </p>
               <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
-                {autoBooked.map((t) => (
+                {autoBooked.rows.map((t) => (
                   <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
                 ))}
               </div>
