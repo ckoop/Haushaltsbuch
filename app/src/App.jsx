@@ -243,10 +243,12 @@ function Shell() {
                       : "bg-stone-100 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400"}`}>
                     <Icon size={15} strokeWidth={iconStroke(active)} />
                   </span>
-                  <span className="shrink-0">{label}</span>
-                  {navBadges[id] && (
-                    <span className="flex-1 min-w-0 text-xs text-stone-400 dark:text-stone-500 truncate text-right font-mono">{navBadges[id]}</span>
-                  )}
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{label}</span>
+                    {navBadges[id] && (
+                      <span className="block text-xs text-stone-400 dark:text-stone-500 truncate font-mono">{navBadges[id]}</span>
+                    )}
+                  </span>
                 </button>
               );
             })}
