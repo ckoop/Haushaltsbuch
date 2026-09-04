@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowLeftRight, ChevronRight } from "lucide-react";
 import { eur, byId, colorOf, UNKNOWN_CAT, UNKNOWN_TAG, UNKNOWN_ACC, TxRow, Sheet } from "../ui.jsx";
 
-export default function Auswertung({ categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc }) {
+export default function Auswertung({ categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc, openDetail }) {
   const [openCat, setOpenCat] = useState(null);
   const [openTag, setOpenTag] = useState(null);
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
@@ -46,7 +46,7 @@ export default function Auswertung({ categories, tags, accounts, transactions, r
           <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">Wiederkehrende Buchungen</p>
           <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-5">
             {recurring.map((t) => (
-              <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+              <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount onClick={() => openDetail(t)} />
             ))}
           </div>
         </>
@@ -86,7 +86,7 @@ export default function Auswertung({ categories, tags, accounts, transactions, r
           <Sheet title={cat.name} onClose={() => setOpenCat(null)}>
             <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
               {catTx.map((t) => (
-                <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+                <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount onClick={() => openDetail(t)} />
               ))}
             </div>
           </Sheet>
@@ -131,7 +131,7 @@ export default function Auswertung({ categories, tags, accounts, transactions, r
           <Sheet title={tag.name} onClose={() => setOpenTag(null)}>
             <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
               {tagTx.map((t) => (
-                <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+                <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount onClick={() => openDetail(t)} />
               ))}
             </div>
           </Sheet>

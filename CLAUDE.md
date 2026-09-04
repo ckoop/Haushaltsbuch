@@ -28,9 +28,13 @@ app/src/ui.jsx               Formatierung, Farben, gemeinsame Bausteine
 app/src/App.jsx              Login, Datenladung, Monatswechsel, Tabs,
                               responsive Shell (Sidebar ab 860px,
                               sonst Bottom-Nav + FAB), Kontext-Badges
-                              je Nav-Eintrag (Kontofilter, Kontoanzahl)
+                              je Nav-Eintrag (Kontofilter, Kontoanzahl),
+                              Buchungs-Detail-Sheet (State + Handler,
+                              damit jeder Screen es via openDetail()
+                              oeffnen kann, nicht nur Buchungen.jsx)
 app/src/screens/             Buchungen, Auswertung, Budgets, Konten,
-                              NewEntry, Import
+                              NewEntry, Import, TxDetail (Darstellung
+                              des Buchungs-Detail-Sheets)
 ```
 
 ### Sammlungen
@@ -83,6 +87,7 @@ Der Identifier liegt in `app/package.json` (`version`), wird über `vite.config.
 
 Wird ab `0.4.0` bei jedem Versions-Bump um einen neuen Eintrag ergänzt (neueste zuerst), nicht rückwirkend über die Git-Historie hinaus vervollständigt. Lebt bewusst nur hier, nicht in `PROMPT.md` — das bleibt eine kompakte, einfügbare Kopie ohne wachsenden Verlauf.
 
+- `0.12.0` (2026-09-04) — Buchungs-Detail-Sheet (Kategorie ändern, Tags, Wiederkehrend, Löschen) von `Buchungen.jsx` nach `App.jsx`/`Shell` gezogen, Darstellung selbst jetzt in eigenem Modul `screens/TxDetail.jsx`. Grund: `Auswertung.jsx` konnte eine Buchung aus dem Kategorie-/Tag-Drilldown bisher nicht öffnen, weil das Sheet lokaler State von `Buchungen.jsx` war. Jetzt `openDetail` (= `setDetail`) über `shared` in jedem Screen verfügbar, `TxRow`-Klick in Auswertung (wiederkehrend, Kategorie-Drilldown, Tag-Drilldown) öffnet dasselbe Sheet wie in der Buchungsliste — stapelt sich über das jeweils offene Drilldown-Sheet, schließt unabhängig davon.
 - `0.11.0` (2026-09-04) — Neue Sammlung `tags` (nur `name`, eindeutig case-insensitiv): freie, mehrfache Zusatz-Kennzeichnung quer zur einen Pflicht-Kategorie (z. B. "Nebenkosten" auf einer als "Abos" kategorisierten Telekom-Buchung). `transactions.tags` als Mehrfachauswahl-Relation (max. 10). Kein eigenes Verwaltungs-Screen — Tags entstehen beim Zuweisen im Buchungen-Detail (`TagEditor`, Name eingeben, Enter/Klick auf "+"), vorhandener Tag wird case-insensitiv wiederverwendet statt dupliziert. Auswertung bekommt einen zweiten Abschnitt "Ausgaben nach Tag" mit demselben Drilldown wie bei Kategorien (`spentByTag` in `App.jsx`, absichtlich keine Partition wie bei Kategorien — eine Buchung mit zwei Tags zählt in beiden mit). Schema-Änderung an einer bestehenden Sammlung (`transactions`) — wie bei `recurring` muss das Feld auf einer laufenden Instanz einmalig manuell ergänzt werden, `setup/schema.mjs` patcht nur Neuinstallationen.
 - `0.10.0` (2026-09-04) — Buchungen-Detail: Kategorie nachträglich änderbar (vorher nur Anzeige). Dropdown zeigt je nach Vorzeichen der Buchung nur Ausgabe- oder Einkommenskategorien, wie beim Neuanlegen in `NewEntry.jsx`. Nicht bei Umbuchungen (haben keine Kategorie).
 - `0.9.0` (2026-09-04) — CSV-Import: Zeilen ohne Regel-Treffer bekommen in der Vorschau ein Kategorie-Dropdown statt "—" — Zuordnung mit Betrag/Datum vor Augen statt blind im Voraus. Häkchen "Regel merken" legt beim Import zusätzlich eine Regel an (höchstens eine je Empfänger, auch bei mehreren Zeilen desselben Empfängers). Vorschau zeigt jetzt alle Zeilen statt nur die ersten 40 (nötig, damit jede zuordenbar bleibt).

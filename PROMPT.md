@@ -39,9 +39,13 @@ app/src/ui.jsx              Formatierung, Farben, gemeinsame Bausteine
 app/src/App.jsx             Login, Datenladung, Monatswechsel, Tabs,
                             responsive Shell (Sidebar ab 860px,
                             sonst Bottom-Nav + FAB), Kontext-Badges
-                            je Nav-Eintrag (Kontofilter, Kontoanzahl)
+                            je Nav-Eintrag (Kontofilter, Kontoanzahl),
+                            Buchungs-Detail-Sheet (State + Handler,
+                            damit jeder Screen es via openDetail()
+                            oeffnen kann, nicht nur Buchungen.jsx)
 app/src/screens/            Buchungen, Auswertung, Budgets, Konten,
-                            NewEntry, Import
+                            NewEntry, Import, TxDetail (Darstellung
+                            des Buchungs-Detail-Sheets)
 ```
 
 **Sammlungen**

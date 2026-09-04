@@ -8,6 +8,7 @@ import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
 import Konten from "./screens/Konten.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
+import TxDetail from "./screens/TxDetail.jsx";
 
 export default function App() {
   const [authed, setAuthed] = useState(pb.authStore.isValid);
@@ -59,6 +60,7 @@ function Shell() {
   const [tab, setTab] = useState("buchungen");
   const [acc, setAcc] = useState("alle");
   const [sheet, setSheet] = useState(false);
+  const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
   const [toast, setToast] = useState("");
   const [error, setError] = useState(null);
@@ -149,6 +151,50 @@ function Shell() {
     return o;
   }, [real]);
 
+  // Handler fuer das Buchungs-Detail-Sheet - hier statt in Buchungen.jsx, damit
+  // auch andere Screens (Auswertung.jsx) eine Buchung per openDetail() oeffnen
+  // koennen, nicht nur die Buchungsliste selbst.
+  const removeTx = async (id) => {
+    try { await api.deleteTransaction(id); setDetail(null); flash("Buchung gelöscht"); load(); }
+    catch (e) { setError(e); }
+  };
+
+  const updateRecurring = async (id, value) => {
+    try {
+      const updated = await api.updateTransaction(id, { recurring: value });
+      setDetail(updated); flash("Aktualisiert"); load();
+    } catch (e) { setError(e); }
+  };
+
+  const updateCategory = async (id, category) => {
+    try {
+      const updated = await api.updateTransaction(id, { category });
+      setDetail(updated); flash("Kategorie geändert"); load();
+    } catch (e) { setError(e); }
+  };
+
+  // Freies Tag-Feld: Name gegen die geladene Liste abgleichen (case-insensitiv),
+  // sonst neu anlegen. load() danach zieht auch einen frisch angelegten Tag in
+  // die App-weite Liste nach, ohne das hier gesondert behandeln zu muessen.
+  const addTag = async (tx, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const existing = tags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+      const tagId = existing?.id ?? (await api.createTag(trimmed)).id;
+      if ((tx.tags ?? []).includes(tagId)) return;
+      const updated = await api.updateTransaction(tx.id, { tags: [...(tx.tags ?? []), tagId] });
+      setDetail(updated); load();
+    } catch (e) { setError(e); }
+  };
+
+  const removeTag = async (tx, tagId) => {
+    try {
+      const updated = await api.updateTransaction(tx.id, { tags: (tx.tags ?? []).filter((id) => id !== tagId) });
+      setDetail(updated); load();
+    } catch (e) { setError(e); }
+  };
+
   const shift = (d) => {
     let m = ym.m + d, y = ym.y;
     if (m < 0) { m = 11; y -= 1; }
@@ -160,7 +206,7 @@ function Shell() {
 
   const shared = {
     accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
-    balances, acc, setAcc, monthKey: key, reload: load, flash, setError,
+    balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail: setDetail,
   };
 
   const navItems = [
@@ -274,6 +320,13 @@ function Shell() {
               defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
               onClose={() => setSheet(false)}
               onSaved={(msg) => { flash(msg); load(); }} />
+          )}
+
+          {detail && (
+            <TxDetail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
+              onClose={() => setDetail(null)} onDelete={removeTx}
+              onUpdateRecurring={updateRecurring} onUpdateCategory={updateCategory}
+              onAddTag={addTag} onRemoveTag={removeTag} />
           )}
 
           {autoBooked && (
