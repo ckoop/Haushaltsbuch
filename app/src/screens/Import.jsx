@@ -23,7 +23,9 @@ export default function Import({ accounts, categories, onBack, flash }) {
     encoding: "windows-1252", delimiter: "semicolon",
     date_format: "dd.MM.yyyy", decimal_comma: true,
   });
-  const [mapping, setMapping] = useState({ col_date: "", col_amount: "", col_payee: "", col_purpose: "" });
+  const [mapping, setMapping] = useState({
+    col_date: "", col_amount: "", col_payee: "", col_purpose: "", col_reference: "",
+  });
   const [account, setAccount] = useState(accounts[0]?.id ?? "");
   const [rows, setRows] = useState([]);
   const [headerIndex, setHeaderIndex] = useState(0);
@@ -76,6 +78,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
     setMapping({
       col_date: p.col_date, col_amount: p.col_amount,
       col_payee: p.col_payee, col_purpose: p.col_purpose,
+      col_reference: p.col_reference ?? "",
     });
     if (p.default_account) setAccount(p.default_account);
   };
@@ -275,6 +278,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
             ["col_amount", "Betrag", true],
             ["col_payee", "Empfänger", false],
             ["col_purpose", "Verwendungszweck", false],
+            ["col_reference", "Referenznummer", false],
           ].map(([k, label, req]) => (
             <Field key={k} label={`${label}${req ? " *" : ""}`}>
               <select className={inputCls} value={mapping[k]}
@@ -282,6 +286,12 @@ export default function Import({ accounts, categories, onBack, flash }) {
                 <option value="">— nicht vorhanden —</option>
                 {header.map((h, i) => <option key={i} value={h}>{h}</option>)}
               </select>
+              {k === "col_reference" && (
+                <span className="block text-xs text-stone-400 dark:text-stone-500 mt-1.5">
+                  Falls vorhanden (z. B. Kundenreferenz): macht Buchungen mit gleichem Datum, Betrag,
+                  Empfänger und Zweck trotzdem unterscheidbar.
+                </span>
+              )}
             </Field>
           ))}
 
@@ -317,15 +327,25 @@ export default function Import({ accounts, categories, onBack, flash }) {
               oder das Dezimaltrennzeichen nicht — geh einen Schritt zurück.
             </p>
           )}
+          {fresh.some((r) => r.batchDupeCount > 1) && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              {fresh.filter((r) => r.batchDupeCount > 1).length} Buchungen sehen wie Mehrfachbuchungen
+              aus — gleiches Datum, Betrag, Empfänger und Zweck innerhalb dieser Datei. Werden trotzdem
+              einzeln angelegt, unten mit „evtl. doppelt" markiert. Prüf sie kurz, falls das nicht stimmen kann.
+            </p>
+          )}
 
           <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-4 max-h-80 overflow-y-auto">
             {fresh.slice(0, 40).map((r, i) => (
               <div key={i} className="flex items-center gap-3 px-3.5 py-2.5">
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm truncate">{r.payee || r.purpose || "—"}</span>
-                  <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">
+                  <span className={`block text-xs truncate ${
+                    r.batchDupeCount > 1 ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
                     {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
                     {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
+                    {r.batchDupeCount > 1 && " · evtl. doppelt"}
                   </span>
                 </span>
                 <span className={`text-sm font-medium tabular-nums ${

@@ -219,6 +219,21 @@ Jeder Lauf legt einen `imports`-Datensatz an, jede Zeile verweist per
 `import_batch` darauf. Damit ist ein misslungener Import vollständig
 zurücknehmbar. Diese Eigenschaft bitte erhalten.
 
+**Zwei Zeilen derselben Datei können denselben Dedup-Hash ergeben**
+(gleiches Datum, Betrag, Empfänger, Zweck — z. B. zweimal Parken am
+selben Tag zum selben Preis). Da `import_hash` einen eindeutigen Index
+hat, würde das den ganzen Batch-Block beim Schreiben abbrechen, nicht
+nur die eine Zeile. `buildRows()` in `csv.js` erkennt das jetzt selbst:
+die erste Zeile behält ihren Hash, jede weitere bekommt ein
+`#n`-Suffix, `batchDupeCount` markiert alle Beteiligten für einen
+Warnhinweis in der Vorschau (`Import.jsx`, Schritt 3) — beide werden
+angelegt, keine wird stillschweigend verworfen. Optional lässt sich
+zusätzlich eine Referenzspalte zuordnen (`col_reference`, z. B.
+`Kundenreferenz`/`Mandatsreferenz`), die dann mit in den Hash einfließt
+und solche Kollisionen von vornherein vermeidet — nur wenn die Spalte
+gemappt ist, sonst bleibt der Hash exakt wie bisher, damit ältere
+Importe ohne Referenzspalte nicht ihre Wiedererkennung verlieren.
+
 ## Arbeitsweise
 
 - Deutsch, Kommentare im Code auf Deutsch

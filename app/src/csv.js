@@ -92,6 +92,10 @@ const PATTERNS = {
   payee: [/beguenstigter/i, /begünstigter/i, /zahlungspflichtiger/i, /auftraggeber/i,
           /empfaenger/i, /empfänger/i, /name/i, /payee/i],
   purpose: [/verwendungszweck/i, /buchungstext/i, /vorgang/i, /zweck/i, /description/i, /referenz/i],
+  // Enger als die Zweck-Muster oben, damit z. B. "Kundenreferenz" nicht dem
+  // Verwendungszweck zugeordnet wird - diese Spalte macht den Dedup-Hash
+  // eindeutiger, ist aber optional und wird separat gesucht.
+  reference: [/kundenreferenz/i, /mandatsreferenz/i, /^referenz$/i, /reference/i],
 };
 
 export function guessMapping(header) {
@@ -107,6 +111,7 @@ export function guessMapping(header) {
     col_amount: pick(PATTERNS.amount),
     col_payee: pick(PATTERNS.payee),
     col_purpose: pick(PATTERNS.purpose),
+    col_reference: pick(PATTERNS.reference),
   };
 }
 
@@ -157,6 +162,7 @@ export function buildRows(rows, headerIndex, mapping, opts) {
   const iAmount = idx(mapping.col_amount);
   const iPayee = idx(mapping.col_payee);
   const iPurpose = idx(mapping.col_purpose);
+  const iReference = idx(mapping.col_reference);
 
   const out = [];
   for (let i = headerIndex + 1; i < rows.length; i++) {
@@ -169,11 +175,34 @@ export function buildRows(rows, headerIndex, mapping, opts) {
     }
     const payee = (iPayee >= 0 ? r[iPayee] : "")?.trim() ?? "";
     const purpose = (iPurpose >= 0 ? r[iPurpose] : "")?.trim() ?? "";
-    out.push({
-      ok: true,
-      date, cents, payee, purpose,
-      hash: hashRow(date, String(cents), payee, purpose),
-    });
+    // Referenz nur einbeziehen, wenn die Spalte zugeordnet ist - sonst aendert
+    // sich der Hash gegenueber bisherigen Importen ohne Referenzspalte nicht.
+    const reference = iReference >= 0 ? (r[iReference]?.trim() ?? "") : "";
+    const hash = iReference >= 0
+      ? hashRow(date, String(cents), payee, purpose, reference)
+      : hashRow(date, String(cents), payee, purpose);
+    out.push({ ok: true, date, cents, payee, purpose, hash });
+  }
+
+  // Zwei Zeilen derselben Datei mit demselben Hash sind entweder echte
+  // Mehrfachbuchungen (zweimal derselbe Betrag beim selben Haendler am selben
+  // Tag, z. B. zweimal Parken) oder ein Duplikat im Bank-Export selbst. Beides
+  // wird angelegt, nicht stillschweigend verworfen: der import_hash-Index ist
+  // eindeutig, ein zweiter identischer Hash wuerde sonst beim Schreiben den
+  // gesamten Batch-Block abbrechen. batchDupeCount markiert die betroffenen
+  // Zeilen fuer einen Hinweis in der Vorschau.
+  const okRows = out.filter((r) => r.ok);
+  const totalByHash = new Map();
+  for (const r of okRows) totalByHash.set(r.hash, (totalByHash.get(r.hash) ?? 0) + 1);
+  const seenSoFar = new Map();
+  for (const r of okRows) {
+    const total = totalByHash.get(r.hash);
+    if (total > 1) {
+      r.batchDupeCount = total;
+      const n = (seenSoFar.get(r.hash) ?? 0) + 1;
+      seenSoFar.set(r.hash, n);
+      if (n > 1) r.hash = `${r.hash}#${n}`;
+    }
   }
   return out;
 }
