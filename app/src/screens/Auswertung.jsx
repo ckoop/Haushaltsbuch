@@ -1,7 +1,9 @@
-import { ArrowLeftRight } from "lucide-react";
-import { eur, byId, colorOf, UNKNOWN_CAT, UNKNOWN_ACC, TxRow } from "../ui.jsx";
+import { useState } from "react";
+import { ArrowLeftRight, ChevronRight } from "lucide-react";
+import { eur, byId, colorOf, UNKNOWN_CAT, UNKNOWN_ACC, TxRow, Sheet } from "../ui.jsx";
 
 export default function Auswertung({ categories, accounts, transactions, real, spentByCat, acc }) {
+  const [openCat, setOpenCat] = useState(null);
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   const transfers = transactions.length - real.length;
@@ -54,9 +56,12 @@ export default function Auswertung({ categories, accounts, transactions, real, s
           const cat = byId(categories, cid, UNKNOWN_CAT);
           const bar = colorOf(cat.color)[2];
           return (
-            <div key={cid}>
-              <div className="flex justify-between text-[13px] mb-1.5">
-                <span>{cat.name}</span>
+            <button key={cid} onClick={() => setOpenCat(cid)} className="block w-full text-left">
+              <div className="flex justify-between items-center text-[13px] mb-1.5">
+                <span className="flex items-center gap-1">
+                  {cat.name}
+                  <ChevronRight size={13} className="text-stone-300 dark:text-stone-600" />
+                </span>
                 <span className="tabular-nums text-stone-500 dark:text-stone-400">
                   {eur(val)} <span className="text-stone-400 dark:text-stone-500">· {Math.round((val / expense) * 100)}%</span>
                 </span>
@@ -64,10 +69,26 @@ export default function Auswertung({ categories, accounts, transactions, real, s
               <div className="h-1.5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
                 <div className={`h-full ${bar}`} style={{ width: `${(val / max) * 100}%` }} />
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {openCat && (() => {
+        const cat = byId(categories, openCat, UNKNOWN_CAT);
+        const catTx = real
+          .filter((t) => t.category === openCat && t.amount_cents < 0)
+          .sort((a, b) => b.date.localeCompare(a.date));
+        return (
+          <Sheet title={cat.name} onClose={() => setOpenCat(null)}>
+            <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+              {catTx.map((t) => (
+                <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+              ))}
+            </div>
+          </Sheet>
+        );
+      })()}
     </div>
   );
 }

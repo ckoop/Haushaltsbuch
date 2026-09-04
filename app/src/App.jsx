@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
@@ -73,7 +73,14 @@ function Shell() {
   const { key } = api.monthRange(ym.y, ym.m);
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 1800); };
 
+  // pb.autoCancellation ist bewusst aus (siehe pb.js) - bei schnellem
+  // Monatswechsel koennen mehrere load()-Aufrufe parallel unterwegs sein und
+  // in beliebiger Reihenfolge zurueckkommen. loadSeq sorgt dafuer, dass nur
+  // die Antwort des zuletzt gestarteten Aufrufs den State setzt, nicht die
+  // zuletzt eingetroffene.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true); setError(null);
     try {
       const [a, c, t, r, b] = await Promise.all([
@@ -81,9 +88,14 @@ function Shell() {
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
         api.listBudgets(key),
       ]);
+      if (seq !== loadSeq.current) return;
       setAccounts(a); setCategories(c); setTransactions(t); setRunning(r); setBudgets(b);
-    } catch (e) { setError(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (seq !== loadSeq.current) return;
+      setError(e);
+    } finally {
+      if (seq === loadSeq.current) setLoading(false);
+    }
   }, [ym.y, ym.m, key]);
 
   useEffect(() => { load(); }, [load]);

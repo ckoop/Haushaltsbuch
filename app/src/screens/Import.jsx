@@ -31,6 +31,10 @@ export default function Import({ accounts, categories, onBack, flash }) {
   const [headerIndex, setHeaderIndex] = useState(0);
   const [known, setKnown] = useState(new Set());
   const [progress, setProgress] = useState(null);
+  // Manuelle Zuordnung fuer Zeilen ohne Regel-Treffer, je Zeilen-Hash:
+  // { category, saveRule }. saveRule legt beim Import zusaetzlich eine
+  // Regel an, damit derselbe Empfaenger kuenftig automatisch zugeordnet wird.
+  const [manualCats, setManualCats] = useState({});
 
   useEffect(() => {
     Promise.all([api.listProfiles(), api.listRules(), api.listImportRuns()])
@@ -96,6 +100,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
       setRows(built.map((r) => r.ok
         ? { ...r, category: csv.applyRules(r, rules) || "" }
         : r));
+      setManualCats({});
       setStep(2);
     } catch (e) { setError(e); }
     finally { setBusy(false); }
@@ -108,6 +113,8 @@ export default function Import({ accounts, categories, onBack, flash }) {
   const dupes = good.filter((r) => known.has(r.hash));
   const fresh = good.filter((r) => !known.has(r.hash));
 
+  const catOf = (r) => r.category || manualCats[r.hash]?.category || "";
+
   const runImport = async () => {
     setBusy(true); setError(null);
     try {
@@ -118,7 +125,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
       await api.batchCreateTransactions(
         fresh.map((r) => ({
           date: r.date, type: "tx", account,
-          category: r.category || undefined,
+          category: catOf(r) || undefined,
           amount_cents: r.cents,
           payee: r.payee || r.purpose.slice(0, 60),
           note: r.purpose,
@@ -127,7 +134,20 @@ export default function Import({ accounts, categories, onBack, flash }) {
         })),
         (done, total) => setProgress({ done, total })
       );
-      flash(`${fresh.length} Buchungen importiert`);
+
+      // Fuer manuell zugeordnete Zeilen mit gesetztem Haekchen je Empfaenger
+      // hoechstens eine Regel anlegen, auch wenn mehrere Zeilen denselben
+      // Empfaenger haben.
+      const newRules = new Map();
+      for (const r of fresh) {
+        const m = manualCats[r.hash];
+        const pattern = r.payee?.trim();
+        if (m?.saveRule && m.category && pattern) newRules.set(pattern.toLowerCase(), { pattern, category: m.category });
+      }
+      for (const rule of newRules.values()) await api.saveRule(rule);
+
+      flash(`${fresh.length} Buchungen importiert`
+        + (newRules.size > 0 ? `, ${newRules.size} ${newRules.size === 1 ? "Regel" : "Regeln"} angelegt` : ""));
       onBack();
     } catch (e) { setError(e); setProgress(null); }
     finally { setBusy(false); }
@@ -336,27 +356,50 @@ export default function Import({ accounts, categories, onBack, flash }) {
             </p>
           )}
 
-          <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-4 max-h-80 overflow-y-auto">
-            {fresh.slice(0, 40).map((r, i) => (
-              <div key={i} className="flex items-center gap-3 px-3.5 py-2.5">
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm truncate">{r.payee || r.purpose || "—"}</span>
-                  <span className={`block text-xs truncate ${
-                    r.batchDupeCount > 1 ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
-                    {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
-                    {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
-                    {r.batchDupeCount > 1 && " · evtl. doppelt"}
-                  </span>
-                </span>
-                <span className={`text-sm font-medium tabular-nums ${
-                  r.cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{eur(r.cents)}</span>
-              </div>
-            ))}
-            {fresh.length > 40 && (
-              <p className="px-3.5 py-2.5 text-xs text-stone-500 dark:text-stone-400">
-                … und {fresh.length - 40} weitere
-              </p>
-            )}
+          <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-4 max-h-96 overflow-y-auto">
+            {fresh.map((r, i) => {
+              const manual = manualCats[r.hash];
+              return (
+                <div key={i} className="px-3.5 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm truncate">{r.payee || r.purpose || "—"}</span>
+                      <span className={`block text-xs truncate ${
+                        r.batchDupeCount > 1 ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
+                        {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
+                        {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
+                        {r.batchDupeCount > 1 && " · evtl. doppelt"}
+                      </span>
+                    </span>
+                    <span className={`text-sm font-medium tabular-nums ${
+                      r.cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{eur(r.cents)}</span>
+                  </div>
+
+                  {!r.category && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <select
+                        className="text-xs bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 dark:text-stone-100 rounded-md px-2 py-1"
+                        value={manual?.category ?? ""}
+                        onChange={(e) => setManualCats((m) => ({
+                          ...m, [r.hash]: { category: e.target.value, saveRule: m[r.hash]?.saveRule ?? true },
+                        }))}>
+                        <option value="">Kategorie wählen</option>
+                        {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      {manual?.category && r.payee?.trim() && (
+                        <label className="flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400 min-w-0">
+                          <input type="checkbox" checked={manual.saveRule}
+                            onChange={(e) => setManualCats((m) => ({
+                              ...m, [r.hash]: { ...m[r.hash], saveRule: e.target.checked },
+                            }))} />
+                          <span className="truncate">Regel merken: „{r.payee.trim()}"</span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {progress && (
