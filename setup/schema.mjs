@@ -71,6 +71,17 @@ const categoriesId = await ensure({
   ],
 });
 
+const tagsId = await ensure({
+  name: "tags", type: "base", ...rules,
+  fields: [
+    text("name", { required: true, max: 40 }),
+  ],
+  indexes: [
+    // COLLATE NOCASE, damit "Urlaub" und "urlaub" nicht als zwei Tags landen.
+    "CREATE UNIQUE INDEX idx_tags_name ON tags (name COLLATE NOCASE)",
+  ],
+});
+
 // ------------------------------------------------------------------- Import
 
 const importProfilesId = await ensure({
@@ -122,6 +133,10 @@ await ensure({
     rel("account", accountsId, { required: true }),
     rel("to_account", accountsId),
     rel("category", categoriesId),
+    // Zusaetzliche, freie Dimension neben der einen Pflicht-Kategorie - z. B.
+    // "Nebenkosten" quer zu Abos/Wohnen. Mehrfachauswahl, kein eigenes
+    // Verwaltungs-Screen: Tags entstehen beim Zuweisen an der Buchung selbst.
+    rel("tags", tagsId, { maxSelect: 10 }),
     num("amount_cents", { required: true, onlyInt: true }),
     text("payee", { max: 120 }),
     text("note", { max: 500 }),

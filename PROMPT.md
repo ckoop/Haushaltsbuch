@@ -47,8 +47,8 @@ app/src/screens/            Buchungen, Auswertung, Budgets, Konten,
 **Sammlungen**
 
 `accounts`, `categories`, `transactions`, `budgets`, `import_profiles`,
-`imports`, `rules`, `recurring_rules`. Zugriffsregel überall identisch:
-`@request.auth.id != ""`.
+`imports`, `rules`, `recurring_rules`, `tags`. Zugriffsregel überall
+identisch: `@request.auth.id != ""`.
 
 `transactions.recurring` markiert eine Buchung als wiederkehrend
 (`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage
@@ -82,6 +82,24 @@ sich nur auf künftige Importe aus. Namenskollision mit dem bereits
 bestehenden `rules`-State für Daueraufträge in `Konten.jsx` vermieden,
 indem die Kategorisierungsregeln dort als `autoRules`/`loadAutoRules`
 geführt werden.
+
+**Tags** (`tags`, ab `0.11.0`) sind eine freie, mehrfache Zusatz-
+Kennzeichnung quer zur einen Pflicht-Kategorie — z. B. "Nebenkosten" auf
+einer als "Abos" kategorisierten Telekom-Buchung, ohne dass die
+Kategorie deshalb aufgeweicht werden müsste. Bewusst kein eigenes
+Verwaltungs-Screen wie bei Kategorien/Regeln: Tags entstehen direkt
+beim Zuweisen im Buchungen-Detail (`TagEditor` in `Buchungen.jsx`), ein
+vorhandener Tag wird case-insensitiv wiederverwendet
+(`idx_tags_name` mit `COLLATE NOCASE`) statt dupliziert. `App.jsx`
+berechnet `spentByTag` analog zu `spentByCat`, aber bewusst ohne
+Partition — eine Buchung mit zwei Tags zählt in beiden Tag-Summen mit.
+`Auswertung.jsx` zeigt dafür einen eigenen Abschnitt "Ausgaben nach
+Tag" mit demselben Klick-Drilldown wie bei Kategorien.
+`transactions.tags` ist eine neue Relation auf einer bestehenden
+Sammlung — wie beim `recurring`-Feld patcht `setup/schema.mjs` das auf
+einer laufenden Instanz nicht automatisch nach, einmalig manuell in der
+PocketBase-Admin-Oberfläche ergänzen (Feldtyp Relation, Ziel `tags`,
+Mehrfachauswahl).
 
 **Daueraufträge** (`recurring_rules`, ab `0.5.0`) erzeugen anders als
 `transactions.recurring` echte künftige Buchungen — bewusst

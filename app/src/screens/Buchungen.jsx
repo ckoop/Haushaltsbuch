@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Trash2, ArrowLeftRight } from "lucide-react";
+import { Trash2, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, eurAbs, relDay, byId, typeIcon, catIcon, colorOf, shortName,
-  UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, Sheet, Button, RECURRING,
+  eur, eurAbs, relDay, byId, typeIcon, catIcon, colorOf, shortName, inputCls,
+  UNKNOWN_ACC, UNKNOWN_CAT, UNKNOWN_TAG, BudgetBar, TxRow, Sheet, Button, RECURRING,
 } from "../ui.jsx";
 
 export default function Buchungen({
-  accounts, categories, transactions, real, spentByCat, budgets,
+  accounts, categories, tags, transactions, real, spentByCat, budgets,
   balances, acc, setAcc, reload, flash, setError,
 }) {
   const [detail, setDetail] = useState(null);
@@ -30,6 +30,35 @@ export default function Buchungen({
     try {
       const updated = await api.updateTransaction(id, { recurring: value });
       setDetail(updated); flash("Aktualisiert"); reload();
+    } catch (e) { setError(e); }
+  };
+
+  const updateCategory = async (id, category) => {
+    try {
+      const updated = await api.updateTransaction(id, { category });
+      setDetail(updated); flash("Kategorie geändert"); reload();
+    } catch (e) { setError(e); }
+  };
+
+  // Freies Tag-Feld: Name gegen die geladene Liste abgleichen (case-insensitiv),
+  // sonst neu anlegen. reload() danach zieht auch einen frisch angelegten Tag
+  // in die App-weite Liste nach, ohne das hier gesondert behandeln zu muessen.
+  const addTag = async (tx, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const existing = tags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+      const tagId = existing?.id ?? (await api.createTag(trimmed)).id;
+      if ((tx.tags ?? []).includes(tagId)) return;
+      const updated = await api.updateTransaction(tx.id, { tags: [...(tx.tags ?? []), tagId] });
+      setDetail(updated); reload();
+    } catch (e) { setError(e); }
+  };
+
+  const removeTag = async (tx, tagId) => {
+    try {
+      const updated = await api.updateTransaction(tx.id, { tags: (tx.tags ?? []).filter((id) => id !== tagId) });
+      setDetail(updated); reload();
     } catch (e) { setError(e); }
   };
 
@@ -84,8 +113,10 @@ export default function Buchungen({
       </section>
 
       {detail && (
-        <Detail tx={detail} accounts={accounts} categories={categories}
-          onClose={() => setDetail(null)} onDelete={remove} onUpdateRecurring={updateRecurring} />
+        <Detail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
+          onClose={() => setDetail(null)} onDelete={remove}
+          onUpdateRecurring={updateRecurring} onUpdateCategory={updateCategory}
+          onAddTag={addTag} onRemoveTag={removeTag} />
       )}
     </>
   );
@@ -119,11 +150,18 @@ function Metric({ label, value, signed }) {
   );
 }
 
-function Detail({ tx, accounts, categories, onClose, onDelete, onUpdateRecurring }) {
+function Detail({
+  tx, accounts, categories, tags, onClose, onDelete,
+  onUpdateRecurring, onUpdateCategory, onAddTag, onRemoveTag,
+}) {
   const isTransfer = tx.type === "transfer";
   const cat = isTransfer ? null : byId(categories, tx.category, UNKNOWN_CAT);
   const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
   const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
+  // Einnahme/Ausgabe steht mit dem Vorzeichen schon fest (nicht nachtraeglich
+  // aenderbar hier) - die Kategorie-Auswahl zeigt deshalb nur die passende Art,
+  // genau wie beim Anlegen in NewEntry.jsx.
+  const catOptions = categories.filter((c) => !c.archived && c.kind === (tx.amount_cents > 0 ? "income" : "expense"));
 
   return (
     <Sheet onClose={onClose}>
@@ -151,6 +189,19 @@ function Detail({ tx, accounts, categories, onClose, onDelete, onUpdateRecurring
         {tx.import_batch && <DetailRow label="Herkunft" value="CSV-Import" />}
       </div>
 
+      {!isTransfer && (
+        <>
+          <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Kategorie</p>
+          <select className={`${inputCls} mb-4`} value={tx.category}
+            onChange={(e) => onUpdateCategory(tx.id, e.target.value)}>
+            {!tx.category && <option value="">{UNKNOWN_CAT.name}</option>}
+            {catOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </>
+      )}
+
+      <TagEditor tx={tx} tags={tags} onAdd={onAddTag} onRemove={onRemoveTag} />
+
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Wiederkehrend</p>
       <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px] mb-4">
         {RECURRING.map(([v, label], i) => (
@@ -175,6 +226,41 @@ function DetailRow({ label, value, muted }) {
     <div className="flex justify-between px-4 py-2.5">
       <span className="text-stone-500 dark:text-stone-400">{label}</span>
       <span className={muted ? "text-stone-400 dark:text-stone-500" : ""}>{value}</span>
+    </div>
+  );
+}
+
+// Freie, mehrfache Zusatz-Kennzeichnung quer zur einen Pflicht-Kategorie
+// (z. B. "Nebenkosten" auf einer Abo-Buchung). Tags entstehen hier direkt
+// beim Zuweisen, kein eigenes Verwaltungs-Screen.
+function TagEditor({ tx, tags, onAdd, onRemove }) {
+  const [value, setValue] = useState("");
+  const current = (tx.tags ?? []).map((id) => byId(tags, id, UNKNOWN_TAG));
+
+  const submit = () => { onAdd(tx, value); setValue(""); };
+
+  return (
+    <div className="mb-4">
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Tags</p>
+      {current.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {current.map((t) => (
+            <span key={t.id}
+              className="inline-flex items-center gap-1 text-xs bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-full pl-2.5 pr-1.5 py-1">
+              {t.name}
+              <button onClick={() => onRemove(tx, t.id)} className="text-stone-400 dark:text-stone-500">
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input value={value} onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+          placeholder="Tag hinzufügen …" className={inputCls} />
+        <Button variant="ghost" onClick={submit} className="px-4 shrink-0">+</Button>
+      </div>
     </div>
   );
 }

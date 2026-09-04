@@ -57,6 +57,7 @@ export const COLOR_KEYS = Object.keys(COLORS);
 
 export const UNKNOWN_ACC = { id: "?", name: "Gelöschtes Konto", short: "?", type: "giro" };
 export const UNKNOWN_CAT = { id: "?", name: "Ohne Kategorie", icon: "dots", color: "stone" };
+export const UNKNOWN_TAG = { id: "?", name: "Gelöschter Tag" };
 export const byId = (list, id, fallback) => list.find((x) => x.id === id) ?? fallback;
 // 14 statt 8 Zeichen, sonst kappt das gängige Wörter wie "Girokonto" (9) oder
 // "Kreditkarte" (11) mitten im Wort ab, ohne Auslassungspunkte anzuzeigen.

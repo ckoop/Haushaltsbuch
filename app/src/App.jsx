@@ -66,6 +66,7 @@ function Shell() {
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [tags, setTags] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [running, setRunning] = useState([]);   // alles bis Monatsende, fuer Salden
   const [budgets, setBudgets] = useState([]);
@@ -83,13 +84,13 @@ function Shell() {
     const seq = ++loadSeq.current;
     setLoading(true); setError(null);
     try {
-      const [a, c, t, r, b] = await Promise.all([
-        api.listAccounts(), api.listCategories(),
+      const [a, c, g, t, r, b] = await Promise.all([
+        api.listAccounts(), api.listCategories(), api.listTags(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
         api.listBudgets(key),
       ]);
       if (seq !== loadSeq.current) return;
-      setAccounts(a); setCategories(c); setTransactions(t); setRunning(r); setBudgets(b);
+      setAccounts(a); setCategories(c); setTags(g); setTransactions(t); setRunning(r); setBudgets(b);
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setError(e);
@@ -140,6 +141,13 @@ function Shell() {
     for (const t of real) if (t.amount_cents < 0) o[t.category] = (o[t.category] ?? 0) - t.amount_cents;
     return o;
   }, [real]);
+  // Tags sind quer zur Kategorie, eine Buchung kann mehrere haben - bewusst
+  // keine Partition wie bei Kategorien, Mehrfachzaehlung ist hier gewollt.
+  const spentByTag = useMemo(() => {
+    const o = {};
+    for (const t of real) if (t.amount_cents < 0) for (const tg of t.tags ?? []) o[tg] = (o[tg] ?? 0) - t.amount_cents;
+    return o;
+  }, [real]);
 
   const shift = (d) => {
     let m = ym.m + d, y = ym.y;
@@ -151,7 +159,7 @@ function Shell() {
   const needsSetup = !loading && !error && accounts.length === 0 && categories.length === 0;
 
   const shared = {
-    accounts, categories, transactions: visible, real, spentByCat, budgets,
+    accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
     balances, acc, setAcc, monthKey: key, reload: load, flash, setError,
   };
 

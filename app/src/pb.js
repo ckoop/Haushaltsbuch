@@ -58,6 +58,11 @@ export const countByCategory = async (categoryId) => {
 export const listRules = () =>
   pb.collection("rules").getFullList({ sort: "-priority" });
 
+// ------------------------------------------------------------------- Tags
+
+export const listTags = () => pb.collection("tags").getFullList({ sort: "name" });
+export const createTag = (name) => pb.collection("tags").create({ name });
+
 export const saveRule = (r) =>
   r.id
     ? pb.collection("rules").update(r.id, r)
