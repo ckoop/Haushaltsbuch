@@ -58,6 +58,13 @@ export const countByCategory = async (categoryId) => {
 export const listRules = () =>
   pb.collection("rules").getFullList({ sort: "-priority" });
 
+export const saveRule = (r) =>
+  r.id
+    ? pb.collection("rules").update(r.id, r)
+    : pb.collection("rules").create(r);
+
+export const deleteRule = (id) => pb.collection("rules").delete(id);
+
 // ------------------------------------------------------------------- Buchungen
 
 export function listTransactions(y, m) {

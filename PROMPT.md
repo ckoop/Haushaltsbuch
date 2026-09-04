@@ -70,6 +70,19 @@ Kategorien, darunter ein Ausklapp-Link für den Rest
 (`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die
 Kategorie-Auswahl in `NewEntry.jsx`.
 
+**Regeln** (`rules`, im UI verwaltbar ab `0.6.0`) ordnen beim CSV-Import
+automatisch eine Kategorie zu, wenn Empfänger oder Verwendungszweck ein
+Textmuster enthalten (`applyRules()` in `csv.js`, unverändert). Vorher nur
+über die PocketBase-Admin-Oberfläche pflegbar, jetzt eigener Abschnitt
+"Automatische Zuordnung" im Konten-Tab (`AutoRuleEditor` in `Konten.jsx`,
+gleiches Muster wie `CategoryEditor`) — anlegen, Textmuster/Kategorie/
+Priorität bearbeiten, löschen. Keine Löschsperre wie bei Konten/
+Kategorien: eine Regel referenziert keine Buchungen, ihr Löschen wirkt
+sich nur auf künftige Importe aus. Namenskollision mit dem bereits
+bestehenden `rules`-State für Daueraufträge in `Konten.jsx` vermieden,
+indem die Kategorisierungsregeln dort als `autoRules`/`loadAutoRules`
+geführt werden.
+
 **Daueraufträge** (`recurring_rules`, ab `0.5.0`) erzeugen anders als
 `transactions.recurring` echte künftige Buchungen — bewusst
 **client-getriggert, kein PocketBase-Cron/`pb_hooks`**: `App.jsx` ruft
@@ -183,9 +196,7 @@ Falls Offline später doch gefordert wird, ist der richtige nächste Schritt
 **nicht** ein vollständiger Sync, sondern eine Warteschlange nur für neu
 erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Regeln für die automatische Kategoriezuordnung im UI
-bearbeiten (bisher nur über die Admin-Oberfläche), Datenexport,
-Mehrwährungsfähigkeit.
+Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit.
 
 ## CSV-Import: der heikelste Teil
 

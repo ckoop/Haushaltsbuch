@@ -16,14 +16,17 @@ export default function Konten({ accounts, categories, balances, reload, flash }
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
+  const [editingAutoRule, setEditingAutoRule] = useState(null);
   const [rules, setRules] = useState([]);
+  const [autoRules, setAutoRules] = useState([]);
   const [catsExpanded, setCatsExpanded] = useState(false);
   const [view, setView] = useState("liste");
   const [error, setError] = useState(null);
   const { theme, setTheme } = useTheme();
 
   const loadRules = () => api.listRecurringRules().then(setRules).catch(setError);
-  useEffect(() => { loadRules(); }, []);
+  const loadAutoRules = () => api.listRules().then(setAutoRules).catch(setError);
+  useEffect(() => { loadRules(); loadAutoRules(); }, []);
 
   if (view === "import") {
     return <Import accounts={accounts} categories={categories}
@@ -155,6 +158,40 @@ export default function Konten({ accounts, categories, balances, reload, flash }
         <Plus size={16} /> Dauerauftrag hinzufügen
       </Button>
 
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Automatische Zuordnung</p>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-1.5 mb-2.5">
+        Setzt beim CSV-Import die Kategorie, wenn Empfänger oder Verwendungszweck den Text enthalten.
+      </p>
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+        {autoRules.map((r) => {
+          const cat = byId(categories, r.category, UNKNOWN_CAT);
+          const Icon = catIcon(cat.icon);
+          const [bg, fg] = colorOf(cat.color);
+          return (
+            <button key={r.id} onClick={() => setEditingAutoRule(r)}
+              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+              <span className={`w-9 h-9 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0`}>
+                <Icon size={17} />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm truncate">„{r.pattern}"</span>
+                <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{cat.name}</span>
+              </span>
+              <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
+            </button>
+          );
+        })}
+        {autoRules.length === 0 && (
+          <p className="px-3.5 py-3 text-sm text-stone-500 dark:text-stone-400">Noch keine Regeln.</p>
+        )}
+      </div>
+
+      <Button variant="ghost"
+        onClick={() => setEditingAutoRule({ id: "", pattern: "", category: categories[0]?.id ?? "", priority: 0 })}
+        className="w-full mt-3 flex items-center justify-center gap-2">
+        <Plus size={16} /> Regel hinzufügen
+      </Button>
+
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daten</p>
       <Button variant="ghost" onClick={() => setView("import")}
         className="w-full flex items-center justify-center gap-2">
@@ -193,6 +230,13 @@ export default function Konten({ accounts, categories, balances, reload, flash }
         <RuleEditor draft={editingRule} accounts={accounts} categories={categories}
           onClose={() => setEditingRule(null)}
           onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); }}
+          onError={setError} />
+      )}
+
+      {editingAutoRule && (
+        <AutoRuleEditor draft={editingAutoRule} categories={categories}
+          onClose={() => setEditingAutoRule(null)}
+          onSaved={(m) => { setEditingAutoRule(null); flash(m); loadAutoRules(); }}
           onError={setError} />
       )}
     </div>
@@ -516,6 +560,69 @@ function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) 
         <Button variant="danger" onClick={remove} disabled={busy}
           className="w-full mt-3 flex items-center justify-center gap-2">
           <Trash2 size={16} /> Dauerauftrag löschen
+        </Button>
+      )}
+    </Sheet>
+  );
+}
+
+function AutoRuleEditor({ draft, categories, onClose, onSaved, onError }) {
+  const isNew = !draft.id;
+  const [pattern, setPattern] = useState(draft.pattern);
+  const [category, setCategory] = useState(draft.category);
+  const [priority, setPriority] = useState(draft.priority ?? 0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    if (!pattern.trim()) return setError("Textmuster eingeben");
+    if (!category) return setError("Kategorie wählen");
+    setBusy(true);
+    try {
+      await api.saveRule({
+        id: draft.id || undefined,
+        pattern: pattern.trim(), category, priority: Number(priority) || 0,
+      });
+      onSaved("Regel gesichert");
+    } catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try { await api.deleteRule(draft.id); onSaved("Regel gelöscht"); }
+    catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Sheet title={isNew ? "Neue Regel" : "Regel bearbeiten"} onClose={onClose}>
+      <Field label="Textmuster">
+        <input value={pattern} onChange={(e) => { setPattern(e.target.value); setError(null); }}
+          placeholder="REWE, Netflix …" className={inputCls} />
+      </Field>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-2 mb-4">
+        Greift, wenn Empfänger oder Verwendungszweck diesen Text enthalten (Groß-/Kleinschreibung egal).
+      </p>
+
+      <Field label="Kategorie">
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+          {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
+
+      <Field label="Priorität (höher = zuerst geprüft)">
+        <input type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)}
+          className={`${inputCls} tabular-nums`} />
+      </Field>
+
+      <ErrorNote error={error} />
+      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+
+      {!isNew && (
+        <Button variant="danger" onClick={remove} disabled={busy}
+          className="w-full mt-3 flex items-center justify-center gap-2">
+          <Trash2 size={16} /> Regel löschen
         </Button>
       )}
     </Sheet>
