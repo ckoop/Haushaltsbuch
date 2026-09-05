@@ -89,6 +89,18 @@ export function listTransactionsUntil(y, m) {
   });
 }
 
+// Fuer die Jahresansicht in der Auswertung: ein Kalenderjahr auf einmal statt
+// zwoelf Einzelaufrufen. Personendaten sind klein genug, dass Client-seitige
+// Aggregation reicht - keine eigene Server-Aggregation noetig.
+export function listTransactionsForYear(y) {
+  const start = `${y}-01-01`;
+  const end = `${y + 1}-01-01`;
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date >= {:start} && date < {:end}", { start, end }),
+    sort: "-date,-created",
+  });
+}
+
 export const createTransaction = (t) => pb.collection("transactions").create(t);
 export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
 export const deleteTransaction = (id) => pb.collection("transactions").delete(id);

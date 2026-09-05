@@ -137,6 +137,29 @@ Superuser-Zugangsdaten nachziehen (idempotent, überspringt alles
 Bestehende) — für eine neue Sammlung mit vielen Feldern einfacher als
 einzelne Felder von Hand in der Admin-UI anzulegen.
 
+**Jahresansicht** (`Auswertung.jsx`, ab `0.17.0`) ergänzt die
+Monatsauswertung um einen Umschalter Monat/Jahr. Eigener Datenpfad
+`listTransactionsForYear(y)` in `pb.js` holt ein komplettes Kalenderjahr
+auf einen Schlag, Aggregation läuft client-seitig wie überall sonst in
+der App — kein Server-Aggregat nötig bei den üblichen Datenmengen eines
+Haushalts. Drei Bausteine, alle in `JahresAnsicht` innerhalb von
+`Auswertung.jsx`: (1) Jahresvergleich als gruppierter 12-Monats-Balken,
+Einnahmen und Ausgaben nebeneinander statt nur ihrer Differenz —
+bewusst ganz oben, noch vor der Summenkarte; (2) Sparquote
+(`(Einnahmen − Ausgaben) / Einnahmen`) als Jahreszahl direkt in der
+Summenkarte, der Monatsverlauf dazu ist optional und standardmäßig
+eingeklappt (`showSparquote`); (3) Kategorie-Trend über ein Dropdown
+mit 12-Monats-Verlauf und gestrichelter Ø-Linie — der Durchschnitt
+zählt nur die bereits vergangenen Monate des gewählten Jahres mit
+(`monthsElapsed`), sonst würde ein noch laufendes Jahr künstlich
+niedrig wirken. Jeder Balken ist klickbar und öffnet wie beim
+bestehenden Kategorie-/Tag-Drilldown ein Sheet mit den zugrunde
+liegenden Buchungen. Eigene Jahresnavigation (`< 2026 >`), unabhängig
+vom Monats-Header der App-Shell — echtes Kalenderjahr, keine
+rollierenden zwölf Monate (bewusste Entscheidung gegen "immer die
+letzten 12 Monate", weil ein festes Kalenderjahr vertrauter ist und
+sich mit dem bestehenden `budgets.month`-Format deckt).
+
 **Darstellung**
 
 Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,

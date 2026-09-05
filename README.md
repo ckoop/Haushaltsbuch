@@ -34,6 +34,8 @@ Vorspann-Zeilen, alles wird erkannt.
   die sonst unsichtbar aus jeder Budgetrechnung herausfallen würden.
 - **Auswertung** mit Drilldown: Kategorie oder Tag anklicken zeigt die
   zugrunde liegenden Buchungen, direkt bearbeitbar.
+- **Jahresansicht** — Einnahmen und Ausgaben im Monatsvergleich, Sparquote,
+  Kategorie-Trend über zwölf Monate mit Durchschnittslinie.
 - **Daueraufträge** — erzeugen echte künftige Buchungen automatisch beim
   Öffnen der App, inklusive Kategorie und Tags. Kein Server-Cron nötig.
 - **Umbuchungen als eine Buchung**, nicht zwei — Geld zwischen eigenen Konten
