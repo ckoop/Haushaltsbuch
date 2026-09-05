@@ -176,6 +176,7 @@ await ensure({
     rel("account", accountsId, { required: true }),
     rel("to_account", accountsId),
     rel("category", categoriesId),
+    rel("tags", tagsId, { maxSelect: 10 }),
     num("amount_cents", { required: true, onlyInt: true }), // bereits vorzeichenrichtig
     text("payee", { max: 120 }),
     text("note", { max: 500 }),

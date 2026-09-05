@@ -148,8 +148,13 @@ export function addMonths(iso, months) {
 // UI zeigen kann, was konkret automatisch gebucht wurde.
 export async function runDueRecurringRules() {
   const today = todayISO();
+  // Exklusive Obergrenze statt "next_due <= today": next_due steht als
+  // "2026-09-05 00:00:00.000Z" (Text) in der DB, ein Vergleich mit dem reinen
+  // Datumsstring "2026-09-05" waere lexikographisch groesser (laengerer
+  // String) - ein heute faelliger Auftrag wuerde so erst morgen erkannt.
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const due = await pb.collection("recurring_rules").getFullList({
-    filter: pb.filter("active = true && next_due <= {:today}", { today }),
+    filter: pb.filter("active = true && next_due < {:tomorrow}", { tomorrow }),
   });
   const createdRows = [];
   for (const rule of due) {
@@ -160,7 +165,7 @@ export async function runDueRecurringRules() {
           const row = await pb.collection("transactions").create({
             date: next, type: rule.type, account: rule.account,
             to_account: rule.to_account || undefined, category: rule.category || undefined,
-            amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
+            tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
             recurring: rule.frequency, import_hash: `rule:${rule.id}:${next}`,
           });
           createdRows.push(row);

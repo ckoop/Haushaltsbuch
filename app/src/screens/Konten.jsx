@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check, Repeat, ArrowLeftRight } from "lucide-react";
+import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check, Repeat, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, eurAbs, typeIcon, ACCOUNT_TYPES, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
-  inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT,
+  inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT, UNKNOWN_TAG,
   RECURRING, recurringLabel, todayISO,
 } from "../ui.jsx";
 import { useTheme } from "../theme.js";
@@ -12,7 +12,7 @@ import Import from "./Import.jsx";
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, balances, reload, flash }) {
+export default function Konten({ accounts, categories, tags, balances, reload, flash }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
@@ -227,10 +227,10 @@ export default function Konten({ accounts, categories, balances, reload, flash }
       )}
 
       {editingRule && (
-        <RuleEditor draft={editingRule} accounts={accounts} categories={categories}
+        <RuleEditor draft={editingRule} accounts={accounts} categories={categories} tags={tags}
           onClose={() => setEditingRule(null)}
           onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); }}
-          onError={setError} />
+          onError={setError} onTagsChanged={reload} />
       )}
 
       {editingAutoRule && (
@@ -439,7 +439,7 @@ function CategoryEditor({ draft, onClose, onSaved, onError }) {
   );
 }
 
-function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) {
+function RuleEditor({ draft, accounts, categories, tags, onClose, onSaved, onError, onTagsChanged }) {
   const isNew = !draft.id;
   const expenses = categories.filter((c) => c.kind === "expense" && !c.archived);
   const incomeCat = categories.find((c) => c.kind === "income");
@@ -448,14 +448,40 @@ function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) 
     : byId(categories, draft.category, {}).kind === "income" ? "ein" : "aus");
   const [account, setAccount] = useState(draft.account || accounts[0]?.id);
   const [toAccount, setToAccount] = useState(() => draft.to_account || (accounts.find((a) => a.id !== draft.account) ?? accounts[0])?.id);
-  const [cat, setCat] = useState(draft.type === "tx" && kind === "aus" ? draft.category : (expenses[0]?.id ?? ""));
+  // Bei einem neuen Dauerauftrag ist draft.category "" (leer) - ohne die
+  // Pruefung auf einen tatsaechlichen Wert bliebe cat leer, waehrend das
+  // Dropdown optisch trotzdem die erste Kategorie zeigt (Browser-Standard bei
+  // <select> ohne passende Option) und beim Speichern keine Kategorie gesetzt
+  // wuerde, obwohl eine ausgewaehlt aussah.
+  const [cat, setCat] = useState((draft.type === "tx" && kind === "aus" && draft.category) ? draft.category : (expenses[0]?.id ?? ""));
   const [amount, setAmount] = useState(draft.amount_cents ? Math.abs(draft.amount_cents) / 100 : "");
   const [payee, setPayee] = useState(draft.payee ?? "");
+  const [tagIds, setTagIds] = useState(draft.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
   const [frequency, setFrequency] = useState(draft.frequency || "monthly");
   const [nextDue, setNextDue] = useState(draft.next_due ? api.dateOnly(draft.next_due) : todayISO());
   const [active, setActive] = useState(draft.active ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+
+  // Tags werden hier nur lokal gesammelt und erst beim Speichern des ganzen
+  // Dauerauftrags mit uebernommen - anders als im Buchungen-Detail, wo jede
+  // Aenderung sofort geschrieben wird. Ein neu getippter Name, den es noch
+  // nicht gibt, wird sofort angelegt (case-insensitiv abgeglichen), damit er
+  // beim naechsten Dauerauftrag schon in der Vorschlagsliste steht.
+  const addTag = async () => {
+    const trimmed = tagInput.trim();
+    if (!trimmed) return;
+    const existing = tags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+    let id = existing?.id;
+    if (!id) {
+      try { id = (await api.createTag(trimmed)).id; onTagsChanged(); }
+      catch (e) { onError(e); return; }
+    }
+    if (!tagIds.includes(id)) setTagIds((v) => [...v, id]);
+    setTagInput("");
+  };
+  const removeTag = (id) => setTagIds((v) => v.filter((x) => x !== id));
 
   const submit = async () => {
     const cents = Math.round((Number(amount) || 0) * 100);
@@ -469,7 +495,7 @@ function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) 
             amount_cents: kind === "ein" ? cents : -cents };
       await api.saveRecurringRule({
         id: draft.id || undefined, ...base,
-        payee: payee.trim(), note: "", frequency, next_due: nextDue, active,
+        payee: payee.trim(), note: "", tags: tagIds, frequency, next_due: nextDue, active,
       });
       onSaved("Dauerauftrag gesichert");
     } catch (e) { onError(e); onClose(); }
@@ -526,6 +552,35 @@ function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) 
         <input value={payee} onChange={(e) => setPayee(e.target.value)}
           placeholder="Sparrate, Miete …" className={inputCls} />
       </Field>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Tags</p>
+      <div className="mb-4">
+        {tagIds.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {tagIds.map((id) => {
+              const t = byId(tags, id, UNKNOWN_TAG);
+              return (
+                <span key={id}
+                  className="inline-flex items-center gap-1 text-xs bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-full pl-2.5 pr-1.5 py-1">
+                  {t.name}
+                  <button onClick={() => removeTag(id)} className="text-stone-400 dark:text-stone-500">
+                    <X size={12} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+            placeholder="Tag hinzufügen …" list="rule-tag-suggestions" className={inputCls} />
+          <datalist id="rule-tag-suggestions">
+            {tags.filter((t) => !tagIds.includes(t.id)).map((t) => <option key={t.id} value={t.name} />)}
+          </datalist>
+          <Button variant="ghost" onClick={addTag} className="px-4 shrink-0">+</Button>
+        </div>
+      </div>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Häufigkeit</p>
       <div className="inline-flex mb-4 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
