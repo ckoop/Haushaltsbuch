@@ -38,6 +38,9 @@ pb_hooks/main.pb.js         Einzige Server-Route: Kurs-Proxy fuers Depot
 app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
 app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
 app/src/ui.jsx              Formatierung, Farben, gemeinsame Bausteine
+app/src/theme.js            Hell/Dunkel/System-Praeferenz (localStorage)
+app/src/depotPref.js        Depot-an/aus-Praeferenz (localStorage),
+                            gleiches Muster wie theme.js
 app/src/App.jsx             Login, Datenladung, Monatswechsel, Tabs,
                             responsive Shell (Sidebar ab 860px,
                             sonst Bottom-Nav + FAB), Kontext-Badges
@@ -241,6 +244,33 @@ hier nur der aktuelle (keine eigene historische FX-Reihe) — bei
 Ungenauigkeit. Reines SVG (`<polyline>`, kein Diagramm-Paket, gleiches
 Prinzip wie `YearBars` in `Auswertung.jsx`).
 
+`DepotChart` (ab `0.21.0`) ist selbstverwaltend: eigener
+`expanded`-Zustand, **Default eingeklappt** — Klapp-Header exakt wie
+`showSparquote` in `Auswertung.jsx` (Chevron rotiert, Text "Verlauf
+anzeigen/ausblenden"). Die Kursreihen-Abfrage steckt im Hook
+`useDepotChart({ positions, trades, fxRates, setFxRates, enabled })`
+und läuft nur, wenn `enabled` (= aufgeklappt) true ist — ein
+eingeklappter Chart löst keine Yahoo-Anfrage aus. `positions` ist der
+Freiheitsgrad, der denselben Chart zweimal nutzbar macht: der
+Portfolio-Chart übergibt `active` (alle nicht-archivierten
+Positionen), der Positions-Chart in `PositionDetail` übergibt
+`[position]` — beide teilen sich denselben `fxRates`-Cache aus dem
+`Depot`-Hauptkomponenten-State, damit der Wechselkurs nicht doppelt
+geholt wird.
+
+**Depot abschaltbar** (ab `0.21.0`, `depotPref.js`): reine
+Anzeige-Präferenz nach exaktem Muster von `theme.js` (`localStorage`,
+kein Server-Feld). Ausgeschaltet verschwindet nur der Nav-Eintrag
+(Sidebar und mobile Bottom-Nav, die dafür zwischen
+`grid-cols-4`/`grid-cols-5` wechselt — beide Klassen bewusst als
+vollständige Literale im Quelltext, Tailwind kann keine dynamisch
+zusammengesetzten Klassennamen erkennen), Positionen und Trades
+bleiben unangetastet in der Datenbank. Umschalter "Depot an/aus" im
+Konten-Tab, Abschnitt "Funktionen". Ist gerade der Depot-Tab offen,
+während er ausgeschaltet wird, springt `App.jsx` automatisch auf
+"Buchungen" zurück, statt auf einem aus der Navigation
+verschwundenen Tab stehen zu bleiben.
+
 **Darstellung**
 
 Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,
@@ -255,6 +285,24 @@ Hell-Flackern beim Laden (berücksichtigt dort ebenfalls "System"). Neue
 Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx`
 etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte
 erfinden).
+
+**Homescreen-Icon**
+
+`app/public/manifest.json` plus `apple-touch-icon.png`/`icon-192.png`/
+`icon-512.png` (ab `0.21.0`) sorgen dafür, dass "Zum Startbildschirm
+hinzufügen" ein echtes Icon und den Namen "Haushaltsbuch" zeigt statt
+eines Screenshot-Platzhalters. Vorher verlinkte `apple-touch-icon` auf
+`favicon.svg` — iOS akzeptiert dort aber nur PNG/JPG und ignoriert SVGs
+kommentarlos, und ein Manifest fehlte komplett (auch von
+Android/Chrome fürs Icon gebraucht). Die PNGs sind mit Pillow direkt
+in Zielgröße gezeichnet (kein SVG-Renderer wie `cairosvg`/
+`rsvg-convert` auf dem System verfügbar), dasselbe Design wie
+`favicon.svg` (abgerundetes Quadrat `#047857`, zentriertes „€" in
+`#FAFAF8`). Macht **nur** Icon/Name beim Homescreen-Shortcut richtig —
+eine echte installierte PWA mit Standalone-Fenster und Offline-Betrieb
+bräuchte zusätzlich einen Service Worker und einen sicheren Kontext
+(HTTPS), beides weiterhin bewusst nicht gebaut (siehe
+Tailscale-Hinweis in BETRIEB.md).
 
 ## Feste Regeln — nicht ohne Rückfrage ändern
 

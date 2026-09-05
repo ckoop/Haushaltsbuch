@@ -76,68 +76,162 @@ function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
 
 const fmtChartDate = (d) => new Date(d + "T12:00:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
-// Portfolio-Wert- und Einstands-Verlauf als einfacher SVG-Linienchart, kein
+// Historische Kursreihen fuer eine beliebige Liste von Positionen laden und
+// zu Wert-/Einstands-Reihen zusammenfassen - dieselbe Funktion bedient
+// sowohl den Portfolio-Chart (alle aktiven Positionen) als auch den
+// Positions-Chart (eine einzelne Position). enabled=false (Chart
+// eingeklappt) laesst Yahoo in Ruhe, kein Request ohne Bedarf.
+function useDepotChart({ positions, trades, fxRates, setFxRates, enabled }) {
+  const [range, setRange] = useState("3mo");
+  const [series, setSeries] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const withTicker = positions.filter((p) => !p.archived && p.ticker);
+  const tickerKey = withTicker.map((p) => p.id).join(",");
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (withTicker.length === 0) { setSeries({ dates: [], values: [], costs: [] }); return; }
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const { span, interval } = CHART_RANGES[range];
+        const histories = await Promise.all(withTicker.map(async (p) => {
+          const h = await api.fetchHistory(p.ticker, span, interval);
+          return {
+            position: p, currency: h.currency,
+            points: h.points.map((pt) => ({ date: new Date(pt.t * 1000).toISOString().slice(0, 10), price: pt.price })),
+          };
+        }));
+
+        const neededCurrencies = [...new Set(histories.map((h) => h.currency).filter((c) => c && c !== "EUR"))];
+        const missing = neededCurrencies.filter((c) => fxRates[c] == null);
+        let rates = fxRates;
+        if (missing.length) {
+          const updates = {};
+          for (const cur of missing) {
+            try { updates[cur] = (await api.fetchQuote({ ticker: `${cur}EUR=X` })).price; }
+            catch { /* fehlender Wechselkurs blockiert nur diese eine Waehrung im Chart */ }
+          }
+          rates = { ...fxRates, ...updates };
+          setFxRates((prev) => ({ ...prev, ...updates }));
+        }
+
+        const allDates = [...new Set(histories.flatMap((h) => h.points.map((pt) => pt.date)))].sort();
+        const values = [];
+        const costs = [];
+        for (const date of allDates) {
+          let totalV = 0, totalC = 0;
+          for (const h of histories) {
+            const { qty, costCents } = quantityAndCostAsOf(trades, h.position.id, date);
+            if (qty === 0 && costCents === 0) continue;
+            totalC += costCents;
+            // Letzten bekannten Kurs bei oder vor "date" nehmen (forward-fill) -
+            // nicht jede Boerse hat an jedem Tag einen Datenpunkt.
+            let price = null;
+            for (let i = h.points.length - 1; i >= 0; i--) {
+              if (h.points[i].date <= date) { price = h.points[i].price; break; }
+            }
+            const rate = h.currency === "EUR" ? 1 : rates[h.currency];
+            if (price != null && rate != null) totalV += qty * price * rate * 100;
+          }
+          values.push(totalV);
+          costs.push(totalC);
+        }
+        if (!cancelled) setSeries({ dates: allDates, values, costs });
+      } catch (e) {
+        if (!cancelled) setError(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [enabled, range, tickerKey, trades.length]);
+
+  return { range, setRange, series, loading, error };
+}
+
+// Wert- und Einstands-Verlauf als einfacher SVG-Linienchart, kein
 // Diagramm-Paket - passt zum Rest der App (YearBars in Auswertung.jsx ist
 // dasselbe Prinzip: reines SVG/CSS statt einer neuen Abhaengigkeit).
-function DepotChart({ range, onRangeChange, series, loading, error }) {
+// Eingeklappt per Default (Chevron-Muster wie "Sparquote" in
+// Auswertung.jsx) - laedt seine Daten deshalb erst beim Aufklappen, nicht
+// beim Rendern. positions bestimmt den Umfang: alle aktiven Positionen fuer
+// den Portfolio-Chart, eine einzelne fuer den Positions-Chart.
+function DepotChart({ positions, trades, fxRates, setFxRates }) {
+  const [expanded, setExpanded] = useState(false);
+  const { range, setRange, series, loading, error } = useDepotChart({ positions, trades, fxRates, setFxRates, enabled: expanded });
   const hasData = series && series.dates.length > 1;
   const empty = series && series.dates.length <= 1;
 
   return (
     <div className="mb-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-stone-500 dark:text-stone-400">Verlauf</p>
-        <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
-          {Object.entries(CHART_RANGES).map(([key, { label }], i) => (
-            <button key={key} onClick={() => onRangeChange(key)}
-              className={`px-3 py-1 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
-                range === key ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <button onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mb-3">
+        <ChevronRight size={13} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
+        Verlauf {expanded ? "ausblenden" : "anzeigen"}
+      </button>
 
-      <ErrorNote error={error} />
-      {loading && <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">Verlauf wird geladen …</p>}
-      {!loading && empty && (
-        <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">
-          Noch keine Verlaufsdaten — brauchst mindestens einen Trade mit Ticker.
-        </p>
+      {expanded && (
+        <>
+          <div className="flex justify-end mb-3">
+            <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+              {Object.entries(CHART_RANGES).map(([key, { label }], i) => (
+                <button key={key} onClick={() => setRange(key)}
+                  className={`px-3 py-1 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+                    range === key ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <ErrorNote error={error} />
+          {loading && <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">Verlauf wird geladen …</p>}
+          {!loading && empty && (
+            <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">
+              Noch keine Verlaufsdaten — brauchst mindestens einen Trade mit Ticker.
+            </p>
+          )}
+
+          {!loading && hasData && (() => {
+            const all = [...series.values, ...series.costs];
+            const min = Math.min(...all), max = Math.max(...all);
+            const span = max - min || 1;
+            const toY = (v) => 96 - ((v - min) / span) * 92; // 2..96, etwas Rand oben/unten
+            const toX = (i) => (i / (series.dates.length - 1)) * 300;
+            const valuePts = series.values.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+            const costPts = series.costs.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+            return (
+              <>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+                    <span className="w-3 h-[3px] rounded-full bg-emerald-600 dark:bg-emerald-500 inline-block" /> Wert
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+                    <span className="w-3 h-[3px] rounded-full bg-stone-400 dark:bg-stone-500 inline-block" /> Einstand
+                  </span>
+                </div>
+                <svg viewBox="0 0 300 100" preserveAspectRatio="none"
+                  className="w-full h-32 bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700">
+                  <polyline points={costPts} fill="none" strokeDasharray="5 4" strokeWidth="1.5"
+                    vectorEffect="non-scaling-stroke" className="stroke-stone-400 dark:stroke-stone-500" />
+                  <polyline points={valuePts} fill="none" strokeWidth="2"
+                    vectorEffect="non-scaling-stroke" className="stroke-emerald-600 dark:stroke-emerald-500" />
+                </svg>
+                <div className="flex justify-between text-[10px] text-stone-400 dark:text-stone-500 mt-1">
+                  <span>{fmtChartDate(series.dates[0])}</span>
+                  <span>{fmtChartDate(series.dates[series.dates.length - 1])}</span>
+                </div>
+              </>
+            );
+          })()}
+        </>
       )}
-
-      {!loading && hasData && (() => {
-        const all = [...series.values, ...series.costs];
-        const min = Math.min(...all), max = Math.max(...all);
-        const span = max - min || 1;
-        const toY = (v) => 96 - ((v - min) / span) * 92; // 2..96, etwas Rand oben/unten
-        const toX = (i) => (i / (series.dates.length - 1)) * 300;
-        const valuePts = series.values.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
-        const costPts = series.costs.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
-        return (
-          <>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
-                <span className="w-3 h-[3px] rounded-full bg-emerald-600 dark:bg-emerald-500 inline-block" /> Wert
-              </span>
-              <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
-                <span className="w-3 h-[3px] rounded-full bg-stone-400 dark:bg-stone-500 inline-block" /> Einstand
-              </span>
-            </div>
-            <svg viewBox="0 0 300 100" preserveAspectRatio="none"
-              className="w-full h-32 bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700">
-              <polyline points={costPts} fill="none" strokeDasharray="5 4" strokeWidth="1.5"
-                vectorEffect="non-scaling-stroke" className="stroke-stone-400 dark:stroke-stone-500" />
-              <polyline points={valuePts} fill="none" strokeWidth="2"
-                vectorEffect="non-scaling-stroke" className="stroke-emerald-600 dark:stroke-emerald-500" />
-            </svg>
-            <div className="flex justify-between text-[10px] text-stone-400 dark:text-stone-500 mt-1">
-              <span>{fmtChartDate(series.dates[0])}</span>
-              <span>{fmtChartDate(series.dates[series.dates.length - 1])}</span>
-            </div>
-          </>
-        );
-      })()}
     </div>
   );
 }
@@ -193,76 +287,6 @@ export default function Depot({ flash }) {
   };
   useEffect(() => { if (positions.length) refreshQuotes(positions); }, [positions.length]);
 
-  // Verlaufs-Chart: historische Kursreihen je Position (derselbe Proxy wie
-  // die Live-Kurse, nur mit range/interval), Bestand/Einstand pro
-  // Datenpunkt ueber quantityAndCostAsOf() rekonstruiert - eine Position
-  // steht am Anfang der Reihe also korrekt bei 0, nicht schon beim ersten
-  // Kauf mit dem heutigen vollen Bestand. Wechselkurs bewusst nur der
-  // aktuelle (siehe positionStats) statt einer eigenen historischen
-  // FX-Reihe - fuer 3 Monate kaum relevant, bei 5 Jahren eine bewusste
-  // Vereinfachung.
-  const [chartRange, setChartRange] = useState("3mo");
-  const [chartSeries, setChartSeries] = useState(null);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [chartError, setChartError] = useState(null);
-
-  const loadChart = async (range, currentPositions, currentTrades) => {
-    const withTicker = currentPositions.filter((p) => !p.archived && p.ticker);
-    if (withTicker.length === 0) { setChartSeries({ dates: [], values: [], costs: [] }); return; }
-    setChartLoading(true); setChartError(null);
-    try {
-      const { span, interval } = CHART_RANGES[range];
-      const histories = await Promise.all(withTicker.map(async (p) => {
-        const h = await api.fetchHistory(p.ticker, span, interval);
-        return {
-          position: p, currency: h.currency,
-          points: h.points.map((pt) => ({ date: new Date(pt.t * 1000).toISOString().slice(0, 10), price: pt.price })),
-        };
-      }));
-
-      const neededCurrencies = [...new Set(histories.map((h) => h.currency).filter((c) => c && c !== "EUR"))];
-      const missing = neededCurrencies.filter((c) => fxRates[c] == null);
-      let rates = fxRates;
-      if (missing.length) {
-        const updates = {};
-        for (const cur of missing) {
-          try { updates[cur] = (await api.fetchQuote({ ticker: `${cur}EUR=X` })).price; }
-          catch { /* fehlender Wechselkurs blockiert nur diese eine Waehrung im Chart */ }
-        }
-        rates = { ...fxRates, ...updates };
-        setFxRates((prev) => ({ ...prev, ...updates }));
-      }
-
-      const allDates = [...new Set(histories.flatMap((h) => h.points.map((pt) => pt.date)))].sort();
-      const values = [];
-      const costs = [];
-      for (const date of allDates) {
-        let totalV = 0, totalC = 0;
-        for (const h of histories) {
-          const { qty, costCents } = quantityAndCostAsOf(currentTrades, h.position.id, date);
-          if (qty === 0 && costCents === 0) continue;
-          totalC += costCents;
-          // Letzten bekannten Kurs bei oder vor "date" nehmen (forward-fill) -
-          // nicht jede Boerse hat an jedem Tag einen Datenpunkt.
-          let price = null;
-          for (let i = h.points.length - 1; i >= 0; i--) {
-            if (h.points[i].date <= date) { price = h.points[i].price; break; }
-          }
-          const rate = h.currency === "EUR" ? 1 : rates[h.currency];
-          if (price != null && rate != null) totalV += qty * price * rate * 100;
-        }
-        values.push(totalV);
-        costs.push(totalC);
-      }
-      setChartSeries({ dates: allDates, values, costs });
-    } catch (e) {
-      setChartError(e);
-    } finally {
-      setChartLoading(false);
-    }
-  };
-  useEffect(() => { if (positions.length) loadChart(chartRange, positions, trades); }, [chartRange, positions.length, trades.length]);
-
   const active = positions.filter((p) => !p.archived);
   const statsOf = (p) => positionStats(p.id, trades, quotes[p.id], p.currency, fxRates[quotes[p.id]?.currency ?? p.currency]);
 
@@ -308,8 +332,7 @@ export default function Depot({ flash }) {
             </p>
           )}
 
-          <DepotChart range={chartRange} onRangeChange={setChartRange}
-            series={chartSeries} loading={chartLoading} error={chartError} />
+          <DepotChart positions={active} trades={trades} fxRates={fxRates} setFxRates={setFxRates} />
 
           <button onClick={() => refreshQuotes(positions)} disabled={quoting}
             className="w-full flex items-center justify-center gap-2 text-xs text-stone-500 dark:text-stone-400 mb-4 py-1 disabled:opacity-50">
@@ -367,6 +390,7 @@ export default function Depot({ flash }) {
         <PositionDetail position={viewingPosition} trades={trades.filter((t) => t.position === viewingPosition.id)}
           quote={quotes[viewingPosition.id]}
           fxRate={fxRates[quotes[viewingPosition.id]?.currency ?? viewingPosition.currency]}
+          fxRates={fxRates} setFxRates={setFxRates}
           quoting={quoting}
           onClose={() => setViewingPositionId(null)}
           onEdit={() => setEditingPosition(viewingPosition)}
@@ -507,7 +531,7 @@ function PositionEditor({ draft, onClose, onSaved, onError }) {
   );
 }
 
-function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onEdit, onRefreshQuote, onReload, flash, setError }) {
+function PositionDetail({ position, trades, quote, fxRate, fxRates, setFxRates, quoting, onClose, onEdit, onRefreshQuote, onReload, flash, setError }) {
   const [editingTrade, setEditingTrade] = useState(null);
   const s = positionStats(position.id, trades, quote, position.currency, fxRate);
   const sorted = [...trades].sort((a, b) => b.date.localeCompare(a.date));
@@ -540,6 +564,8 @@ function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onE
           </div>
         ))}
       </div>
+
+      <DepotChart positions={[position]} trades={trades} fxRates={fxRates} setFxRates={setFxRates} />
 
       <div className="flex gap-2 mb-5">
         <Button variant="ghost" onClick={onEdit} className="flex-1">Bearbeiten</Button>

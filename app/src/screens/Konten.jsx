@@ -12,7 +12,7 @@ import Import from "./Import.jsx";
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, tags, balances, reload, flash }) {
+export default function Konten({ accounts, categories, tags, balances, reload, flash, depotEnabled, setDepotEnabled }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
@@ -197,6 +197,20 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
         className="w-full flex items-center justify-center gap-2">
         <Upload size={16} /> CSV-Datei importieren
       </Button>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Funktionen</p>
+      <div className="inline-flex mb-1 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {[[true, "Depot an"], [false, "Depot aus"]].map(([v, label], i) => (
+          <button key={String(v)} onClick={() => setDepotEnabled(v)}
+            className={`px-3.5 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              depotEnabled === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
+        Ausgeschaltet verschwindet nur der Reiter — Positionen und Trades bleiben erhalten.
+      </p>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Darstellung</p>
       <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">

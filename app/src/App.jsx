@@ -10,6 +10,7 @@ import Konten from "./screens/Konten.jsx";
 import Depot from "./screens/Depot.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
+import { useDepotEnabled } from "./depotPref.js";
 
 export default function App() {
   const [authed, setAuthed] = useState(pb.authStore.isValid);
@@ -56,6 +57,7 @@ function Login() {
 }
 
 function Shell() {
+  const { depotEnabled, setDepotEnabled } = useDepotEnabled();
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [tab, setTab] = useState("buchungen");
@@ -208,15 +210,21 @@ function Shell() {
   const shared = {
     accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
     balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail: setDetail,
+    depotEnabled, setDepotEnabled,
   };
 
   const navItems = [
     { id: "buchungen", label: "Buchungen", Icon: List },
     { id: "auswertung", label: "Auswertung", Icon: PieChart },
     { id: "budgets", label: "Budgets", Icon: Target },
-    { id: "depot", label: "Depot", Icon: TrendingUp },
+    ...(depotEnabled ? [{ id: "depot", label: "Depot", Icon: TrendingUp }] : []),
     { id: "konten", label: "Konten", Icon: Settings },
   ];
+
+  // Wer das Depot gerade offen hat und es dann in den Einstellungen
+  // ausschaltet, landet sonst auf einem Tab, der aus der Navigation
+  // verschwunden ist.
+  useEffect(() => { if (!depotEnabled && tab === "depot") setTab("buchungen"); }, [depotEnabled, tab]);
 
   // Kontextinfo je Tab, analog zu den Sidebar-/Bottom-Nav-Badges im epoch-Projekt.
   const navBadges = accounts.length > 0 ? {
@@ -301,7 +309,8 @@ function Shell() {
             </button>
           )}
 
-          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid grid-cols-5">
+          <nav className={`sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid ${
+            navItems.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (

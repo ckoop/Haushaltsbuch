@@ -42,10 +42,11 @@ Vorspann-Zeilen, alles wird erkannt.
   Öffnen der App, inklusive Kategorie und Tags. Kein Server-Cron nötig.
 - **Umbuchungen als eine Buchung**, nicht zwei — Geld zwischen eigenen Konten
   verfälscht keine Auswertung.
-- **Depot** — Wertpapiere über echte Kauf-/Verkaufstrades, aktuelle Kurse
-  kostenlos von Yahoo Finance, Gewinn/Verlust nach der Durchschnittsmethode.
-  Fremdwährungen zusätzlich live in Euro umgerechnet. Verlaufs-Chart über
-  3 Monate/3/5 Jahre, mit Einstand als Vergleichslinie.
+- **Depot** (optional abschaltbar) — Wertpapiere über echte Kauf-/
+  Verkaufstrades, aktuelle Kurse kostenlos von Yahoo Finance, Gewinn/Verlust
+  nach der Durchschnittsmethode, Fremdwährungen live in Euro umgerechnet.
+  Einklappbarer Verlaufs-Chart übers Gesamtdepot und pro Position, 3
+  Monate/3/5 Jahre, mit Einstand als Vergleichslinie.
 - **Hell/Dunkel/System-Design**, responsive (Bottom-Nav auf dem Handy,
   Sidebar auf dem Desktop).
 
