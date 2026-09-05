@@ -10,14 +10,24 @@ const fmtQty = (q) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 4 
 // Verhaeltnis zum bisherigen Durchschnittspreis (nicht nach FIFO/LIFO -
 // fuer ein privates Depot reicht das, und es bleibt nachvollziehbar).
 //
-// fxRate rechnet Wert und Einstand zusaetzlich in Euro um (1 Einheit der
-// Positionswaehrung -> X Euro, vom selben Yahoo-Kurs-Proxy geholt wie die
-// Kurse selbst, z. B. Ticker "USDEUR=X"). Bewusst eine einzige, aktuelle
-// Umrechnung fuer Wert UND Einstand statt historischer Kurse zum jeweiligen
-// Kaufzeitpunkt - eine Momentaufnahme, kein separates Fremdwaehrungs-
-// Gewinn/Verlust-Tracking. Ohne (noch nicht geholten) Kurs bleiben die
-// Euro-Felder null, nie 0 - sonst wuerde eine fehlende Umrechnung wie ein
-// echter Nullwert aussehen.
+// Trade-Preise (price_cents) sind IMMER Euro - genau wie ueberall sonst
+// in der App ("Beträge sind ganzzahlige Cent", CLAUDE.md), das ist der
+// Preis, den man tatsaechlich gezahlt hat, unabhaengig davon, an welcher
+// Boerse und in welcher Waehrung das Wertpapier notiert. Costcents ist
+// deshalb immer EUR-nativ, ohne jede Umrechnung.
+//
+// Der LIVE-Kurs dagegen kommt von Yahoo in dessen eigener Handelswaehrung
+// (z. B. USD, wenn die Suche eine Londoner statt eine Xetra-Notierung
+// trifft) - fuer einen fairen Vergleich mit dem Euro-Einstand wird nur
+// dieser eine Wert per fxRate nach Euro umgerechnet (1 Einheit der
+// Kurswaehrung -> X Euro, vom selben Yahoo-Kurs-Proxy geholt, z. B. Ticker
+// "USDEUR=X"). Frueher wurden Einstand UND Kurs an derselben Waehrung
+// aufgehaengt - das mischte "was ich bezahlt habe" mit "wo das Papier
+// notiert" und ergab falsche Gewinne, sobald beide auseinanderfielen.
+//
+// Ohne (noch nicht geholten) Kurs oder Wechselkurs bleiben die
+// Euro-Wert-Felder null, nie 0 - sonst wuerde eine fehlende Umrechnung wie
+// ein echter Nullwert aussehen.
 function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
   const own = [...trades].filter((t) => t.position === positionId).sort((a, b) => a.date.localeCompare(b.date));
   let qty = 0, costCents = 0;
@@ -31,20 +41,18 @@ function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
       costCents -= avg * t.quantity;
     }
   }
-  const currency = quote?.currency ?? fallbackCurrency;
-  const priceCents = quote?.price_cents ?? null;
-  const valueCents = priceCents != null ? qty * priceCents : null;
-  const gainCents = valueCents != null ? valueCents - costCents : null;
-  const gainPct = valueCents != null && costCents > 0 ? (gainCents / costCents) * 100 : null;
+  const priceCurrency = quote?.currency ?? fallbackCurrency ?? "EUR";
+  const priceCents = quote?.price_cents ?? null; // in priceCurrency
+  const priceNativeValueCents = priceCents != null ? qty * priceCents : null; // in priceCurrency
 
-  const rate = currency === "EUR" ? 1 : fxRate;
-  const valueEurCents = valueCents != null && rate != null ? valueCents * rate : null;
-  const costEurCents = rate != null ? costCents * rate : null;
-  const gainEurCents = valueEurCents != null && costEurCents != null ? valueEurCents - costEurCents : null;
+  const rate = priceCurrency === "EUR" ? 1 : fxRate;
+  const valueEurCents = priceNativeValueCents != null && rate != null ? priceNativeValueCents * rate : null;
+  const gainEurCents = valueEurCents != null ? valueEurCents - costCents : null;
+  const gainEurPct = valueEurCents != null && costCents > 0 ? (gainEurCents / costCents) * 100 : null;
 
   return {
-    qty, costCents, priceCents, valueCents, gainCents, gainPct, currency,
-    valueEurCents, costEurCents, gainEurCents,
+    qty, costCents, priceCents, priceCurrency, priceNativeValueCents,
+    valueEurCents, gainEurCents, gainEurPct,
   };
 }
 
@@ -102,14 +110,15 @@ export default function Depot({ flash }) {
   const active = positions.filter((p) => !p.archived);
   const statsOf = (p) => positionStats(p.id, trades, quotes[p.id], p.currency, fxRates[quotes[p.id]?.currency ?? p.currency]);
 
-  // Nur Positionen mit bekannter Euro-Umrechnung fliessen in die Summe ein -
-  // waehrend ein Fremdwaehrungs-Kurs noch unterwegs ist, zaehlt sie kurz
-  // nicht mit, statt mit einem falschen Zwischenwert die Summe zu verfaelschen.
-  const convertible = active.filter((p) => statsOf(p).valueEurCents != null || statsOf(p).qty === 0);
-  const totalValue = convertible.reduce((s, p) => s + (statsOf(p).valueEurCents ?? 0), 0);
-  const totalCost = convertible.reduce((s, p) => s + (statsOf(p).costEurCents ?? 0), 0);
+  // Einstand ist immer Euro-nativ (siehe positionStats), zaehlt also sofort
+  // vollstaendig. Beim aktuellen Wert zaehlt eine Position erst mit, sobald
+  // ihr Kurs (und bei Fremdwaehrung: der Wechselkurs) tatsaechlich da ist -
+  // sonst wuerde ein kurzzeitig fehlender Kurs wie ein echter Nullwert
+  // aussehen und die Summe verfaelschen.
+  const totalCost = active.reduce((s, p) => s + statsOf(p).costCents, 0);
+  const pendingCount = active.filter((p) => statsOf(p).qty > 0 && statsOf(p).valueEurCents == null).length;
+  const totalValue = active.reduce((s, p) => s + (statsOf(p).valueEurCents ?? 0), 0);
   const totalGain = totalValue - totalCost;
-  const pendingCount = active.length - convertible.length;
 
   const viewingPosition = positions.find((p) => p.id === viewingPositionId) ?? null;
 
@@ -163,18 +172,18 @@ export default function Depot({ flash }) {
                   </span>
                   <span className="text-right shrink-0">
                     <span className="block text-sm font-medium tabular-nums">
-                      {s.valueCents != null ? money(s.valueCents, s.currency) : "–"}
+                      {s.valueEurCents != null ? money(s.valueEurCents) : "–"}
                     </span>
-                    {s.currency !== "EUR" && (
+                    {s.priceCurrency !== "EUR" && (
                       <span className="block text-xs text-stone-400 dark:text-stone-500 tabular-nums">
-                        {s.valueEurCents != null ? `≈ ${money(s.valueEurCents)}` : "Kurs folgt …"}
+                        {s.priceNativeValueCents != null ? money(s.priceNativeValueCents, s.priceCurrency) : "Kurs folgt …"}
                       </span>
                     )}
-                    {s.gainCents != null && (
+                    {s.gainEurCents != null && (
                       <span className={`block text-xs tabular-nums ${
-                        s.gainCents < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                        {s.gainCents < 0 ? "−" : "+"}{money(Math.abs(s.gainCents), s.currency)}
-                        {s.gainPct != null && ` · ${s.gainPct >= 0 ? "+" : ""}${s.gainPct.toFixed(1)}%`}
+                        s.gainEurCents < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                        {s.gainEurCents < 0 ? "−" : "+"}{money(Math.abs(s.gainEurCents))}
+                        {s.gainEurPct != null && ` · ${s.gainEurPct >= 0 ? "+" : ""}${s.gainEurPct.toFixed(1)}%`}
                       </span>
                     )}
                   </span>
@@ -296,10 +305,14 @@ function PositionEditor({ draft, onClose, onSaved, onError }) {
         bei Bedarf hier von Hand auf den Xetra-Ticker (Endung ".DE") ändern.
       </p>
 
-      <Field label="Handelswährung">
+      <Field label="Handelswährung (Anzeige des Live-Kurses)">
         <input value={currency} onChange={(e) => setCurrency(e.target.value)}
           placeholder="EUR" className={`${inputCls} uppercase w-24!`} />
       </Field>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-3 mb-4">
+        Nur für die Anzeige des Live-Kurses, bevor er zum ersten Mal geholt wurde — der wird danach
+        ohnehin live überschrieben. Trades erfasst du immer in Euro, unabhängig davon.
+      </p>
 
       {!isNew && (
         <>
@@ -339,23 +352,20 @@ function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onE
   const [editingTrade, setEditingTrade] = useState(null);
   const s = positionStats(position.id, trades, quote, position.currency, fxRate);
   const sorted = [...trades].sort((a, b) => b.date.localeCompare(a.date));
-  const foreign = s.currency !== "EUR";
+  const foreign = s.priceCurrency !== "EUR";
 
   const rows = [
     ["Bestand", `${fmtQty(s.qty)} Stk.`, ""],
-    ["Kurs", s.priceCents != null ? money(s.priceCents, s.currency) : "–", ""],
-    ["Aktueller Wert", s.valueCents != null ? money(s.valueCents, s.currency) : "–", ""],
+    ["Kurs", s.priceCents != null ? money(s.priceCents, s.priceCurrency) : "–", ""],
   ];
-  if (foreign) rows.push(["… in Euro", s.valueEurCents != null ? `≈ ${money(s.valueEurCents)}` : "Kurs folgt …", "text-stone-500 dark:text-stone-400"]);
-  rows.push(["Einstand", money(s.costCents, s.currency), ""]);
-  if (foreign && s.costEurCents != null) rows.push(["… in Euro", `≈ ${money(s.costEurCents)}`, "text-stone-500 dark:text-stone-400"]);
-  const gainVal = foreign ? s.gainEurCents : s.gainCents;
-  rows.push(["Gewinn/Verlust", s.gainCents != null
-    ? `${s.gainCents < 0 ? "−" : "+"}${money(Math.abs(s.gainCents), s.currency)}${s.gainPct != null ? ` · ${s.gainPct >= 0 ? "+" : ""}${s.gainPct.toFixed(1)}%` : ""}`
-    : "–",
-    s.gainCents == null ? "" : s.gainCents < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"]);
-  if (foreign) rows.push(["… in Euro", gainVal != null ? `${gainVal < 0 ? "−" : "+"}${money(Math.abs(gainVal))}` : "Kurs folgt …",
-    gainVal == null ? "text-stone-500 dark:text-stone-400" : gainVal < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"]);
+  if (foreign) rows.push(["Aktueller Wert (" + s.priceCurrency + ")",
+    s.priceNativeValueCents != null ? money(s.priceNativeValueCents, s.priceCurrency) : "–", "text-stone-500 dark:text-stone-400"]);
+  rows.push(["Aktueller Wert", s.valueEurCents != null ? money(s.valueEurCents) : "Kurs folgt …", ""]);
+  rows.push(["Einstand", money(s.costCents), ""]);
+  rows.push(["Gewinn/Verlust", s.gainEurCents != null
+    ? `${s.gainEurCents < 0 ? "−" : "+"}${money(Math.abs(s.gainEurCents))}${s.gainEurPct != null ? ` · ${s.gainEurPct >= 0 ? "+" : ""}${s.gainEurPct.toFixed(1)}%` : ""}`
+    : "Kurs folgt …",
+    s.gainEurCents == null ? "" : s.gainEurCents < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"]);
 
   return (
     <Sheet title={position.name} onClose={onClose}>
@@ -387,7 +397,7 @@ function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onE
             <span className="flex-1 min-w-0">
               <span className="block text-sm">{t.type === "buy" ? "Kauf" : "Verkauf"} · {fmtQty(t.quantity)} Stk.</span>
               <span className="block text-xs text-stone-500 dark:text-stone-400">
-                {new Date(api.dateOnly(t.date) + "T12:00:00").toLocaleDateString("de-DE")} · {money(t.price_cents, position.currency)}/Stk.
+                {new Date(api.dateOnly(t.date) + "T12:00:00").toLocaleDateString("de-DE")} · {money(t.price_cents)}/Stk.
               </span>
             </span>
             <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
@@ -405,7 +415,7 @@ function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onE
       </Button>
 
       {editingTrade && (
-        <TradeEditor draft={editingTrade} currency={position.currency || "EUR"} onClose={() => setEditingTrade(null)}
+        <TradeEditor draft={editingTrade} onClose={() => setEditingTrade(null)}
           onSaved={(m) => { setEditingTrade(null); flash(m); onReload(); }}
           onError={setError} />
       )}
@@ -413,7 +423,7 @@ function PositionDetail({ position, trades, quote, fxRate, quoting, onClose, onE
   );
 }
 
-function TradeEditor({ draft, currency, onClose, onSaved, onError }) {
+function TradeEditor({ draft, onClose, onSaved, onError }) {
   const isNew = !draft.id;
   const [type, setType] = useState(draft.type);
   const [date, setDate] = useState(draft.date ? api.dateOnly(draft.date) : todayISO());
@@ -468,19 +478,23 @@ function TradeEditor({ draft, currency, onClose, onSaved, onError }) {
           className={`${inputCls} tabular-nums`} />
       </Field>
 
-      <Field label="Kurs pro Stück">
+      <Field label="Kurs pro Stück (in Euro)">
         <div className="flex items-center gap-2">
           <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)}
             className={`${inputCls} tabular-nums`} />
-          <span className="text-sm text-stone-400 dark:text-stone-500 shrink-0">{currency}</span>
+          <span className="text-sm text-stone-400 dark:text-stone-500 shrink-0">€</span>
         </div>
       </Field>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-3 mb-4">
+        Der Preis, den du tatsächlich bezahlt hast, in Euro — unabhängig davon, in welcher Währung
+        das Wertpapier an seiner Börse notiert.
+      </p>
 
-      <Field label="Gebühren (optional)">
+      <Field label="Gebühren (optional, in Euro)">
         <div className="flex items-center gap-2">
           <input type="number" min="0" step="0.01" value={fees} onChange={(e) => setFees(e.target.value)}
             className={`${inputCls} tabular-nums`} />
-          <span className="text-sm text-stone-400 dark:text-stone-500 shrink-0">{currency}</span>
+          <span className="text-sm text-stone-400 dark:text-stone-500 shrink-0">€</span>
         </div>
       </Field>
 

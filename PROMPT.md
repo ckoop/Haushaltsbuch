@@ -182,24 +182,39 @@ beim Öffnen des Depot-Tabs und per "Aktualisieren"-Button geholt
 bei den Daueraufträgen. Kein Server-Feld für den aktuellen Kurs — der
 Preis lebt nur als Session-State (`quotes` in `Depot.jsx`), nie in der
 Datenbank, damit nie ein veralteter Kurs mit einem frischen verwechselt
-wird. **Währungsumrechnung** (ab `0.19.0`): Fremdwährungs-Positionen
+wird. **Trade-Preise sind immer Euro**
+(`depot_trades.price_cents`/`fees_cents`), genau wie überall sonst in
+der App — der Preis, den man tatsächlich gezahlt hat, unabhängig
+davon, an welcher Börse und in welcher Währung das Wertpapier notiert.
+`TradeEditor` in `Depot.jsx` beschriftet die Felder entsprechend
+("Kurs pro Stück (in Euro)"). **Währungsumrechnung** (ab `0.19.1`,
+korrigiert nach einem Bug in `0.19.0`) betrifft deshalb ausschließlich
+den *Live-Kurs*: wenn der aufgelöste Ticker nicht in Euro notiert
 (z. B. wenn die Yahoo-Suche die Londoner USD- statt die Xetra-Euro-
-Notierung trifft) werden zusätzlich in Euro ausgewiesen, nicht ersetzt
-— Wert, Einstand und Gewinn/Verlust bleiben in der Handelswährung
-sichtbar, eine "… in Euro"-Zeile daneben zeigt die Umrechnung. Der
-Wechselkurs kommt vom selben Kurs-Proxy: Yahoo führt Währungspaare als
-ganz normale Ticker (`USDEUR=X`), `fxRates` in `Depot.jsx` holt pro
-vorkommender Fremdwährung einmal den Kurs, nicht pro Position. Bewusst
-eine einzige, aktuelle Umrechnung für Wert *und* Einstand statt
-historischer Kurse zum jeweiligen Kaufzeitpunkt — eine Momentaufnahme,
-kein separates Fremdwährungs-Gewinn/Verlust-Tracking. Der Proxy liefert
-dafür zusätzlich zu `price_cents` (gerundet auf ganze Cent, reicht für
-Aktienkurse) ein rohes `price`-Feld — bei einem Wechselkurs wie `0,0068`
-(z. B. JPY→EUR) würde die Rundung auf Cent die Genauigkeit komplett
-zerstören. Solange ein Kurs für eine Fremdwährung noch nicht geholt
-ist, bleiben ihre Euro-Felder `null` statt `0` und die Position zählt
-kurz nicht in der Gesamtsumme mit — sichtbar an "Kurs folgt …" statt
-einem falschen Zwischenwert. `docker-compose.yml` mountet dafür neu
+Notierung trifft), wird nur dieser eine Wert in Euro umgerechnet und
+mit dem Euro-Einstand verglichen — `positionStats()` gibt dafür
+`costCents` (immer Euro) getrennt von `priceCurrency`/
+`priceNativeValueCents` (native Kurswährung) zurück,
+`valueEurCents`/`gainEurCents` sind die einzigen für Vergleiche/Summen
+verwendeten Werte. Die frühere `0.19.0`-Version hatte stattdessen die
+*ganze Position* an der Live-Kurswährung aufgehängt und damit implizit
+unterstellt, der eingegebene Trade-Preis sei in derselben Fremdwährung
+wie der Live-Kurs — bei einer Londoner USD-Notierung mit tatsächlich
+in Euro eingegebenem Kaufpreis ergab das einen kräftig falschen
+Gewinn. Der Wechselkurs selbst kommt vom selben Kurs-Proxy: Yahoo
+führt Währungspaare als ganz normale Ticker (`USDEUR=X`), `fxRates` in
+`Depot.jsx` holt pro vorkommender Live-Kurswährung einmal den Kurs,
+nicht pro Position. Bewusst eine einzige, aktuelle Umrechnung für den
+Wert statt historischer Kurse zum jeweiligen Kaufzeitpunkt — eine
+Momentaufnahme, kein separates Fremdwährungs-Gewinn/Verlust-Tracking.
+Der Proxy liefert dafür zusätzlich zu `price_cents` (gerundet auf
+ganze Cent, reicht für Aktienkurse) ein rohes `price`-Feld — bei einem
+Wechselkurs wie `0,0068` (z. B. JPY→EUR) würde die Rundung auf Cent
+die Genauigkeit komplett zerstören. Solange der Live-Kurs oder sein
+Wechselkurs noch nicht geholt ist, bleibt `valueEurCents` `null` statt
+`0` und die Position zählt kurz nicht in der Gesamtsumme mit —
+sichtbar an "Kurs folgt …" statt einem falschen Zwischenwert.
+`docker-compose.yml` mountet dafür neu
 `./pb_hooks:/pb_hooks` — auf einer bestehenden Instanz braucht es nach
 `git pull` ein `docker compose up -d` (Container-Neuerzeugung, ein
 reiner Neustart reicht nicht, siehe BETRIEB.md).

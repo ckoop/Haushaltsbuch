@@ -190,19 +190,29 @@ Bewusste Vereinfachung: Bestand und Einstandspreis laufen nach der
 **Durchschnittsmethode** (kein FIFO/LIFO) — für ein privates Depot
 nachvollziehbar genug.
 
-**Währungsumrechnung** (ab `0.19.0`): Positionen in Fremdwährung (z. B.
-wenn "Ticker suchen" die Londoner USD- statt die Xetra-Euro-Notierung
-trifft) werden zusätzlich in Euro ausgewiesen — die Handelswährung bleibt
-sichtbar, eine "… in Euro"-Zeile zeigt daneben die Umrechnung, und diese
-Positionen fließen mit ihrem Euro-Wert in die Gesamtsumme ein. Der
-Wechselkurs kommt vom selben Kurs-Proxy wie die Kurse: Yahoo führt
-Währungspaare als ganz normale Ticker (`USDEUR=X`), einmal pro
-vorkommender Fremdwährung geholt, nicht pro Position. Bewusst eine
-einzige, aktuelle Umrechnung für Wert *und* Einstand statt historischer
-Kurse zum jeweiligen Kaufzeitpunkt — eine Momentaufnahme, kein separates
-Fremdwährungs-Gewinn/Verlust-Tracking. Solange ein Wechselkurs noch nicht
-geholt ist, zählt die betroffene Position kurz nicht in der Gesamtsumme
-mit ("Kurs folgt …" statt eines falschen Zwischenwerts).
+**Trade-Preise sind immer Euro** — der Preis, den man tatsächlich gezahlt
+hat, unabhängig davon, an welcher Börse und in welcher Währung das
+Wertpapier notiert. Der Trade-Editor beschriftet die Felder entsprechend
+("Kurs pro Stück (in Euro)").
+
+**Währungsumrechnung** (ab `0.19.1`, korrigiert nach einem Bug in
+`0.19.0`) betrifft deshalb ausschließlich den *Live-Kurs*: wenn der
+aufgelöste Ticker nicht in Euro notiert (z. B. wenn "Ticker suchen" die
+Londoner USD- statt die Xetra-Euro-Notierung trifft), wird nur dieser
+eine Wert in Euro umgerechnet und dem Euro-Einstand gegenübergestellt.
+Die `0.19.0`-Version hatte stattdessen die ganze Position an der
+Live-Kurswährung aufgehängt — bei einer Fremdwährungs-Notierung mit
+tatsächlich in Euro eingegebenem Kaufpreis ergab das einen deutlich
+falschen Gewinn, weil der (schon Euro-native) Einstand fälschlich noch
+einmal umgerechnet wurde. Der Wechselkurs selbst kommt vom selben
+Kurs-Proxy wie die Kurse: Yahoo führt Währungspaare als ganz normale
+Ticker (`USDEUR=X`), einmal pro vorkommender Live-Kurswährung geholt,
+nicht pro Position. Bewusst eine einzige, aktuelle Umrechnung für den
+Wert statt historischer Kurse zum jeweiligen Kaufzeitpunkt — eine
+Momentaufnahme, kein separates Fremdwährungs-Gewinn/Verlust-Tracking.
+Solange der Live-Kurs oder sein Wechselkurs noch nicht geholt ist, zählt
+die betroffene Position kurz nicht in der Gesamtsumme mit ("Kurs
+folgt …" statt eines falschen Zwischenwerts).
 
 ## Sicherung
 
