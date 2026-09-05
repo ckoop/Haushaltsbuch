@@ -1,7 +1,10 @@
 # Experten-Prompt: Haushaltsbuch
 
 Zum Einfügen in eine neue Unterhaltung, in Claude Code oder als Projektanweisung.
-Er enthält alles, was gebaut wurde, und vor allem die Gründe dafür.
+Er beschreibt den aktuellen Stand der App und die Gründe hinter den
+Architekturentscheidungen — nicht die Geschichte, wie er entstanden ist. Wer
+wissen will, was sich wann geändert hat, findet das im Änderungsprotokoll in
+`CLAUDE.md`.
 
 ---
 
@@ -15,325 +18,373 @@ tatsächlich löst. Der Nutzer hat solide Programmiergrundlagen, braucht keine
 Erklärung von Sprachgrundlagen, aber will die Begründung hinter
 Architekturentscheidungen hören.
 
-## Was existiert
+## Was das ist
 
-Eine lauffähige Web-App plus Backend, betrieben im Heimnetz.
+Eine Web-App plus Backend für Buchungen, Budgets, Auswertungen und ein
+Wertpapier-Depot, betrieben in einem einzigen Docker-Container im Heimnetz.
+Erreichbar von unterwegs per WireGuard-Tunnel, nicht über eine öffentliche
+Domain. Kein Multi-Tenant-Gedanke: alle angemeldeten Nutzer sehen dieselben
+Daten, der Haushalt ist die Zugriffsgrenze, nicht die einzelne Person.
 
-**Stack**
+## Stack & Betrieb
 
-- PocketBase 0.39 in einem Docker-Container, Port 8090, kein Reverse Proxy
-- React 18 + Vite 6 + Tailwind 4, Build geht nach `pb_public/`, PocketBase
-  liefert es aus — ein Ursprung, keine CORS-Fragen
-- `lucide-react` für Icons, sonst keine UI-Bibliothek
-- Zugriff von unterwegs über WireGuard ins Heimnetz, nicht über eine
-  öffentliche Domain
+- **PocketBase 0.39** in einem Docker-Container, Port 8090, kein Reverse
+  Proxy davor.
+- **React 18 + Vite 6 + Tailwind 4** — Build geht nach `pb_public/`,
+  PocketBase liefert es aus. Ein Ursprung, keine CORS-Fragen fürs Frontend.
+- `lucide-react` für Icons, sonst keine UI-Bibliothek. Kein Diagramm-Paket
+  — Charts (Jahresvergleich, Depot-Verlauf) sind reines SVG/CSS.
+- Läuft über `http://192.168.x.x:8090`, also **kein sicherer Kontext**.
+  Konsequenzen: kein `crypto.subtle` (Dedup-Hash ist eine FNV-1a-Variante in
+  reinem JavaScript), kein Service Worker, keine echte installierbare PWA.
+  Ein Homescreen-Icon geht trotzdem (siehe unten).
+- Client benutzt `window.location.origin`, keine feste Server-Adresse im
+  Code — dieselbe App funktioniert unverändert im WLAN und im
+  WireGuard-Tunnel.
+- Einzige Ausnahme vom "läuft komplett im Heimnetz"-Prinzip: der Depot-Tab
+  holt Börsenkurse von Yahoo Finance aus dem Internet (siehe Depot-Abschnitt).
 
-**Dateien**
+## Dateien
 
 ```
-docker-compose.yml          Container, Port 8090, Healthcheck,
-                            mountet zusaetzlich pb_hooks (Kurs-Proxy)
-setup/schema.mjs            Legt alle Sammlungen an, wiederholbar
-pb_hooks/main.pb.js         Einzige Server-Route: Kurs-Proxy fuers Depot
-app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
-app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
-app/src/ui.jsx              Formatierung, Farben, gemeinsame Bausteine
-app/src/theme.js            Hell/Dunkel/System-Praeferenz (localStorage)
-app/src/depotPref.js        Depot-an/aus-Praeferenz (localStorage),
-                            gleiches Muster wie theme.js
-app/src/App.jsx             Login, Datenladung, Monatswechsel, Tabs,
-                            responsive Shell (Sidebar ab 860px,
-                            sonst Bottom-Nav + FAB), Kontext-Badges
-                            je Nav-Eintrag (Kontofilter, Kontoanzahl),
-                            Buchungs-Detail-Sheet (State + Handler,
-                            damit jeder Screen es via openDetail()
-                            oeffnen kann, nicht nur Buchungen.jsx)
-app/src/screens/            Buchungen, Auswertung, Budgets, Depot,
-                            Konten, Einstellungen, NewEntry, Import,
-                            TxDetail
-                            (Darstellung des Buchungs-Detail-Sheets)
+docker-compose.yml       Container, Port 8090, Healthcheck, mountet
+                         pb_data, pb_public und pb_hooks
+setup/schema.mjs         Legt alle Sammlungen an, wiederholbar/idempotent
+pb_hooks/main.pb.js      Einzige Server-Route: Kurs-Proxy fürs Depot
+app/src/pb.js            PocketBase-Client + gesamter Datenzugriff —
+                         Screens sprechen nie direkt mit dem SDK
+app/src/csv.js           CSV-Parser, Kodierungserkennung, Datums-/
+                         Betragslogik, Dedup-Hash
+app/src/ui.jsx           Formatierung (eur/money), Farben, Icons,
+                         gemeinsame Bausteine (Sheet, Button, TxRow, ...)
+app/src/theme.js         Hell/Dunkel/System-Präferenz (localStorage)
+app/src/depotPref.js     Depot-an/aus-Präferenz (localStorage), gleiches
+                         Muster wie theme.js
+app/src/App.jsx          Login, Datenladung fürs jeweilige Monat,
+                         responsive Shell (Sidebar ab 860px, sonst
+                         Bottom-Nav + FAB), Buchungs-Detail-Sheet
+                         (State + Handler, damit jeder Screen es über
+                         openDetail() öffnen kann)
+app/src/screens/         Buchungen, Auswertung, Budgets, Depot, Konten,
+                         Einstellungen, NewEntry, Import, TxDetail
 ```
 
-**Sammlungen**
+## Datenmodell
 
-`accounts`, `categories`, `transactions`, `budgets`, `import_profiles`,
-`imports`, `rules`, `recurring_rules`, `tags`, `depot_positions`,
-`depot_trades`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
+| Sammlung | Zweck |
+|---|---|
+| `accounts` | Konten (Girokonto, Bargeld, Sparen, Kreditkarte) |
+| `categories` | Kategorien, getrennt nach `kind` (Ausgabe/Einnahme) |
+| `tags` | Freie Zusatz-Kennzeichnung quer zur Kategorie |
+| `transactions` | Buchungen und Umbuchungen |
+| `budgets` | Monats- oder Dauerlimit je Kategorie |
+| `rules` | Textmuster → Kategorie, für den CSV-Import |
+| `recurring_rules` | Daueraufträge, erzeugen künftige Buchungen automatisch |
+| `import_profiles` / `imports` | Spaltenzuordnung je Bank / Protokoll je Importlauf |
+| `depot_positions` / `depot_trades` | Wertpapiere und ihre Kauf-/Verkaufstrades |
 
-`transactions.recurring` markiert eine Buchung als wiederkehrend
-(`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage
-(`NewEntry.jsx`) und nachträglich im Detail-Sheet (`Buchungen.jsx`). Kein
-Auto-Generieren künftiger Buchungen, nur eine Markierung auf manuell
-erfassten Zeilen, sichtbar in der Buchungsliste (Frequenz-Suffix +
-Repeat-Icon über `TxRow` in `ui.jsx`) und als eigener Abschnitt in
-`Auswertung.jsx`. `setup/schema.mjs` legt das Feld nur bei einer
-Neuinstallation an (`ensure()` patcht keine Felder auf bereits
-existierenden Sammlungen) — auf einer laufenden Instanz muss es einmalig
-manuell in der PocketBase-Admin-Oberfläche ergänzt werden.
+Zugriffsregel überall identisch: `@request.auth.id != ""` — wer angemeldet
+ist, sieht alles.
 
-Kategorien lassen sich seit `0.4.0` vollständig im UI verwalten
-(Konten-Tab, `CategoryEditor` in `Konten.jsx`) — anlegen, Name/Art/Symbol/
-Farbe bearbeiten, löschen. Löschen ist wie bei Konten gesperrt, solange
-Buchungen die Kategorie referenzieren (`api.countByCategory`, gleiches
-Muster wie `countByAccount`). Die Liste zeigt standardmäßig die ersten 5
-Kategorien, darunter ein Ausklapp-Link für den Rest
-(`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die
-Kategorie-Auswahl in `NewEntry.jsx`.
+**Feldbesonderheiten, die man kennen muss:**
 
-**Regeln** (`rules`) ordnen beim CSV-Import automatisch eine Kategorie
-zu, wenn Empfänger oder Verwendungszweck ein Textmuster enthalten
-(`applyRules()` in `csv.js`). Im Konten-Tab verwaltbar (`AutoRuleEditor`
-in `Konten.jsx`, gleiches Muster wie `CategoryEditor`) — anlegen,
-Textmuster/Kategorie/Priorität bearbeiten, löschen. Keine Löschsperre
-wie bei Konten/Kategorien: eine Regel referenziert keine Buchungen, ihr
-Löschen wirkt sich nur auf künftige Importe aus. Namenskollision mit
-dem `rules`-State für Daueraufträge in `Konten.jsx` vermieden, indem
-die Kategorisierungsregeln dort als `autoRules`/`loadAutoRules`
-geführt werden.
+- Alle Beträge sind ganzzahlige Cent (`amount_cents`, `start_cents`,
+  `price_cents`, ...). Nie Fließkomma für Geld.
+- `transactions.type` ist `"tx"` oder `"transfer"`. Bei `"transfer"` ist
+  `account` die Quelle, `to_account` das Ziel — eine Umbuchung ist eine
+  Zeile, nicht zwei, und zählt weder als Einnahme noch als Ausgabe.
+- `transactions.recurring` (`monthly`/`quarterly`/`yearly`, leer = nein)
+  ist nur eine Markierung auf einer manuell erfassten Zeile — erzeugt
+  nichts automatisch. Das übernimmt `recurring_rules` (siehe
+  Daueraufträge unten), eine komplett andere Sammlung.
+- `transactions.import_hash` hat einen eindeutigen Index, der nur für
+  nicht-leere Werte gilt — manuell erfasste Buchungen haben einen leeren
+  Hash und blockieren sich dadurch nicht gegenseitig.
+- `budgets.month` ist Text: `"2026-08"` für einen einzelnen Monat, `"*"`
+  als Dauerbudget. Ein Monatsbudget schlägt das Dauerbudget derselben
+  Kategorie. Budgets gelten kontoübergreifend.
+- `depot_trades.price_cents`/`fees_cents` sind immer Euro — der Preis, den
+  man tatsächlich gezahlt hat, unabhängig von der Handelswährung des
+  Wertpapiers (mehr dazu im Depot-Abschnitt).
+- Schema-Änderungen an bestehenden Sammlungen (z. B. `recurring`- oder
+  `tags`-Feld auf `transactions`) zieht `setup/schema.mjs` auf einer
+  bereits laufenden Instanz **nicht** automatisch nach — `ensure()`
+  überspringt Sammlungen, die schon existieren. Auf einer laufenden
+  Instanz muss so ein Feld einmalig manuell in der PocketBase-Admin-
+  Oberfläche ergänzt werden. Komplett neue Sammlungen (z. B.
+  `recurring_rules`, `depot_positions`) zieht man stattdessen einfach per
+  erneutem `node setup/schema.mjs` nach — das Skript ist idempotent.
 
-**Tags** (`tags`, ab `0.11.0`) sind eine freie, mehrfache Zusatz-
-Kennzeichnung quer zur einen Pflicht-Kategorie — z. B. "Nebenkosten" auf
-einer als "Abos" kategorisierten Telekom-Buchung, ohne dass die
-Kategorie deshalb aufgeweicht werden müsste. Bewusst kein eigenes
-Verwaltungs-Screen wie bei Kategorien/Regeln: Tags entstehen direkt
-beim Zuweisen im Buchungen-Detail (`TagEditor` in `Buchungen.jsx`), ein
-vorhandener Tag wird case-insensitiv wiederverwendet
-(`idx_tags_name` mit `COLLATE NOCASE`) statt dupliziert. `App.jsx`
-berechnet `spentByTag` analog zu `spentByCat`, aber bewusst ohne
+## Funktionen
+
+### Buchungen, Kategorien, Tags, Regeln
+
+Kategorien sind vollständig im UI verwaltbar (Konten-Tab, `CategoryEditor`
+in `Konten.jsx`): anlegen, Name/Art/Symbol/Farbe bearbeiten, löschen.
+Löschen ist gesperrt, solange Buchungen oder aktive Daueraufträge die
+Kategorie referenzieren (`countByCategory`/`countRecurringRulesByCategory`
+in `pb.js`). Die Liste zeigt standardmäßig die ersten 5 Kategorien, darunter
+ein Ausklapp-Link für den Rest.
+
+**Tags** (`tags`) sind eine freie, mehrfache Zusatz-Kennzeichnung quer zur
+einen Pflicht-Kategorie — z. B. "Nebenkosten" auf einer als "Abos"
+kategorisierten Telekom-Buchung. Kein eigenes Verwaltungs-Screen: Tags
+entstehen direkt beim Zuweisen im Buchungen-Detail (`TagEditor` in
+`Buchungen.jsx`), ein vorhandener Tag wird case-insensitiv wiederverwendet
+statt dupliziert (`idx_tags_name` mit `COLLATE NOCASE`). `spentByTag` in
+`App.jsx` wird analog zu `spentByCat` berechnet, aber bewusst ohne
 Partition — eine Buchung mit zwei Tags zählt in beiden Tag-Summen mit.
-`Auswertung.jsx` zeigt dafür einen eigenen Abschnitt "Ausgaben nach
-Tag" mit demselben Klick-Drilldown wie bei Kategorien.
-`transactions.tags` ist eine neue Relation auf einer bestehenden
-Sammlung — wie beim `recurring`-Feld patcht `setup/schema.mjs` das auf
-einer laufenden Instanz nicht automatisch nach, einmalig manuell in der
-PocketBase-Admin-Oberfläche ergänzen (Feldtyp Relation, Ziel `tags`,
-Mehrfachauswahl).
 
-**Daueraufträge** (`recurring_rules`, ab `0.5.0`) erzeugen anders als
-`transactions.recurring` echte künftige Buchungen — bewusst
-**client-getriggert, kein PocketBase-Cron/`pb_hooks`**: `App.jsx` ruft
-beim Mount einmalig `api.runDueRecurringRules()` auf (nicht Teil von
-`load()`, das feuert bei jedem Monatswechsel neu). Wer die App eine Weile
+**Regeln** (`rules`) ordnen beim CSV-Import automatisch eine Kategorie zu,
+wenn Empfänger oder Verwendungszweck ein Textmuster enthalten
+(`applyRules()` in `csv.js`). Im Konten-Tab verwaltbar (`AutoRuleEditor`),
+keine Löschsperre — eine Regel referenziert keine Buchungen.
+
+### Daueraufträge
+
+`recurring_rules` erzeugt echte künftige Buchungen — bewusst
+**client-getriggert, kein PocketBase-Cron/`pb_hooks`**: `App.jsx` ruft beim
+Mount einmalig `api.runDueRecurringRules()` auf. Wer die App eine Weile
 nicht öffnet, bekommt die fälligen Perioden beim nächsten Öffnen gesammelt
-nachgebucht (Catch-up, kalendertag-sicher über `addMonths()` in `pb.js`)
-— kein "läuft im Hintergrund", das war eine bewusste Abwägung gegen die
-zusätzliche Server-Infrastruktur. Nach dem Nachbuchen zeigt ein Sheet
-"Automatisch gebucht" (`App.jsx`) konkret, welche Buchungen entstanden
-sind — `runDueRecurringRules()` gibt dafür die erzeugten Zeilen zurück,
-nicht nur eine Anzahl; ein Toast allein wäre schon wieder verschwunden,
-bevor man ihn liest. Dedup läuft über den bestehenden
-`import_hash`-Unique-Index (`import_hash = "rule:<ruleId>:<datum>"`),
-damit zwei gleichzeitig geöffnete Sessions sich nicht doppelt buchen —
-deshalb bewusst kein `createBatch()` für die Erzeugung, PocketBase-Batches
-sind atomar und ein Dedup-Konflikt würde sonst auch andere fällige Regeln
-blockieren. Zwei Einstiege: direkt beim Erfassen einer Buchung
-(`NewEntry.jsx`, Checkbox "Automatisch weiterbuchen" bei gesetzter
-Wiederholung — die Regel greift erst ab der *nächsten* Periode, die
-gerade gesicherte Buchung deckt die aktuelle ab) und im Konten-Tab
-(eigene Sektion "Daueraufträge", `RuleEditor`, gleiches Muster wie
-`AccountEditor`/`CategoryEditor`). Löschen eines Kontos/einer Kategorie
-ist zusätzlich gesperrt, solange ein aktiver Dauerauftrag darauf zeigt
-(`countRecurringRulesByAccount`/`ByCategory` in `pb.js`, kombiniert mit
-der Buchungs-Zählung) — sonst bricht die Regel beim nächsten Lauf still.
-`setup/schema.mjs` legt die Sammlung nur bei einer Neuinstallation an;
-auf einer laufenden Instanz per `node setup/schema.mjs` mit
-Superuser-Zugangsdaten nachziehen (idempotent, überspringt alles
-Bestehende) — für eine neue Sammlung mit vielen Feldern einfacher als
-einzelne Felder von Hand in der Admin-UI anzulegen.
+nachgebucht (Catch-up, kalendertag-sicher über `addMonths()` in `pb.js`).
+Ein Sheet "Automatisch gebucht" zeigt danach konkret, welche Buchungen
+entstanden sind. Dedup läuft über den `import_hash`-Unique-Index
+(`import_hash = "rule:<ruleId>:<datum>"`), damit zwei gleichzeitig
+geöffnete Sessions sich nicht doppelt buchen — deshalb bewusst kein
+`createBatch()` für die Erzeugung, ein Dedup-Konflikt in einem atomaren
+Batch würde sonst auch andere fällige Regeln blockieren. Zwei Einstiege:
+Checkbox "Automatisch weiterbuchen" beim Erfassen einer Buchung
+(`NewEntry.jsx`) oder eigene Sektion im Konten-Tab (`RuleEditor`). Löschen
+eines Kontos/einer Kategorie ist zusätzlich gesperrt, solange ein aktiver
+Dauerauftrag darauf zeigt.
 
-**Jahresansicht** (`Auswertung.jsx`, ab `0.17.0`) ergänzt die
-Monatsauswertung um einen Umschalter Monat/Jahr. Eigener Datenpfad
-`listTransactionsForYear(y)` in `pb.js` holt ein komplettes Kalenderjahr
-auf einen Schlag, Aggregation läuft client-seitig wie überall sonst in
-der App — kein Server-Aggregat nötig bei den üblichen Datenmengen eines
-Haushalts. Drei Bausteine, alle in `JahresAnsicht` innerhalb von
-`Auswertung.jsx`: (1) Jahresvergleich als gruppierter 12-Monats-Balken,
-Einnahmen und Ausgaben nebeneinander statt nur ihrer Differenz —
-bewusst ganz oben, noch vor der Summenkarte; (2) Sparquote
-(`(Einnahmen − Ausgaben) / Einnahmen`) als Jahreszahl direkt in der
-Summenkarte, der Monatsverlauf dazu ist optional und standardmäßig
-eingeklappt (`showSparquote`); (3) Kategorie-Trend über ein Dropdown
-mit 12-Monats-Verlauf und gestrichelter Ø-Linie — der Durchschnitt
-zählt nur die bereits vergangenen Monate des gewählten Jahres mit
-(`monthsElapsed`), sonst würde ein noch laufendes Jahr künstlich
-niedrig wirken. Jeder Balken ist klickbar und öffnet wie beim
-bestehenden Kategorie-/Tag-Drilldown ein Sheet mit den zugrunde
-liegenden Buchungen. Eigene Jahresnavigation (`< 2026 >`), unabhängig
-vom Monats-Header der App-Shell — echtes Kalenderjahr, keine
-rollierenden zwölf Monate (bewusste Entscheidung gegen "immer die
-letzten 12 Monate", weil ein festes Kalenderjahr vertrauter ist und
-sich mit dem bestehenden `budgets.month`-Format deckt).
+### Budgets
 
-**Depot** (`depot_positions`/`depot_trades`, eigener Tab `Depot.jsx`)
-trackt Wertpapiere über echte Kauf-/Verkaufstrades statt eines reinen
-Bestandsfelds — Bestand und Ø-Einstandspreis werden clientseitig nach
-der Durchschnittsmethode berechnet (`positionStats()`/
-`quantityAndCostAsOf()` in `Depot.jsx`, kein FIFO/LIFO). Ein
-bestehender Bestand lässt sich als ein einzelner "Kauf"-Trade mit
-Gesamtstückzahl und Ø-Einstandspreis erfassen, kein eigenes Feld nötig.
-Einzige Funktion der App mit echtem Internetzugriff:
-`pb_hooks/main.pb.js` registriert `GET /api/depot/quote`, das Yahoo
-Finance abfragt (kostenlos, kein API-Key) und das Ergebnis
-weiterreicht — Yahoo setzt keinen CORS-Header, ein `fetch()` direkt aus
-dem Browser scheitert deshalb, die Route umgeht das serverseitig. Drei
-Modi: `?isin=...` löst per Yahoo-Suche einen Ticker auf (beim Anlegen
-einer Position, `PositionEditor` in `Depot.jsx`), `?ticker=...` fragt
-den aktuellen Kurs ab, `?ticker=...&range=...&interval=...` liefert
-stattdessen eine historische Kursreihe (`{ symbol, currency, points:
-[{t, price}] }`) für den Verlaufs-Chart. Route ist über
-`$apis.requireAuth()` genauso zugriffsgeschützt wie alle Sammlungen.
-Bewusst kein Cron/Scheduler — Kurse werden nur beim Öffnen des
-Depot-Tabs, per "Aktualisieren"-Button oder beim Aufklappen eines
-Verlaufs-Charts geholt (`fetchQuote()`/`fetchHistory()` in `pb.js`),
-derselbe "nur bei Bedarf"-Ansatz wie bei den Daueraufträgen. Kein
-Server-Feld für den aktuellen Kurs — der Preis lebt nur als
-Session-State (`quotes` in `Depot.jsx`), nie in der Datenbank.
-`docker-compose.yml` mountet dafür `./pb_hooks:/pb_hooks` (Container-
-Neuerzeugung nötig, ein reiner Neustart reicht nicht, siehe
-BETRIEB.md).
+Monatslimit pro Kategorie, kontoübergreifend (`budgets`, `setBudget()` in
+`pb.js`). Ein Warnhinweis zeigt Buchungen ohne Kategorie an, die sonst
+unsichtbar aus jeder Budgetrechnung herausfallen würden (`Budgets.jsx`).
 
-**Trade-Preise sind immer Euro** (`depot_trades.price_cents`/
-`fees_cents`), genau wie überall sonst in der App — der Preis, den man
-tatsächlich gezahlt hat, unabhängig davon, an welcher Börse und in
-welcher Währung das Wertpapier notiert. `TradeEditor` in `Depot.jsx`
-beschriftet die Felder entsprechend ("Kurs pro Stück (in Euro)").
-**Währungsumrechnung** betrifft deshalb ausschließlich den *Live-Kurs*:
-wenn der aufgelöste Ticker nicht in Euro notiert (z. B. wenn die
-Yahoo-Suche die Londoner USD- statt die Xetra-Euro-Notierung trifft),
-wird nur dieser eine Wert in Euro umgerechnet und mit dem Euro-Einstand
-verglichen — `positionStats()` gibt dafür `costCents` (immer Euro)
-getrennt von `priceCurrency`/`priceNativeValueCents` (native
-Kurswährung) zurück, `valueEurCents`/`gainEurCents` sind die einzigen
-für Vergleiche/Summen verwendeten Werte. Der Wechselkurs kommt vom
-selben Kurs-Proxy: Yahoo führt Währungspaare als ganz normale Ticker
-(`USDEUR=X`), `fxRates` in `Depot.jsx` holt pro vorkommender
-Live-Kurswährung einmal den Kurs, nicht pro Position. Bewusst eine
-einzige, aktuelle Umrechnung statt historischer Kurse zum jeweiligen
-Kaufzeitpunkt — eine Momentaufnahme, kein separates
-Fremdwährungs-Gewinn/Verlust-Tracking. Der Proxy liefert dafür
-zusätzlich zu `price_cents` (gerundet auf ganze Cent, reicht für
-Aktienkurse) ein rohes `price`-Feld — bei einem Wechselkurs wie
-`0,0068` (z. B. JPY→EUR) würde die Rundung auf Cent die Genauigkeit
-komplett zerstören. Solange der Live-Kurs oder sein Wechselkurs noch
-nicht geholt ist, bleibt `valueEurCents` `null` statt `0` und die
-Position zählt kurz nicht in der Gesamtsumme mit — sichtbar an "Kurs
-folgt …" statt einem falschen Zwischenwert.
+### Auswertung
 
-**Depot-Verlauf** zeigt den Portfolio-Wert über die Zeit als
-Linienchart, mit Einstand als zweite Vergleichslinie — filterbar auf
-3 Monate (täglich), 3 Jahre und 5 Jahre (wöchentlich, `CHART_RANGES` in
-`Depot.jsx`). Bestand und Einstand pro historischem Datenpunkt werden
-über `quantityAndCostAsOf()` rekonstruiert — eine Position steht vor
-ihrem ersten Kauf korrekt bei 0, nicht rückwirkend beim vollen
-heutigen Bestand. Mehrere Positionen mit leicht unterschiedlichen
-Handelstagen werden über die Vereinigung aller vorkommenden
-Kalendertage plus "letzter bekannter Kurs bei oder vor diesem Datum"
-(Forward-Fill) zusammengeführt. Bewusste Vereinfachung: der
-Wechselkurs für Fremdwährungs-Positionen ist auch hier nur der
-aktuelle, keine eigene historische FX-Reihe. Reines SVG (`<polyline>`,
-kein Diagramm-Paket, gleiches Prinzip wie `YearBars` in
-`Auswertung.jsx`).
+Monatsansicht (Standard) zeigt Einnahmen/Ausgaben/Saldo, wiederkehrende
+Buchungen und Ausgaben nach Kategorie/Tag mit Klick-Drilldown zu den
+zugrunde liegenden Buchungen.
 
-`DepotChart` ist selbstverwaltend: eigener `expanded`-Zustand,
-Default eingeklappt — Klapp-Header wie `showSparquote` in
-`Auswertung.jsx` (Chevron rotiert, Text "Verlauf
-anzeigen/ausblenden"). Die Kursreihen-Abfrage steckt im Hook
-`useDepotChart({ positions, trades, fxRates, setFxRates, enabled })`
-und läuft nur, wenn `enabled` (= aufgeklappt) true ist — ein
-eingeklappter Chart löst keine Yahoo-Anfrage aus. `positions` macht
+Umschalter **Monat/Jahr** (`Auswertung.jsx`) ergänzt eine Jahresansicht mit
+eigenem Datenpfad `listTransactionsForYear(y)` — holt ein komplettes
+Kalenderjahr auf einen Schlag, Aggregation läuft client-seitig wie überall
+sonst in der App. Eigene Jahresnavigation, unabhängig vom Monats-Header der
+App-Shell — echtes Kalenderjahr, keine rollierenden zwölf Monate. Drei
+Bausteine in `JahresAnsicht`:
+
+1. **Jahresvergleich** — gruppierter 12-Monats-Balken, Einnahmen und
+   Ausgaben nebeneinander statt nur ihrer Differenz, ganz oben vor der
+   Summenkarte.
+2. **Sparquote** (`(Einnahmen − Ausgaben) / Einnahmen`) als Jahreszahl in
+   der Summenkarte, der Monatsverlauf dazu ist optional und standardmäßig
+   eingeklappt (`showSparquote`).
+3. **Kategorie-Trend** über ein Dropdown mit 12-Monats-Verlauf und
+   gestrichelter Ø-Linie — der Durchschnitt zählt nur die bereits
+   vergangenen Monate des gewählten Jahres mit (`monthsElapsed`), sonst
+   würde ein noch laufendes Jahr künstlich niedrig wirken.
+
+Jeder Balken ist klickbar und öffnet ein Sheet mit den zugrunde liegenden
+Buchungen, gleiches Prinzip wie der Kategorie-/Tag-Drilldown im Monatsmodus.
+
+### CSV-Import
+
+Deutsche Bank-Exporte haben durchgehend dieselben Fallen, `csv.js`
+behandelt jede einzeln:
+
+- Trennzeichen `;`/`,`/Tab, Dezimaltrennzeichen Komma, Datum `TT.MM.JJJJ`
+- Kodierung meist Windows-1252, nicht UTF-8 — erkannt daran, ob die
+  UTF-8-Dekodierung kaputte Umlaute liefert (`Ã¼`-Muster)
+- Mehrere Vorspann-Zeilen vor der echten Kopfzeile; diese ist die erste
+  Zeile, in der ein Datums- **und** ein Betragsbegriff vorkommt
+- Nachgestelltes Minus (`123,45-`) bei manchen Instituten
+- Zweistellige Jahreszahlen
+
+Ablauf in drei Schritten (`Import.jsx`): Datei → Zuordnung → Vorschau. Die
+Vorschau zeigt neu / schon vorhanden / unlesbar. Jeder Lauf legt einen
+`imports`-Datensatz an, jede importierte Zeile verweist per `import_batch`
+darauf — ein misslungener Import ist dadurch vollständig zurücknehmbar
+(`deleteImportRun()`). Zwei Zeilen derselben Datei können denselben
+Dedup-Hash ergeben (z. B. zweimal Parken zum selben Preis am selben Tag);
+`buildRows()` erkennt das selbst, die erste Zeile behält ihren Hash, jede
+weitere bekommt ein `#n`-Suffix, `batchDupeCount` markiert alle Beteiligten
+für einen Warnhinweis — beide werden angelegt, keine wird stillschweigend
+verworfen. Optional lässt sich eine Referenzspalte zuordnen
+(`col_reference`), die dann mit in den Hash einfließt und solche
+Kollisionen von vornherein vermeidet.
+
+### Depot
+
+Eigener Tab `Depot.jsx`, trackt Wertpapiere über echte Kauf-/
+Verkaufstrades statt eines reinen Bestandsfelds. Ein bestehender Bestand
+lässt sich als ein einzelner "Kauf"-Trade mit Gesamtstückzahl und
+Ø-Einstandspreis erfassen — kein eigenes Feld dafür nötig. Bestand und
+Ø-Einstandspreis werden clientseitig nach der **Durchschnittsmethode**
+berechnet (`positionStats()`/`quantityAndCostAsOf()`, kein FIFO/LIFO).
+
+**Trade-Preise sind immer Euro** — der Preis, den man tatsächlich gezahlt
+hat, unabhängig davon, an welcher Börse und in welcher Währung das
+Wertpapier notiert. `TradeEditor` beschriftet die Felder entsprechend
+("Kurs pro Stück (in Euro)").
+
+**Kurs-Proxy** (`pb_hooks/main.pb.js`, einzige Server-Route der App):
+Yahoo Finance liefert Kurse kostenlos und ohne API-Key, setzt aber keinen
+`Access-Control-Allow-Origin`-Header — ein `fetch()` direkt aus dem
+Browser scheitert deshalb an CORS, die Route umgeht das serverseitig.
+Drei Modi über `GET /api/depot/quote`: `?isin=...` löst per Yahoo-Suche
+einen Ticker auf (beim Anlegen einer Position), `?ticker=...` fragt den
+aktuellen Kurs ab, `?ticker=...&range=...&interval=...` liefert eine
+historische Kursreihe für den Verlaufs-Chart. Auth-geschützt über
+`$apis.requireAuth()` wie alle Sammlungen. Bewusst kein Cron/Scheduler —
+Kurse werden nur bei Bedarf geholt (Tab öffnen, "Aktualisieren", Chart
+aufklappen). Kein Server-Feld für den aktuellen Kurs, er lebt nur als
+Session-State. `docker-compose.yml` mountet dafür `./pb_hooks:/pb_hooks`
+— bei einer neuen Instanz oder nach Änderungen an der Hook-Datei reicht
+PocketBases eingebautes Hot-Reload, bei erstmaligem Hinzufügen des Mounts
+braucht es eine Container-Neuerzeugung (`docker compose up -d`), ein
+reiner Neustart reicht nicht.
+
+**Währungsumrechnung** betrifft ausschließlich den *Live-Kurs*, nie den
+Einstand: wenn der aufgelöste Ticker nicht in Euro notiert (z. B. wenn die
+Yahoo-Suche die Londoner USD- statt die Xetra-Euro-Notierung trifft), wird
+nur dieser eine Wert in Euro umgerechnet und mit dem Euro-Einstand
+verglichen — `positionStats()` gibt dafür `costCents` (immer Euro) getrennt
+von `priceCurrency`/`priceNativeValueCents` (native Kurswährung) zurück,
+`valueEurCents`/`gainEurCents` sind die einzigen für Vergleiche/Summen
+verwendeten Werte. Der Wechselkurs kommt vom selben Kurs-Proxy — Yahoo
+führt Währungspaare als ganz normale Ticker (`USDEUR=X`), `fxRates` in
+`Depot.jsx` holt pro vorkommender Live-Kurswährung einmal den Kurs, nicht
+pro Position. Bewusst eine einzige, aktuelle Umrechnung statt historischer
+Kurse zum jeweiligen Kaufzeitpunkt — eine Momentaufnahme, kein separates
+Fremdwährungs-Gewinn/Verlust-Tracking. Der Proxy liefert dafür zusätzlich
+zu `price_cents` (gerundet auf ganze Cent, reicht für Aktienkurse) ein
+rohes `price`-Feld — bei einem Wechselkurs wie `0,0068` (z. B. JPY→EUR)
+würde die Rundung auf Cent die Genauigkeit komplett zerstören. Solange der
+Live-Kurs oder sein Wechselkurs noch nicht geholt ist, bleibt
+`valueEurCents` `null` statt `0` und die Position zählt kurz nicht in der
+Gesamtsumme mit — sichtbar an "Kurs folgt …" statt einem falschen
+Zwischenwert.
+
+**Verlaufs-Chart** zeigt den Wert über die Zeit als Linienchart, mit
+Einstand als zweite Vergleichslinie — filterbar auf 3 Monate (täglich), 3
+Jahre und 5 Jahre (wöchentlich, `CHART_RANGES`). Bestand und Einstand pro
+historischem Datenpunkt werden über `quantityAndCostAsOf()` rekonstruiert
+— eine Position steht vor ihrem ersten Kauf korrekt bei 0, nicht
+rückwirkend beim vollen heutigen Bestand. Mehrere Positionen mit leicht
+unterschiedlichen Handelstagen werden über die Vereinigung aller
+vorkommenden Kalendertage plus Forward-Fill (letzter bekannter Kurs bei
+oder vor einem Datum) zusammengeführt. Wechselkurs auch hier bewusst nur
+der aktuelle, keine eigene historische FX-Reihe. Reines SVG (`<polyline>`).
+
+`DepotChart` ist selbstverwaltend: eigener `expanded`-Zustand, Default
+eingeklappt (Klapp-Header wie `showSparquote` in `Auswertung.jsx`). Die
+Kursreihen-Abfrage steckt im Hook `useDepotChart({ positions, trades,
+fxRates, setFxRates, enabled })` und läuft nur, wenn aufgeklappt — kein
+Yahoo-Request für einen Chart, den niemand ansieht. `positions` macht
 denselben Chart zweimal nutzbar: der Portfolio-Chart übergibt `active`
 (alle nicht-archivierten Positionen), der Positions-Chart in
 `PositionDetail` übergibt `[position]` — beide teilen sich denselben
 `fxRates`-Cache aus dem `Depot`-Hauptkomponenten-State.
 
-**Depot abschaltbar** (`depotPref.js`): reine Anzeige-Präferenz nach
-exaktem Muster von `theme.js` (`localStorage`, kein Server-Feld) —
-Positionen und Trades bleiben in der Datenbank erhalten, nur der
-Nav-Eintrag verschwindet. Umschalter "Depot an/aus" im
-Einstellungen-Tab. Ist der Depot-Tab gerade offen, während er
-ausgeschaltet wird, springt `App.jsx` automatisch auf "Buchungen"
-zurück.
+### Einstellungen & Darstellung
 
-**Navigation** ist responsiv: ab 860px Sidebar-Layout, darunter
-Bottom-Nav + FAB (`sidebar:`-Breakpoint durchgehend in
-Tailwind-Klassen). Die Sidebar zeigt immer alle Einträge (`navItems`
-in `App.jsx`); die mobile Bottom-Nav lässt `einstellungen` bewusst weg
-(`mobileNavItems`) und wechselt zwischen `grid-cols-4`/`grid-cols-5`
-(Depot aus/an) — beide Klassen als vollständige Literale im
-Quelltext, Tailwind erkennt keine dynamisch zusammengesetzten
-Klassennamen. Grund: sechs Spalten sind auf 375px zu eng
-("Einstellungen" als längstes Label sprengt die Spaltenbreite), und
-Einstellungen wird ohnehin seltener angetippt als die übrigen Tabs.
-Auf Mobile öffnet stattdessen ein Zahnrad-Icon rechts in der Kopfzeile
-(`sidebar:hidden`, `absolute right-5`) denselben Tab. Die
-Monatsnavigation (`‹ September 2026 ›`) sitzt auf Mobile eng am Titel
-(`justify-center gap-1`, `ChevronLeft`/`ChevronRight` ohne die
-randbündigen `-ml-1.5`/`-mr-1.5`) statt über die volle
-Kopfzeilenbreite gespreizt — sonst würde sie mit dem Zahnrad an
-derselben Ecke kollidieren. Ab der Sidebar-Breite (Desktop, kein
-Zahnrad im Header) spreizt `sidebar:justify-between` zusammen mit
-`sidebar:-ml-1.5`/`sidebar:-mr-1.5` wieder auf die volle Breite.
+Eigener Tab `Einstellungen.jsx` (getrennt vom Konten-Tab, der reine
+Kontoverwaltung bleibt) mit zwei Umschaltern:
 
-**Darstellung**
+- **Depot an/aus** (`depotPref.js`): reine Anzeige-Präferenz nach exaktem
+  Muster von `theme.js` (`localStorage`, kein Server-Feld). Ausgeschaltet
+  verschwindet nur der Nav-Eintrag, Positionen und Trades bleiben in der
+  Datenbank erhalten. Ist der Depot-Tab gerade offen, während er
+  ausgeschaltet wird, springt `App.jsx` automatisch auf "Buchungen"
+  zurück.
+- **Hell/Dunkel/System** (`theme.js`): "System" folgt `prefers-color-
+  scheme` live per `matchMedia`-Listener, auch wenn sich die
+  Geräteeinstellung ändert, während die App offen ist — Standard ohne
+  eigene Wahl ist ebenfalls "System". Umsetzung über Tailwind-4-Class-
+  Dark-Mode (`.dark`-Klasse auf `<html>`), ein Inline-Script in
+  `index.html` verhindert Hell-Flackern beim Laden. Neue Farben
+  grundsätzlich mit `dark:`-Variante nach dem etablierten Muster ergänzen
+  (stone/emerald-Skala, keine neuen Farbwerte erfinden).
 
-Hell/Dunkel/System ist im Einstellungen-Tab umschaltbar, reines
-Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
-(`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System"
-folgt `prefers-color-scheme` live per `matchMedia`-Listener, auch wenn
-sich die Geräteeinstellung ändert, während die App offen ist —
-Standard ohne eigene Wahl ist ebenfalls "System", nicht fest "Hell".
-Umsetzung über Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in
-`index.css`, `.dark`-Klasse auf `<html>`), ein Inline-Script in
-`index.html` verhindert Hell-Flackern beim Laden (berücksichtigt dort
-ebenfalls "System"). Neue Farben grundsätzlich mit `dark:`-Variante
-nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen
-(stone/emerald-Skala, keine neuen Farbwerte erfinden).
+### Navigation
 
-**Homescreen-Icon**
+Responsiv: ab 860px Sidebar-Layout, darunter Bottom-Nav + FAB
+(`sidebar:`-Breakpoint durchgehend in Tailwind-Klassen). Die Sidebar zeigt
+immer alle Einträge (`navItems` in `App.jsx`); die mobile Bottom-Nav lässt
+`einstellungen` bewusst weg (`mobileNavItems`) und wechselt zwischen
+`grid-cols-4`/`grid-cols-5` (Depot aus/an) — beide Klassen als
+vollständige Literale im Quelltext, Tailwind erkennt keine dynamisch
+zusammengesetzten Klassennamen. Grund: sechs Spalten wären auf 375px zu
+eng, und Einstellungen wird ohnehin seltener angetippt als die übrigen
+Tabs. Auf Mobile öffnet stattdessen ein Zahnrad-Icon rechts in der
+Kopfzeile (`sidebar:hidden`, `absolute right-5`) denselben Tab. Die
+Monatsnavigation (`‹ September 2026 ›`) sitzt auf Mobile deshalb eng am
+Titel (`justify-center gap-1`) statt über die volle Kopfzeilenbreite
+gespreizt, damit sie nicht mit dem Zahnrad an derselben Ecke kollidiert.
+Ab der Sidebar-Breite (Desktop, kein Zahnrad im Header) spreizt
+`sidebar:justify-between` wieder auf die volle Breite.
+
+### Homescreen-Icon
 
 `app/public/manifest.json` plus `apple-touch-icon.png`/`icon-192.png`/
 `icon-512.png` sorgen dafür, dass "Zum Startbildschirm hinzufügen" ein
 echtes Icon und den Namen "Haushaltsbuch" zeigt. iOS akzeptiert für
-`apple-touch-icon` nur PNG/JPG, keine SVGs — `favicon.svg` bleibt
-deshalb auf den Browser-Tab beschränkt. Die PNGs sind mit Pillow
-direkt in Zielgröße gezeichnet (kein SVG-Renderer wie `cairosvg`/
-`rsvg-convert` auf dem System verfügbar), dasselbe Design wie
-`favicon.svg` (abgerundetes Quadrat `#047857`, zentriertes „€" in
-`#FAFAF8`). Macht **nur** Icon/Name beim Homescreen-Shortcut richtig —
-eine echte installierte PWA mit Standalone-Fenster und Offline-Betrieb
-bräuchte zusätzlich einen Service Worker und einen sicheren Kontext
-(HTTPS), beides bewusst nicht gebaut (siehe Tailscale-Hinweis in
-BETRIEB.md).
+`apple-touch-icon` nur PNG/JPG, keine SVGs — `favicon.svg` bleibt deshalb
+auf den Browser-Tab beschränkt. Die PNGs sind mit Pillow direkt in
+Zielgröße gezeichnet (kein SVG-Renderer wie `cairosvg`/`rsvg-convert` auf
+dem System verfügbar), dasselbe Design wie `favicon.svg` (abgerundetes
+Quadrat `#047857`, zentriertes „€" in `#FAFAF8`). Macht **nur** Icon/Name
+beim Homescreen-Shortcut richtig — eine echte installierte PWA mit
+Standalone-Fenster und Offline-Betrieb bräuchte zusätzlich einen Service
+Worker und einen sicheren Kontext (HTTPS), beides bewusst nicht gebaut
+(siehe Tailscale-Hinweis in `BETRIEB.md`).
 
 ## Feste Regeln — nicht ohne Rückfrage ändern
 
-**Beträge sind ganzzahlige Cent** in `amount_cents` und `start_cents`.
-Niemals Fließkomma für Geld. 34,82 € ist `3482`.
+**Beträge sind ganzzahlige Cent** in `amount_cents`, `start_cents`,
+`price_cents` und verwandten Feldern. Niemals Fließkomma für Geld. 34,82 €
+ist `3482`.
 
 **Umbuchungen sind eine Zeile, nicht zwei.** `type = "transfer"`, `account`
-ist die Quelle, `to_account` das Ziel. Sie fallen aus Einnahmen, Ausgaben und
-Budgets heraus — Geld zwischen eigenen Konten ist kein Umsatz. Wer das
+ist die Quelle, `to_account` das Ziel. Sie fallen aus Einnahmen, Ausgaben
+und Budgets heraus — Geld zwischen eigenen Konten ist kein Umsatz. Wer das
 aufweicht, macht jede Monatsauswertung wertlos.
 
-**Kein `crypto.subtle`, kein Service Worker, keine PWA-Installation.** Die App
-läuft über `http://192.168.x.x:8090` und ist damit kein sicherer Kontext. Der
-Dedup-Hash ist deshalb eine FNV-Variante in reinem JavaScript. Wenn du
-irgendwo Web-Crypto vorschlägst, ist der Vorschlag falsch.
+**Kein `crypto.subtle`, kein Service Worker, keine PWA-Installation.** Die
+App läuft über `http://192.168.x.x:8090` und ist damit kein sicherer
+Kontext. Der Dedup-Hash ist deshalb eine FNV-Variante in reinem
+JavaScript. Wenn du irgendwo Web-Crypto vorschlägst, ist der Vorschlag
+falsch.
 
 **Keine feste Server-Adresse im Code.** Der Client benutzt
 `window.location.origin`. Nur so funktioniert dieselbe App im WLAN und im
 WireGuard-Tunnel ohne Umschalten.
 
-**Löschen eines Kontos ist gesperrt, solange Buchungen daran hängen.** Sonst
-entstehen verwaiste Referenzen.
+**Löschen eines Kontos ist gesperrt, solange Buchungen daran hängen.**
+Sonst entstehen verwaiste Referenzen. Gleiches Prinzip bei Kategorien
+(Buchungen) und bei Depot-Positionen (Trades).
 
 **`transactions.import_hash` hat einen eindeutigen Index, der nur für
-nicht-leere Werte gilt.** Manuell erfasste Buchungen haben einen leeren Hash
-und dürfen sich nicht gegenseitig blockieren.
+nicht-leere Werte gilt.** Manuell erfasste Buchungen haben einen leeren
+Hash und dürfen sich nicht gegenseitig blockieren.
 
 **Budgets gelten kontoübergreifend.** `budgets.month` ist Text: `"2026-08"`
 für einen Monat, `"*"` als Dauerbudget. Ein Monatsbudget schlägt das
 Dauerbudget derselben Kategorie.
+
+**Depot-Trade-Preise sind immer Euro**, nie die Handelswährung des
+Wertpapiers. Nur der *Live-Kurs* kann fremd sein und wird bei Bedarf nach
+Euro umgerechnet. Wer beides an derselben Währung aufhängt, produziert
+falsche Gewinne, sobald sie auseinanderfallen.
+
+**Kein Server-Cron, keine geplanten Hintergrund-Jobs.** Daueraufträge und
+Depot-Kurse sind beide client-getriggert (beim Öffnen der App bzw. des
+Depot-Tabs). Die eine Server-Route, die es gibt (`pb_hooks/main.pb.js`),
+ist ein reiner Request-Proxy ohne eigenen Zeitplan.
 
 ## Versionierung
 
@@ -348,71 +399,27 @@ immer nur hochzählender Zähler:
 
 Die Version wird unaufgefordert im selben Commit wie die Codeänderung
 erhöht, nicht in einem separaten Folge-Commit — und vor einem
-Rebuild/Neustart (z. B. `docker compose up --build`), damit die laufende
-Instanz die neue Version sofort zeigt. Gibt es noch keinen
-Versions-Identifier im Code, wird das angesprochen, sobald echter
-Feature-Code committet werden soll, statt stillschweigend einen Ort
-dafür festzulegen.
-
-Der Identifier liegt in `app/package.json` (`version`), wird über
-`vite.config.js` (`define: { __APP_VERSION__ }`) in den Build
-eingebunden und erscheint unten in der Desktop-Sidebar (`App.jsx`). Im
-mobilen Layout ist er nicht sichtbar, dort ist kein Platz dafür
-vorgesehen.
+Rebuild/Neustart, damit die laufende Instanz die neue Version sofort
+zeigt. Der Identifier liegt in `app/package.json` (`version`), wird über
+`vite.config.js` (`define: { __APP_VERSION__ }`) in den Build eingebunden
+und erscheint unten in der Desktop-Sidebar. Im mobilen Layout ist er
+nicht sichtbar, dort ist kein Platz dafür vorgesehen.
 
 ## Bewusst nicht gebaut
 
-Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das war
-eine ausdrückliche Entscheidung gegen Komplexität: die Daten liegen an genau
-einem Ort, damit fallen `dirty`-Flags, Grabsteine, Cursor, Zeitstempel-Konflikte
-und UUID-Kollisionen alle weg.
+Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das
+war eine ausdrückliche Entscheidung gegen Komplexität: die Daten liegen an
+genau einem Ort, damit fallen `dirty`-Flags, Grabsteine, Cursor,
+Zeitstempel-Konflikte und UUID-Kollisionen alle weg. Falls Offline später
+doch gefordert wird, ist der richtige nächste Schritt **nicht** ein
+vollständiger Sync, sondern eine Warteschlange nur für neu erfasste
+Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Falls Offline später doch gefordert wird, ist der richtige nächste Schritt
-**nicht** ein vollständiger Sync, sondern eine Warteschlange nur für neu
-erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
-
-Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit für den Rest der
-App (Konten/Buchungen bleiben Euro-only, nur das Depot rechnet um),
-FIFO/LIFO-Berechnung im Depot (nur Durchschnittsmethode),
-gespeicherte/historische Depot-Kurse und -Wechselkurse (immer nur der
-zuletzt live abgerufene, nie in der DB), historische Wechselkurse zum
-Kaufzeitpunkt (Depot-Euro-Werte nutzen durchgehend den aktuellen Kurs).
-
-## CSV-Import: der heikelste Teil
-
-Deutsche Bank-Exporte haben durchgehend dieselben Fallen, und der Code
-behandelt jede einzeln:
-
-- Trennzeichen `;`, Dezimaltrennzeichen Komma, Datum `TT.MM.JJJJ`
-- Kodierung meist Windows-1252, nicht UTF-8 — erkannt daran, ob die
-  UTF-8-Dekodierung kaputte Umlaute liefert (`Ã¼`-Muster)
-- Mehrere Vorspann-Zeilen vor der echten Kopfzeile; diese ist die erste Zeile,
-  in der ein Datums- **und** ein Betragsbegriff vorkommt
-- Nachgestelltes Minus (`123,45-`) bei manchen Instituten
-- Zweistellige Jahreszahlen
-
-Ablauf in drei Schritten: Datei → Zuordnung → Vorschau. Die Vorschau zeigt
-neu / schon vorhanden / unlesbar. Viele unlesbare Zeilen heißen fast immer
-falsches Datumsformat oder falsches Dezimaltrennzeichen.
-
-Jeder Lauf legt einen `imports`-Datensatz an, jede Zeile verweist per
-`import_batch` darauf. Damit ist ein misslungener Import vollständig
-zurücknehmbar. Diese Eigenschaft bitte erhalten.
-
-**Zwei Zeilen derselben Datei können denselben Dedup-Hash ergeben**
-(gleiches Datum, Betrag, Empfänger, Zweck — z. B. zweimal Parken am
-selben Tag zum selben Preis). Da `import_hash` einen eindeutigen Index
-hat, würde das den ganzen Batch-Block beim Schreiben abbrechen, nicht
-nur die eine Zeile. `buildRows()` in `csv.js` erkennt das jetzt selbst:
-die erste Zeile behält ihren Hash, jede weitere bekommt ein
-`#n`-Suffix, `batchDupeCount` markiert alle Beteiligten für einen
-Warnhinweis in der Vorschau (`Import.jsx`, Schritt 3) — beide werden
-angelegt, keine wird stillschweigend verworfen. Optional lässt sich
-zusätzlich eine Referenzspalte zuordnen (`col_reference`, z. B.
-`Kundenreferenz`/`Mandatsreferenz`), die dann mit in den Hash einfließt
-und solche Kollisionen von vornherein vermeidet — nur wenn die Spalte
-gemappt ist, sonst bleibt der Hash exakt wie bisher, damit ältere
-Importe ohne Referenzspalte nicht ihre Wiedererkennung verlieren.
+Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit für den Rest der App
+(Konten/Buchungen bleiben Euro-only, nur das Depot rechnet den Live-Kurs
+um), FIFO/LIFO-Berechnung im Depot (nur Durchschnittsmethode), gespeicherte
+oder historische Depot-Kurse/-Wechselkurse (immer nur der zuletzt live
+abgerufene, nie in der Datenbank).
 
 ## Arbeitsweise
 
@@ -420,15 +427,16 @@ Importe ohne Referenzspalte nicht ihre Wiedererkennung verlieren.
 - Konkrete Dateien und Diffs statt allgemeiner Ratschläge
 - Bei mehreren Wegen: kurz die Abwägung nennen, dann eine Empfehlung geben,
   nicht die Entscheidung zurückspielen
-- Bestehende Muster fortführen — `pb.js` kapselt jeden Datenzugriff, Screens
-  sprechen nie direkt mit dem SDK
+- Bestehende Muster fortführen — `pb.js` kapselt jeden Datenzugriff,
+  Screens sprechen nie direkt mit dem SDK
 - Neue Abhängigkeiten nur mit Begründung; das Projekt kommt bewusst mit
   wenigen aus
 - Warnen, wenn ein Vorschlag eine der oben genannten festen Regeln verletzt
 
 ## Erste Frage an mich
 
-Frag, woran ich gerade arbeite und ob der CSV-Import bereits mit einer echten
-Bankdatei getestet wurde. Falls dabei etwas klemmt, brauchst du die ersten drei
-Zeilen der Datei — daran ist meistens sofort erkennbar, welche der oben
-genannten Fallen zugeschlagen hat.
+Frag, woran ich gerade arbeite. Wenn es um den CSV-Import geht: ob er
+bereits mit einer echten Bankdatei getestet wurde, und falls dabei etwas
+klemmt, brauchst du die ersten drei Zeilen der Datei — daran ist meistens
+sofort erkennbar, welche der in `csv.js` behandelten Fallen zugeschlagen
+hat.
