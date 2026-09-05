@@ -281,14 +281,26 @@ dabei die Spaltenbreite sichtbar. `mobileNavItems` in `App.jsx`
 filtert den Eintrag `einstellungen` aus der Bottom-Nav-Liste heraus
 (Sidebar bleibt bei `navItems`, vollständig, unverändert), stattdessen
 öffnet ein Zahnrad-Icon rechts in der Kopfzeile (`sidebar:hidden`,
-`absolute right-5` neben der zentrierten Monatsnavigation) denselben
-Tab. Bottom-Nav ist dadurch wieder bei `grid-cols-4`/`grid-cols-5`
-(Depot an/aus) statt `grid-cols-5`/`grid-cols-6` — dieselbe
-Spaltenzahl wie vor der Einstellungen-Aufteilung. Bewusste
-Design-Entscheidung, keine reine Notlösung: Einstellungen wird
-seltener angetippt als Buchungen/Auswertung/Budgets/Konten/Depot, ein
-Ecken-Icon statt eines Dauerplatzes in der Haupt-Tableiste passt zur
-tatsächlichen Nutzungshäufigkeit.
+`absolute right-5`) denselben Tab. Bottom-Nav ist dadurch wieder bei
+`grid-cols-4`/`grid-cols-5` (Depot an/aus) statt
+`grid-cols-5`/`grid-cols-6` — dieselbe Spaltenzahl wie vor der
+Einstellungen-Aufteilung. Bewusste Design-Entscheidung, keine reine
+Notlösung: Einstellungen wird seltener angetippt als
+Buchungen/Auswertung/Budgets/Konten/Depot, ein Ecken-Icon statt eines
+Dauerplatzes in der Haupt-Tableiste passt zur tatsächlichen
+Nutzungshäufigkeit.
+
+Die Monatsnavigation (`‹ September 2026 ›`) rückt auf Mobile dafür
+enger an den Titel heran (`justify-center gap-1`, `ChevronLeft`/
+`ChevronRight` ohne die randbündigen `-ml-1.5`/`-mr-1.5`) statt wie
+vorher auf die volle Kopfzeilenbreite gespreizt zu sein (`0.21.2`
+hatte das Zahnrad einfach `absolute right-5` über den bestehenden
+`justify-between`-Pfeil "Monat vor" gelegt — beide sassen an
+derselben Ecke, das Zahnrad lag optisch und im Klick-Handling darüber,
+der Pfeil war nicht mehr erreichbar). Ab der Sidebar-Breite (Desktop,
+kein Zahnrad im Header) spreizt `sidebar:justify-between` zusammen mit
+`sidebar:-ml-1.5`/`sidebar:-mr-1.5` exakt auf den vorherigen Zustand
+zurück — die Änderung ist rein mobil sichtbar.
 
 **Darstellung**
 

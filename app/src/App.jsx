@@ -280,12 +280,18 @@ function Shell() {
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden">
           <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5 relative">
-            <div className="flex items-center justify-between">
-              <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
+            {/* Mobil: Monatsnavigation ruecken eng an den Titel, damit rechts
+                Platz fuers Einstellungen-Zahnrad frei bleibt - vorher sass
+                der Pfeil "Monat vor" an derselben Ecke wie das Zahnrad und
+                wurde von ihm verdeckt. Ab der Sidebar-Breite (Desktop, kein
+                Zahnrad im Header) wieder exakt wie zuvor auf die volle
+                Breite gespreizt. */}
+            <div className="flex items-center justify-center gap-1 sidebar:justify-between sidebar:gap-0">
+              <button onClick={() => shift(-1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-ml-1.5">
                 <ChevronLeft size={20} />
               </button>
               <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
-              <button onClick={() => shift(1)} className="p-1.5 -mr-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
+              <button onClick={() => shift(1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-mr-1.5">
                 <ChevronRight size={20} />
               </button>
             </div>
