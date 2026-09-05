@@ -180,8 +180,8 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
       </div>
 
       <div className="grid grid-cols-2 gap-2 p-4 border-t border-stone-200 dark:border-stone-700">
-        <Button onClick={() => commit(false)} disabled={busy}>Sichern</Button>
-        <Button variant="ghost" onClick={() => commit(true)} disabled={busy}>Sichern und weiter</Button>
+        <Button onClick={() => commit(false)} disabled={busy}>Speichern</Button>
+        <Button variant="ghost" onClick={() => commit(true)} disabled={busy}>Speichern und weiter</Button>
       </div>
 
       {confirmClose && (

@@ -3,6 +3,7 @@ import {
   ShoppingCart, UtensilsCrossed, Bus, Home, Zap, Film, HeartPulse, Shirt,
   Smartphone, MoreHorizontal, ArrowDownLeft, Landmark, Wallet, PiggyBank,
   CreditCard, ArrowLeftRight, Check, X, Loader2, Repeat, Shield,
+  ShoppingBag, Gift, Plane, Car, PawPrint, BookOpen, Baby, Wrench,
 } from "lucide-react";
 
 export const eur = (cents) =>
@@ -26,6 +27,8 @@ export function relDay(iso) {
 const CAT_ICONS = {
   cart: ShoppingCart, utensils: UtensilsCrossed, bus: Bus, home: Home, zap: Zap,
   film: Film, heart: HeartPulse, shirt: Shirt, phone: Smartphone, shield: Shield,
+  bag: ShoppingBag, gift: Gift, plane: Plane, car: Car, paw: PawPrint,
+  book: BookOpen, baby: Baby, wrench: Wrench, piggy: PiggyBank,
   dots: MoreHorizontal, income: ArrowDownLeft,
 };
 export const catIcon = (name) => CAT_ICONS[name] ?? MoreHorizontal;

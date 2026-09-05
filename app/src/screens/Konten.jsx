@@ -312,7 +312,7 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
       </Field>
 
       <ErrorNote error={error} />
-      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+      <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
       {!isNew && usage && (usage.tx + usage.rules > 0 ? (
         <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
@@ -419,7 +419,7 @@ function CategoryEditor({ draft, onClose, onSaved, onError }) {
       </div>
 
       <ErrorNote error={error} />
-      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+      <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
       {!isNew && usage && (usage.tx + usage.rules > 0 ? (
         <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
@@ -554,7 +554,7 @@ function RuleEditor({ draft, accounts, categories, onClose, onSaved, onError }) 
       </div>
 
       <ErrorNote error={error} />
-      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+      <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
       {!isNew && (
         <Button variant="danger" onClick={remove} disabled={busy}
@@ -617,7 +617,7 @@ function AutoRuleEditor({ draft, categories, onClose, onSaved, onError }) {
       </Field>
 
       <ErrorNote error={error} />
-      <Button onClick={submit} disabled={busy} className="w-full">Sichern</Button>
+      <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
       {!isNew && (
         <Button variant="danger" onClick={remove} disabled={busy}
