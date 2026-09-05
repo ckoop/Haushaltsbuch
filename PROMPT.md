@@ -263,7 +263,7 @@ geholt wird.
 Anzeige-Präferenz nach exaktem Muster von `theme.js` (`localStorage`,
 kein Server-Feld). Ausgeschaltet verschwindet nur der Nav-Eintrag
 (Sidebar und mobile Bottom-Nav, die dafür zwischen
-`grid-cols-5`/`grid-cols-6` wechselt — beide Klassen bewusst als
+`grid-cols-4`/`grid-cols-5` wechselt — beide Klassen bewusst als
 vollständige Literale im Quelltext, Tailwind kann keine dynamisch
 zusammengesetzten Klassennamen erkennen), Positionen und Trades
 bleiben unangetastet in der Datenbank. Umschalter "Depot an/aus" im
@@ -273,6 +273,22 @@ verwalten" und "App-weite Präferenzen"). Ist gerade der Depot-Tab
 offen, während er ausgeschaltet wird, springt `App.jsx` automatisch
 auf "Buchungen" zurück, statt auf einem aus der Navigation
 verschwundenen Tab stehen zu bleiben.
+
+**Einstellungen nicht in der mobilen Bottom-Nav** (ab `0.21.2`):
+sechs Sidebar-Einträge (mit Depot) quetschten sich auf dem Handy auf
+375px in sechs Spalten — "Einstellungen" als längstes Label sprengte
+dabei die Spaltenbreite sichtbar. `mobileNavItems` in `App.jsx`
+filtert den Eintrag `einstellungen` aus der Bottom-Nav-Liste heraus
+(Sidebar bleibt bei `navItems`, vollständig, unverändert), stattdessen
+öffnet ein Zahnrad-Icon rechts in der Kopfzeile (`sidebar:hidden`,
+`absolute right-5` neben der zentrierten Monatsnavigation) denselben
+Tab. Bottom-Nav ist dadurch wieder bei `grid-cols-4`/`grid-cols-5`
+(Depot an/aus) statt `grid-cols-5`/`grid-cols-6` — dieselbe
+Spaltenzahl wie vor der Einstellungen-Aufteilung. Bewusste
+Design-Entscheidung, keine reine Notlösung: Einstellungen wird
+seltener angetippt als Buchungen/Auswertung/Budgets/Konten/Depot, ein
+Ecken-Icon statt eines Dauerplatzes in der Haupt-Tableiste passt zur
+tatsächlichen Nutzungshäufigkeit.
 
 **Darstellung**
 

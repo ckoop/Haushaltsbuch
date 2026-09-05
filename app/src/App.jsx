@@ -222,6 +222,11 @@ function Shell() {
     { id: "konten", label: "Konten", Icon: Landmark },
     { id: "einstellungen", label: "Einstellungen", Icon: Settings },
   ];
+  // Auf dem Handy hat die Bottom-Nav bei sechs Eintraegen zu wenig Platz
+  // ("Einstellungen" als laengstes Label sprengt die Spalte) - Einstellungen
+  // zieht dort stattdessen in ein Zahnrad-Icon in der Kopfzeile um (siehe
+  // unten), auf dem Desktop bleibt die Sidebar unveraendert vollstaendig.
+  const mobileNavItems = navItems.filter((i) => i.id !== "einstellungen");
 
   // Wer das Depot gerade offen hat und es dann in den Einstellungen
   // ausschaltet, landet sonst auf einem Tab, der aus der Navigation
@@ -274,7 +279,7 @@ function Shell() {
         </aside>
 
         <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden">
-          <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5">
+          <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5 relative">
             <div className="flex items-center justify-between">
               <button onClick={() => shift(-1)} className="p-1.5 -ml-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800">
                 <ChevronLeft size={20} />
@@ -284,6 +289,13 @@ function Shell() {
                 <ChevronRight size={20} />
               </button>
             </div>
+            {/* Nur mobil - auf dem Desktop ist Einstellungen schon in der
+                Sidebar erreichbar, ein zweiter Zugang waere redundant. */}
+            <button onClick={() => setTab("einstellungen")} aria-label="Einstellungen"
+              className={`sidebar:hidden absolute right-5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${
+                tab === "einstellungen" ? "text-stone-900 dark:text-stone-50" : "text-stone-400 dark:text-stone-500"}`}>
+              <Settings size={19} />
+            </button>
           </header>
 
           <main className="flex-1 min-h-0 overflow-y-auto pb-28 sidebar:pb-8">
@@ -313,8 +325,8 @@ function Shell() {
           )}
 
           <nav className={`sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid ${
-            navItems.length === 6 ? "grid-cols-6" : "grid-cols-5"}`}>
-            {navItems.map(({ id, label, Icon }) => {
+            mobileNavItems.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+            {mobileNavItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (
                 <button key={id} onClick={() => setTab(id)}
