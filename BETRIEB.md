@@ -186,13 +186,23 @@ braucht** — alles andere läuft rein im Heimnetz. Ohne Internetzugang vom
 Docker-Container aus bleiben Depot-Kurse einfach leer, der Rest der App ist
 unberührt.
 
-Zwei bewusste Vereinfachungen: Bestand und Einstandspreis laufen nach der
+Bewusste Vereinfachung: Bestand und Einstandspreis laufen nach der
 **Durchschnittsmethode** (kein FIFO/LIFO) — für ein privates Depot
-nachvollziehbar genug. Und **keine Währungsumrechnung**: Positionen in
-Fremdwährung (z. B. wenn "Ticker suchen" die Londoner statt die
-Xetra-Notierung trifft) fließen nicht in die Euro-Gesamtsumme ein, sondern
-werden separat mit Hinweis ausgewiesen — lieber unvollständig als ein
-falsch umgerechneter Gesamtwert.
+nachvollziehbar genug.
+
+**Währungsumrechnung** (ab `0.19.0`): Positionen in Fremdwährung (z. B.
+wenn "Ticker suchen" die Londoner USD- statt die Xetra-Euro-Notierung
+trifft) werden zusätzlich in Euro ausgewiesen — die Handelswährung bleibt
+sichtbar, eine "… in Euro"-Zeile zeigt daneben die Umrechnung, und diese
+Positionen fließen mit ihrem Euro-Wert in die Gesamtsumme ein. Der
+Wechselkurs kommt vom selben Kurs-Proxy wie die Kurse: Yahoo führt
+Währungspaare als ganz normale Ticker (`USDEUR=X`), einmal pro
+vorkommender Fremdwährung geholt, nicht pro Position. Bewusst eine
+einzige, aktuelle Umrechnung für Wert *und* Einstand statt historischer
+Kurse zum jeweiligen Kaufzeitpunkt — eine Momentaufnahme, kein separates
+Fremdwährungs-Gewinn/Verlust-Tracking. Solange ein Wechselkurs noch nicht
+geholt ist, zählt die betroffene Position kurz nicht in der Gesamtsumme
+mit ("Kurs folgt …" statt eines falschen Zwischenwerts).
 
 ## Sicherung
 

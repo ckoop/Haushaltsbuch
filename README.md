@@ -44,6 +44,7 @@ Vorspann-Zeilen, alles wird erkannt.
   verfälscht keine Auswertung.
 - **Depot** — Wertpapiere über echte Kauf-/Verkaufstrades, aktuelle Kurse
   kostenlos von Yahoo Finance, Gewinn/Verlust nach der Durchschnittsmethode.
+  Fremdwährungen zusätzlich live in Euro umgerechnet.
 - **Hell/Dunkel/System-Design**, responsive (Bottom-Nav auf dem Handy,
   Sidebar auf dem Desktop).
 

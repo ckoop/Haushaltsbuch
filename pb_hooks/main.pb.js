@@ -55,6 +55,11 @@ routerAdd("GET", "/api/depot/quote", (e) => {
       symbol: symbol,
       name: name,
       price_cents: Math.round(meta.regularMarketPrice * 100),
+      // Zusaetzlich der rohe Wert: price_cents rundet auf ganze Cent, das
+      // reicht fuer Aktien-/ETF-Preise, zerstoert aber die Genauigkeit bei
+      // Wechselkursen (z. B. 0,0068 JPY->EUR wuerde auf 0 oder 1 runden).
+      // Fuer Waehrungsumrechnung im Depot wird deshalb price verwendet.
+      price: meta.regularMarketPrice,
       currency: meta.currency,
       as_of: meta.regularMarketTime,
     });

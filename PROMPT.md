@@ -182,14 +182,27 @@ beim Öffnen des Depot-Tabs und per "Aktualisieren"-Button geholt
 bei den Daueraufträgen. Kein Server-Feld für den aktuellen Kurs — der
 Preis lebt nur als Session-State (`quotes` in `Depot.jsx`), nie in der
 Datenbank, damit nie ein veralteter Kurs mit einem frischen verwechselt
-wird. Keine Währungsumrechnung: Positionen, deren Ticker nicht in Euro
-notiert (z. B. wenn die Yahoo-Suche die Londoner statt die
-Xetra-Notierung trifft), fließen nicht in die Euro-Gesamtsumme ein,
-sondern werden mit Hinweis separat ausgewiesen. `docker-compose.yml`
-mountet dafür neu `./pb_hooks:/pb_hooks` — auf einer bestehenden
-Instanz braucht es nach `git pull` ein `docker compose up -d`
-(Container-Neuerzeugung, ein reiner Neustart reicht nicht, siehe
-BETRIEB.md).
+wird. **Währungsumrechnung** (ab `0.19.0`): Fremdwährungs-Positionen
+(z. B. wenn die Yahoo-Suche die Londoner USD- statt die Xetra-Euro-
+Notierung trifft) werden zusätzlich in Euro ausgewiesen, nicht ersetzt
+— Wert, Einstand und Gewinn/Verlust bleiben in der Handelswährung
+sichtbar, eine "… in Euro"-Zeile daneben zeigt die Umrechnung. Der
+Wechselkurs kommt vom selben Kurs-Proxy: Yahoo führt Währungspaare als
+ganz normale Ticker (`USDEUR=X`), `fxRates` in `Depot.jsx` holt pro
+vorkommender Fremdwährung einmal den Kurs, nicht pro Position. Bewusst
+eine einzige, aktuelle Umrechnung für Wert *und* Einstand statt
+historischer Kurse zum jeweiligen Kaufzeitpunkt — eine Momentaufnahme,
+kein separates Fremdwährungs-Gewinn/Verlust-Tracking. Der Proxy liefert
+dafür zusätzlich zu `price_cents` (gerundet auf ganze Cent, reicht für
+Aktienkurse) ein rohes `price`-Feld — bei einem Wechselkurs wie `0,0068`
+(z. B. JPY→EUR) würde die Rundung auf Cent die Genauigkeit komplett
+zerstören. Solange ein Kurs für eine Fremdwährung noch nicht geholt
+ist, bleiben ihre Euro-Felder `null` statt `0` und die Position zählt
+kurz nicht in der Gesamtsumme mit — sichtbar an "Kurs folgt …" statt
+einem falschen Zwischenwert. `docker-compose.yml` mountet dafür neu
+`./pb_hooks:/pb_hooks` — auf einer bestehenden Instanz braucht es nach
+`git pull` ein `docker compose up -d` (Container-Neuerzeugung, ein
+reiner Neustart reicht nicht, siehe BETRIEB.md).
 
 **Darstellung**
 
@@ -272,10 +285,12 @@ Falls Offline später doch gefordert wird, ist der richtige nächste Schritt
 **nicht** ein vollständiger Sync, sondern eine Warteschlange nur für neu
 erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit (auch im Depot
-keine Umrechnung Fremdwährung → Euro), FIFO/LIFO-Berechnung im Depot
-(nur Durchschnittsmethode), gespeicherte/historische Depot-Kurse (immer
-nur der zuletzt live abgerufene, nie in der DB).
+Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit für den Rest der
+App (Konten/Buchungen bleiben Euro-only, nur das Depot rechnet um),
+FIFO/LIFO-Berechnung im Depot (nur Durchschnittsmethode),
+gespeicherte/historische Depot-Kurse und -Wechselkurse (immer nur der
+zuletzt live abgerufene, nie in der DB), historische Wechselkurse zum
+Kaufzeitpunkt (Depot-Euro-Werte nutzen durchgehend den aktuellen Kurs).
 
 ## CSV-Import: der heikelste Teil
 
