@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
@@ -8,6 +8,7 @@ import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
 import Konten from "./screens/Konten.jsx";
 import Depot from "./screens/Depot.jsx";
+import Einstellungen from "./screens/Einstellungen.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
 import { useDepotEnabled } from "./depotPref.js";
@@ -218,7 +219,8 @@ function Shell() {
     { id: "auswertung", label: "Auswertung", Icon: PieChart },
     { id: "budgets", label: "Budgets", Icon: Target },
     ...(depotEnabled ? [{ id: "depot", label: "Depot", Icon: TrendingUp }] : []),
-    { id: "konten", label: "Konten", Icon: Settings },
+    { id: "konten", label: "Konten", Icon: Landmark },
+    { id: "einstellungen", label: "Einstellungen", Icon: Settings },
   ];
 
   // Wer das Depot gerade offen hat und es dann in den Einstellungen
@@ -297,6 +299,7 @@ function Shell() {
                 {tab === "budgets" && <BudgetScreen {...shared} />}
                 {tab === "depot" && <Depot {...shared} />}
                 {tab === "konten" && <Konten {...shared} />}
+                {tab === "einstellungen" && <Einstellungen {...shared} />}
               </>
             )}
           </main>
@@ -310,7 +313,7 @@ function Shell() {
           )}
 
           <nav className={`sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid ${
-            navItems.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+            navItems.length === 6 ? "grid-cols-6" : "grid-cols-5"}`}>
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (

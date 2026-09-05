@@ -6,13 +6,12 @@ import {
   inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT, UNKNOWN_TAG,
   RECURRING, recurringLabel, todayISO,
 } from "../ui.jsx";
-import { useTheme } from "../theme.js";
 import Import from "./Import.jsx";
 
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, tags, balances, reload, flash, depotEnabled, setDepotEnabled }) {
+export default function Konten({ accounts, categories, tags, balances, reload, flash }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
@@ -22,7 +21,6 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
   const [catsExpanded, setCatsExpanded] = useState(false);
   const [view, setView] = useState("liste");
   const [error, setError] = useState(null);
-  const { theme, setTheme } = useTheme();
 
   const loadRules = () => api.listRecurringRules().then(setRules).catch(setError);
   const loadAutoRules = () => api.listRules().then(setAutoRules).catch(setError);
@@ -197,31 +195,6 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
         className="w-full flex items-center justify-center gap-2">
         <Upload size={16} /> CSV-Datei importieren
       </Button>
-
-      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Funktionen</p>
-      <div className="inline-flex mb-1 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
-        {[[true, "Depot an"], [false, "Depot aus"]].map(([v, label], i) => (
-          <button key={String(v)} onClick={() => setDepotEnabled(v)}
-            className={`px-3.5 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
-              depotEnabled === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
-        Ausgeschaltet verschwindet nur der Reiter — Positionen und Trades bleiben erhalten.
-      </p>
-
-      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Darstellung</p>
-      <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
-        {[["light", "Hell"], ["dark", "Dunkel"], ["system", "System"]].map(([v, label], i) => (
-          <button key={v} onClick={() => setTheme(v)}
-            className={`px-3.5 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
-              theme === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
 
       <button onClick={api.logout}
         className="w-full mt-8 py-3 text-sm text-stone-500 dark:text-stone-400 flex items-center justify-center gap-2">

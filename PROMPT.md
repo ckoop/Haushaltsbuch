@@ -49,7 +49,8 @@ app/src/App.jsx             Login, Datenladung, Monatswechsel, Tabs,
                             damit jeder Screen es via openDetail()
                             oeffnen kann, nicht nur Buchungen.jsx)
 app/src/screens/            Buchungen, Auswertung, Budgets, Depot,
-                            Konten, NewEntry, Import, TxDetail
+                            Konten, Einstellungen, NewEntry, Import,
+                            TxDetail
                             (Darstellung des Buchungs-Detail-Sheets)
 ```
 
@@ -262,18 +263,21 @@ geholt wird.
 Anzeige-Präferenz nach exaktem Muster von `theme.js` (`localStorage`,
 kein Server-Feld). Ausgeschaltet verschwindet nur der Nav-Eintrag
 (Sidebar und mobile Bottom-Nav, die dafür zwischen
-`grid-cols-4`/`grid-cols-5` wechselt — beide Klassen bewusst als
+`grid-cols-5`/`grid-cols-6` wechselt — beide Klassen bewusst als
 vollständige Literale im Quelltext, Tailwind kann keine dynamisch
 zusammengesetzten Klassennamen erkennen), Positionen und Trades
 bleiben unangetastet in der Datenbank. Umschalter "Depot an/aus" im
-Konten-Tab, Abschnitt "Funktionen". Ist gerade der Depot-Tab offen,
-während er ausgeschaltet wird, springt `App.jsx` automatisch auf
-"Buchungen" zurück, statt auf einem aus der Navigation
+eigenen Tab **Einstellungen** (ab `0.21.1`, `Einstellungen.jsx` —
+vorher im Konten-Tab, dort verschwamm die Grenze zwischen "Konten
+verwalten" und "App-weite Präferenzen"). Ist gerade der Depot-Tab
+offen, während er ausgeschaltet wird, springt `App.jsx` automatisch
+auf "Buchungen" zurück, statt auf einem aus der Navigation
 verschwundenen Tab stehen zu bleiben.
 
 **Darstellung**
 
-Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,
+Hell/Dunkel/System ist im Einstellungen-Tab umschaltbar (bis `0.21.0`
+im Konten-Tab, siehe oben),
 reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
 (`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System" folgt
 `prefers-color-scheme` live per `matchMedia`-Listener, auch wenn sich die
