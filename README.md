@@ -13,7 +13,7 @@ Vorspann-Zeilen, alles wird erkannt.
 
 | Buchungen | Auswertung |
 |---|---|
-| ![Buchungen](docs/screenshots/buchungen.png) | ![Auswertung](docs/screenshots/auswertung.png) |
+| ![Buchungen](docs/screenshots/buchungen.png) | ![Auswertung](docs/screenshots/auswertung.png?v=2) |
 
 | Budgets | Konten & Kategorien |
 |---|---|
