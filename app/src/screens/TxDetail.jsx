@@ -98,6 +98,11 @@ function TagEditor({ tx, tags, onAdd, onRemove }) {
   const current = (tx.tags ?? []).map((id) => byId(tags, id, UNKNOWN_TAG));
 
   const submit = () => { onAdd(tx, value); setValue(""); };
+  // Native Browser-Autovervollstaendigung statt eigenem Dropdown - reicht fuer
+  // "welche Tags gibt es schon" und braucht keine zusaetzliche Bibliothek.
+  // Schon an dieser Buchung haengende Tags werden nicht nochmal vorgeschlagen.
+  const listId = `tag-suggestions-${tx.id}`;
+  const suggestions = tags.filter((t) => !(tx.tags ?? []).includes(t.id));
 
   return (
     <div className="mb-4">
@@ -118,7 +123,10 @@ function TagEditor({ tx, tags, onAdd, onRemove }) {
       <div className="flex gap-2">
         <input value={value} onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
-          placeholder="Tag hinzufügen …" className={inputCls} />
+          placeholder="Tag hinzufügen …" list={listId} className={inputCls} />
+        <datalist id={listId}>
+          {suggestions.map((t) => <option key={t.id} value={t.name} />)}
+        </datalist>
         <Button variant="ghost" onClick={submit} className="px-4 shrink-0">+</Button>
       </div>
     </div>
