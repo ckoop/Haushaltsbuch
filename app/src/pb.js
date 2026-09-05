@@ -318,6 +318,12 @@ export const deleteDepotTrade = (id) => pb.collection("depot_trades").delete(id)
 export const fetchQuote = ({ isin, ticker }) =>
   pb.send("/api/depot/quote", isin ? { isin } : { ticker });
 
+// Historische Kursreihe fuer den Verlaufs-Chart im Depot - dieselbe Route,
+// range/interval werden unveraendert an Yahoo weitergereicht (z. B.
+// "3mo"/"1d" oder "5y"/"1wk"). Antwort: { symbol, currency, points: [{t, price}] }.
+export const fetchHistory = (ticker, range, interval) =>
+  pb.send("/api/depot/quote", { ticker, range, interval });
+
 // ------------------------------------------------------------------- Erstbefüllung
 
 export const DEFAULT_CATEGORIES = [

@@ -9,15 +9,24 @@
 // "Aktualisieren" geklickt), genau wie beim Nachbuchen faelliger
 // Daueraufträge in App.jsx.
 //
-// Zwei Modi:
-//   ?isin=...   loest zuerst per Yahoo-Suche einen Ticker auf (einmalig
-//               beim Anlegen einer Depot-Position, danach wird der
-//               Ticker in depot_positions.ticker zwischengespeichert)
-//   ?ticker=...  fragt direkt den Kurs ab (der uebliche Fall)
+// Drei Modi:
+//   ?isin=...              loest zuerst per Yahoo-Suche einen Ticker auf
+//                          (einmalig beim Anlegen einer Depot-Position,
+//                          danach wird der Ticker in
+//                          depot_positions.ticker zwischengespeichert)
+//   ?ticker=...             fragt direkt den aktuellen Kurs ab (der
+//                          uebliche Fall)
+//   ?ticker=...&range=...&interval=...   fragt stattdessen eine
+//                          historische Kursreihe ab, fuer den
+//                          Verlaufs-Chart in Depot.jsx. range/interval
+//                          werden unveraendert an Yahoo durchgereicht
+//                          (z. B. "3mo"/"1d" oder "5y"/"1wk").
 routerAdd("GET", "/api/depot/quote", (e) => {
   const query = e.request.url.query();
   const isin = query.get("isin");
   const tickerParam = query.get("ticker");
+  const range = query.get("range");
+  const interval = query.get("interval");
 
   let symbol = tickerParam;
   let name = "";
@@ -40,17 +49,36 @@ routerAdd("GET", "/api/depot/quote", (e) => {
       name = first.longname || first.shortname || "";
     }
 
+    let chartUrl = "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(symbol);
+    if (range && interval) {
+      chartUrl += "?range=" + encodeURIComponent(range) + "&interval=" + encodeURIComponent(interval);
+    }
     const chartRes = $http.send({
-      url: "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(symbol),
+      url: chartUrl,
       headers: { "User-Agent": "Mozilla/5.0" },
       timeout: 10,
     });
-    const meta = chartRes.json && chartRes.json.chart && chartRes.json.chart.result && chartRes.json.chart.result[0]
-      && chartRes.json.chart.result[0].meta;
-    if (!meta || meta.regularMarketPrice == null) {
+    const result = chartRes.json && chartRes.json.chart && chartRes.json.chart.result && chartRes.json.chart.result[0];
+    const meta = result && result.meta;
+    if (!meta) {
       return e.json(404, { error: "Kein Kurs fuer " + symbol + " gefunden" });
     }
 
+    if (range && interval) {
+      const timestamps = result.timestamp || [];
+      const closes = (result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close) || [];
+      // Der letzte Punkt eines noch laufenden Handelstages hat oft ein
+      // "close: null" - rausfiltern statt eine Luecke im Chart zu erzeugen.
+      const points = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        if (closes[i] != null) points.push({ t: timestamps[i], price: closes[i] });
+      }
+      return e.json(200, { symbol: symbol, currency: meta.currency, points: points });
+    }
+
+    if (meta.regularMarketPrice == null) {
+      return e.json(404, { error: "Kein Kurs fuer " + symbol + " gefunden" });
+    }
     return e.json(200, {
       symbol: symbol,
       name: name,

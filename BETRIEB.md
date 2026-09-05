@@ -190,6 +190,13 @@ Bewusste Vereinfachung: Bestand und Einstandspreis laufen nach der
 **Durchschnittsmethode** (kein FIFO/LIFO) — für ein privates Depot
 nachvollziehbar genug.
 
+**Bestehenden Bestand erfassen** (z. B. beim erstmaligen Anlegen einer
+Position, deren Aktien du schon länger hältst): kein eigenes Feld dafür
+nötig — einfach ein einzelner "Kauf"-Trade mit der aktuellen
+Gesamtstückzahl und deinem Ø-Einstandspreis, Datum nach Wahl (z. B. dein
+tatsächliches erstes Kaufdatum, wenn du es kennst — das bestimmt auch, ab
+wann die Position im Verlaufs-Chart unten auftaucht).
+
 **Trade-Preise sind immer Euro** — der Preis, den man tatsächlich gezahlt
 hat, unabhängig davon, an welcher Börse und in welcher Währung das
 Wertpapier notiert. Der Trade-Editor beschriftet die Felder entsprechend
@@ -213,6 +220,18 @@ Momentaufnahme, kein separates Fremdwährungs-Gewinn/Verlust-Tracking.
 Solange der Live-Kurs oder sein Wechselkurs noch nicht geholt ist, zählt
 die betroffene Position kurz nicht in der Gesamtsumme mit ("Kurs
 folgt …" statt eines falschen Zwischenwerts).
+
+**Depot-Verlauf** (ab `0.20.0`): Portfolio-Wert über die Zeit als Linienchart
+mit Einstand als Vergleichslinie, filterbar auf 3 Monate/3 Jahre/5 Jahre.
+Dieselbe Kurs-Route liefert auf Anfrage (`range`/`interval`-Parameter) statt
+eines einzelnen Kurses eine historische Reihe. Der Wechselkurs für
+Fremdwährungs-Positionen ist auch hier nur der aktuelle, keine eigene
+historische FX-Reihe — bei 5 Jahren dadurch eine leichte, akzeptierte
+Ungenauigkeit. Wichtig für die Aussagekraft: die Kurve zeigt den tatsächlich
+gehaltenen Bestand zu jedem Zeitpunkt, nicht rückwirkend den heutigen — ein
+frisch angelegter Anfangsbestand (siehe oben, "ein einzelner Kauf-Trade als
+Bestand") erscheint im Chart deshalb erst ab seinem eingetragenen Datum,
+davor korrekt bei 0.
 
 ## Sicherung
 

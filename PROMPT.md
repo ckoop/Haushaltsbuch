@@ -219,6 +219,28 @@ sichtbar an "Kurs folgt …" statt einem falschen Zwischenwert.
 `git pull` ein `docker compose up -d` (Container-Neuerzeugung, ein
 reiner Neustart reicht nicht, siehe BETRIEB.md).
 
+**Depot-Verlauf** (ab `0.20.0`) zeigt den Portfolio-Wert über die Zeit
+als Linienchart, mit Einstand als zweite Vergleichslinie — filterbar
+auf 3 Monate (täglich), 3 Jahre und 5 Jahre (wöchentlich,
+`CHART_RANGES` in `Depot.jsx`). Historische Kursreihen kommen von
+derselben `/api/depot/quote`-Route: `range`/`interval`-Query-Parameter
+werden unverändert an Yahoos Chart-Endpunkt durchgereicht (z. B.
+`range=5y&interval=1wk`), die Antwort liefert
+`{ symbol, currency, points: [{t, price}] }` statt eines einzelnen
+Kurses. Bestand und Einstand pro historischem Datenpunkt werden über
+`quantityAndCostAsOf()` rekonstruiert (dieselbe Durchschnittsmethode
+wie `positionStats()`, aber nur Trades bis zu einem Stichtag) — eine
+Position steht vor ihrem ersten Kauf also korrekt bei 0, nicht schon
+rückwirkend beim vollen heutigen Bestand. Mehrere Positionen mit
+leicht unterschiedlichen Handelstagen werden über die Vereinigung
+aller vorkommenden Kalendertage plus "letzter bekannter Kurs bei oder
+vor diesem Datum" (Forward-Fill) zusammengeführt. Bewusste
+Vereinfachung: der Wechselkurs für Fremdwährungs-Positionen ist auch
+hier nur der aktuelle (keine eigene historische FX-Reihe) — bei
+3 Monaten kaum relevant, bei 5 Jahren eine spürbare, aber akzeptierte
+Ungenauigkeit. Reines SVG (`<polyline>`, kein Diagramm-Paket, gleiches
+Prinzip wie `YearBars` in `Auswertung.jsx`).
+
 **Darstellung**
 
 Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,

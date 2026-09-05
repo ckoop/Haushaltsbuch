@@ -5,6 +5,14 @@ import { money, ErrorNote, Spinner, Sheet, Button, Field, inputCls, todayISO } f
 
 const fmtQty = (q) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 4 }).format(q ?? 0);
 
+// 3 Monate taeglich (fein genug fuer kurzfristige Bewegung), 3/5 Jahre
+// woechentlich (taeglich waere ueber Jahre unnoetig viele Punkte).
+const CHART_RANGES = {
+  "3mo": { label: "3M", span: "3mo", interval: "1d" },
+  "3y": { label: "3J", span: "3y", interval: "1wk" },
+  "5y": { label: "5J", span: "5y", interval: "1wk" },
+};
+
 // Bestand und Ø-Einstandspreis nach der Durchschnittsmethode: jeder Kauf
 // erhoeht Stueckzahl und Einstand, jeder Verkauf reduziert beides im
 // Verhaeltnis zum bisherigen Durchschnittspreis (nicht nach FIFO/LIFO -
@@ -28,8 +36,13 @@ const fmtQty = (q) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 4 
 // Ohne (noch nicht geholten) Kurs oder Wechselkurs bleiben die
 // Euro-Wert-Felder null, nie 0 - sonst wuerde eine fehlende Umrechnung wie
 // ein echter Nullwert aussehen.
-function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
-  const own = [...trades].filter((t) => t.position === positionId).sort((a, b) => a.date.localeCompare(b.date));
+// Wiederverwendet fuer den Verlaufs-Chart: Bestand/Einstand nicht zum
+// aktuellen Zeitpunkt, sondern zu einem beliebigen Stichtag (nur Trades
+// bis einschliesslich asOfDate zaehlen mit). Ohne asOfDate = heutiger Stand.
+function quantityAndCostAsOf(trades, positionId, asOfDate) {
+  const own = trades
+    .filter((t) => t.position === positionId && (!asOfDate || api.dateOnly(t.date) <= asOfDate))
+    .sort((a, b) => a.date.localeCompare(b.date));
   let qty = 0, costCents = 0;
   for (const t of own) {
     if (t.type === "buy") {
@@ -41,6 +54,11 @@ function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
       costCents -= avg * t.quantity;
     }
   }
+  return { qty, costCents };
+}
+
+function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
+  const { qty, costCents } = quantityAndCostAsOf(trades, positionId, null);
   const priceCurrency = quote?.currency ?? fallbackCurrency ?? "EUR";
   const priceCents = quote?.price_cents ?? null; // in priceCurrency
   const priceNativeValueCents = priceCents != null ? qty * priceCents : null; // in priceCurrency
@@ -54,6 +72,74 @@ function positionStats(positionId, trades, quote, fallbackCurrency, fxRate) {
     qty, costCents, priceCents, priceCurrency, priceNativeValueCents,
     valueEurCents, gainEurCents, gainEurPct,
   };
+}
+
+const fmtChartDate = (d) => new Date(d + "T12:00:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
+// Portfolio-Wert- und Einstands-Verlauf als einfacher SVG-Linienchart, kein
+// Diagramm-Paket - passt zum Rest der App (YearBars in Auswertung.jsx ist
+// dasselbe Prinzip: reines SVG/CSS statt einer neuen Abhaengigkeit).
+function DepotChart({ range, onRangeChange, series, loading, error }) {
+  const hasData = series && series.dates.length > 1;
+  const empty = series && series.dates.length <= 1;
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-stone-500 dark:text-stone-400">Verlauf</p>
+        <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+          {Object.entries(CHART_RANGES).map(([key, { label }], i) => (
+            <button key={key} onClick={() => onRangeChange(key)}
+              className={`px-3 py-1 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+                range === key ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ErrorNote error={error} />
+      {loading && <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">Verlauf wird geladen …</p>}
+      {!loading && empty && (
+        <p className="text-xs text-stone-400 dark:text-stone-500 py-8 text-center">
+          Noch keine Verlaufsdaten — brauchst mindestens einen Trade mit Ticker.
+        </p>
+      )}
+
+      {!loading && hasData && (() => {
+        const all = [...series.values, ...series.costs];
+        const min = Math.min(...all), max = Math.max(...all);
+        const span = max - min || 1;
+        const toY = (v) => 96 - ((v - min) / span) * 92; // 2..96, etwas Rand oben/unten
+        const toX = (i) => (i / (series.dates.length - 1)) * 300;
+        const valuePts = series.values.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+        const costPts = series.costs.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+        return (
+          <>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+                <span className="w-3 h-[3px] rounded-full bg-emerald-600 dark:bg-emerald-500 inline-block" /> Wert
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+                <span className="w-3 h-[3px] rounded-full bg-stone-400 dark:bg-stone-500 inline-block" /> Einstand
+              </span>
+            </div>
+            <svg viewBox="0 0 300 100" preserveAspectRatio="none"
+              className="w-full h-32 bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700">
+              <polyline points={costPts} fill="none" strokeDasharray="5 4" strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke" className="stroke-stone-400 dark:stroke-stone-500" />
+              <polyline points={valuePts} fill="none" strokeWidth="2"
+                vectorEffect="non-scaling-stroke" className="stroke-emerald-600 dark:stroke-emerald-500" />
+            </svg>
+            <div className="flex justify-between text-[10px] text-stone-400 dark:text-stone-500 mt-1">
+              <span>{fmtChartDate(series.dates[0])}</span>
+              <span>{fmtChartDate(series.dates[series.dates.length - 1])}</span>
+            </div>
+          </>
+        );
+      })()}
+    </div>
+  );
 }
 
 export default function Depot({ flash }) {
@@ -107,6 +193,76 @@ export default function Depot({ flash }) {
   };
   useEffect(() => { if (positions.length) refreshQuotes(positions); }, [positions.length]);
 
+  // Verlaufs-Chart: historische Kursreihen je Position (derselbe Proxy wie
+  // die Live-Kurse, nur mit range/interval), Bestand/Einstand pro
+  // Datenpunkt ueber quantityAndCostAsOf() rekonstruiert - eine Position
+  // steht am Anfang der Reihe also korrekt bei 0, nicht schon beim ersten
+  // Kauf mit dem heutigen vollen Bestand. Wechselkurs bewusst nur der
+  // aktuelle (siehe positionStats) statt einer eigenen historischen
+  // FX-Reihe - fuer 3 Monate kaum relevant, bei 5 Jahren eine bewusste
+  // Vereinfachung.
+  const [chartRange, setChartRange] = useState("3mo");
+  const [chartSeries, setChartSeries] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState(null);
+
+  const loadChart = async (range, currentPositions, currentTrades) => {
+    const withTicker = currentPositions.filter((p) => !p.archived && p.ticker);
+    if (withTicker.length === 0) { setChartSeries({ dates: [], values: [], costs: [] }); return; }
+    setChartLoading(true); setChartError(null);
+    try {
+      const { span, interval } = CHART_RANGES[range];
+      const histories = await Promise.all(withTicker.map(async (p) => {
+        const h = await api.fetchHistory(p.ticker, span, interval);
+        return {
+          position: p, currency: h.currency,
+          points: h.points.map((pt) => ({ date: new Date(pt.t * 1000).toISOString().slice(0, 10), price: pt.price })),
+        };
+      }));
+
+      const neededCurrencies = [...new Set(histories.map((h) => h.currency).filter((c) => c && c !== "EUR"))];
+      const missing = neededCurrencies.filter((c) => fxRates[c] == null);
+      let rates = fxRates;
+      if (missing.length) {
+        const updates = {};
+        for (const cur of missing) {
+          try { updates[cur] = (await api.fetchQuote({ ticker: `${cur}EUR=X` })).price; }
+          catch { /* fehlender Wechselkurs blockiert nur diese eine Waehrung im Chart */ }
+        }
+        rates = { ...fxRates, ...updates };
+        setFxRates((prev) => ({ ...prev, ...updates }));
+      }
+
+      const allDates = [...new Set(histories.flatMap((h) => h.points.map((pt) => pt.date)))].sort();
+      const values = [];
+      const costs = [];
+      for (const date of allDates) {
+        let totalV = 0, totalC = 0;
+        for (const h of histories) {
+          const { qty, costCents } = quantityAndCostAsOf(currentTrades, h.position.id, date);
+          if (qty === 0 && costCents === 0) continue;
+          totalC += costCents;
+          // Letzten bekannten Kurs bei oder vor "date" nehmen (forward-fill) -
+          // nicht jede Boerse hat an jedem Tag einen Datenpunkt.
+          let price = null;
+          for (let i = h.points.length - 1; i >= 0; i--) {
+            if (h.points[i].date <= date) { price = h.points[i].price; break; }
+          }
+          const rate = h.currency === "EUR" ? 1 : rates[h.currency];
+          if (price != null && rate != null) totalV += qty * price * rate * 100;
+        }
+        values.push(totalV);
+        costs.push(totalC);
+      }
+      setChartSeries({ dates: allDates, values, costs });
+    } catch (e) {
+      setChartError(e);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+  useEffect(() => { if (positions.length) loadChart(chartRange, positions, trades); }, [chartRange, positions.length, trades.length]);
+
   const active = positions.filter((p) => !p.archived);
   const statsOf = (p) => positionStats(p.id, trades, quotes[p.id], p.currency, fxRates[quotes[p.id]?.currency ?? p.currency]);
 
@@ -151,6 +307,9 @@ export default function Depot({ flash }) {
               im Gesamtwert enthalten — Wechselkurs wird noch geholt.
             </p>
           )}
+
+          <DepotChart range={chartRange} onRangeChange={setChartRange}
+            series={chartSeries} loading={chartLoading} error={chartError} />
 
           <button onClick={() => refreshQuotes(positions)} disabled={quoting}
             className="w-full flex items-center justify-center gap-2 text-xs text-stone-500 dark:text-stone-400 mb-4 py-1 disabled:opacity-50">
