@@ -80,17 +80,15 @@ Kategorien, darunter ein Ausklapp-Link für den Rest
 (`CAT_LIST_COLLAPSED` in `Konten.jsx`) — gleiches Prinzip wie die
 Kategorie-Auswahl in `NewEntry.jsx`.
 
-**Regeln** (`rules`, im UI verwaltbar ab `0.6.0`) ordnen beim CSV-Import
-automatisch eine Kategorie zu, wenn Empfänger oder Verwendungszweck ein
-Textmuster enthalten (`applyRules()` in `csv.js`, unverändert). Vorher nur
-über die PocketBase-Admin-Oberfläche pflegbar, jetzt eigener Abschnitt
-"Automatische Zuordnung" im Konten-Tab (`AutoRuleEditor` in `Konten.jsx`,
-gleiches Muster wie `CategoryEditor`) — anlegen, Textmuster/Kategorie/
-Priorität bearbeiten, löschen. Keine Löschsperre wie bei Konten/
-Kategorien: eine Regel referenziert keine Buchungen, ihr Löschen wirkt
-sich nur auf künftige Importe aus. Namenskollision mit dem bereits
-bestehenden `rules`-State für Daueraufträge in `Konten.jsx` vermieden,
-indem die Kategorisierungsregeln dort als `autoRules`/`loadAutoRules`
+**Regeln** (`rules`) ordnen beim CSV-Import automatisch eine Kategorie
+zu, wenn Empfänger oder Verwendungszweck ein Textmuster enthalten
+(`applyRules()` in `csv.js`). Im Konten-Tab verwaltbar (`AutoRuleEditor`
+in `Konten.jsx`, gleiches Muster wie `CategoryEditor`) — anlegen,
+Textmuster/Kategorie/Priorität bearbeiten, löschen. Keine Löschsperre
+wie bei Konten/Kategorien: eine Regel referenziert keine Buchungen, ihr
+Löschen wirkt sich nur auf künftige Importe aus. Namenskollision mit
+dem `rules`-State für Daueraufträge in `Konten.jsx` vermieden, indem
+die Kategorisierungsregeln dort als `autoRules`/`loadAutoRules`
 geführt werden.
 
 **Tags** (`tags`, ab `0.11.0`) sind eine freie, mehrfache Zusatz-
@@ -166,175 +164,146 @@ rollierenden zwölf Monate (bewusste Entscheidung gegen "immer die
 letzten 12 Monate", weil ein festes Kalenderjahr vertrauter ist und
 sich mit dem bestehenden `budgets.month`-Format deckt).
 
-**Depot** (`depot_positions`/`depot_trades`, ab `0.18.0`, eigener Tab
-`Depot.jsx`) trackt Wertpapiere über echte Kauf-/Verkaufstrades statt
-eines reinen Bestandsfelds — Bestand und Ø-Einstandspreis werden
-clientseitig nach der Durchschnittsmethode berechnet (`positionStats()`
-in `Depot.jsx`, kein FIFO/LIFO). Erste Funktion der App mit echtem
-Internetzugriff: `pb_hooks/main.pb.js` registriert
-`GET /api/depot/quote`, das Yahoo Finance abfragt (kostenlos, kein
-API-Key) und das Ergebnis weiterreicht — Yahoo setzt keinen CORS-Header,
-ein `fetch()` direkt aus dem Browser scheitert deshalb, die Route
-umgeht das serverseitig. Zwei Modi: `?isin=...` löst einmalig per
-Yahoo-Suche einen Ticker auf (beim Anlegen einer Position,
-`PositionEditor` in `Depot.jsx`), `?ticker=...` fragt danach direkt den
-Kurs ab. Route ist über `$apis.requireAuth()` genauso zugriffsgeschützt
-wie alle Sammlungen. Bewusst kein Cron/Scheduler — Kurse werden nur
-beim Öffnen des Depot-Tabs und per "Aktualisieren"-Button geholt
-(`fetchQuote()` in `pb.js`), erstmalig ein Bruch mit der bisherigen
-"kein `pb_hooks`"-Haltung, aber derselbe "nur bei Bedarf"-Ansatz wie
-bei den Daueraufträgen. Kein Server-Feld für den aktuellen Kurs — der
-Preis lebt nur als Session-State (`quotes` in `Depot.jsx`), nie in der
-Datenbank, damit nie ein veralteter Kurs mit einem frischen verwechselt
-wird. **Trade-Preise sind immer Euro**
-(`depot_trades.price_cents`/`fees_cents`), genau wie überall sonst in
-der App — der Preis, den man tatsächlich gezahlt hat, unabhängig
-davon, an welcher Börse und in welcher Währung das Wertpapier notiert.
-`TradeEditor` in `Depot.jsx` beschriftet die Felder entsprechend
-("Kurs pro Stück (in Euro)"). **Währungsumrechnung** (ab `0.19.1`,
-korrigiert nach einem Bug in `0.19.0`) betrifft deshalb ausschließlich
-den *Live-Kurs*: wenn der aufgelöste Ticker nicht in Euro notiert
-(z. B. wenn die Yahoo-Suche die Londoner USD- statt die Xetra-Euro-
-Notierung trifft), wird nur dieser eine Wert in Euro umgerechnet und
-mit dem Euro-Einstand verglichen — `positionStats()` gibt dafür
-`costCents` (immer Euro) getrennt von `priceCurrency`/
-`priceNativeValueCents` (native Kurswährung) zurück,
-`valueEurCents`/`gainEurCents` sind die einzigen für Vergleiche/Summen
-verwendeten Werte. Die frühere `0.19.0`-Version hatte stattdessen die
-*ganze Position* an der Live-Kurswährung aufgehängt und damit implizit
-unterstellt, der eingegebene Trade-Preis sei in derselben Fremdwährung
-wie der Live-Kurs — bei einer Londoner USD-Notierung mit tatsächlich
-in Euro eingegebenem Kaufpreis ergab das einen kräftig falschen
-Gewinn. Der Wechselkurs selbst kommt vom selben Kurs-Proxy: Yahoo
-führt Währungspaare als ganz normale Ticker (`USDEUR=X`), `fxRates` in
-`Depot.jsx` holt pro vorkommender Live-Kurswährung einmal den Kurs,
-nicht pro Position. Bewusst eine einzige, aktuelle Umrechnung für den
-Wert statt historischer Kurse zum jeweiligen Kaufzeitpunkt — eine
-Momentaufnahme, kein separates Fremdwährungs-Gewinn/Verlust-Tracking.
-Der Proxy liefert dafür zusätzlich zu `price_cents` (gerundet auf
-ganze Cent, reicht für Aktienkurse) ein rohes `price`-Feld — bei einem
-Wechselkurs wie `0,0068` (z. B. JPY→EUR) würde die Rundung auf Cent
-die Genauigkeit komplett zerstören. Solange der Live-Kurs oder sein
-Wechselkurs noch nicht geholt ist, bleibt `valueEurCents` `null` statt
-`0` und die Position zählt kurz nicht in der Gesamtsumme mit —
-sichtbar an "Kurs folgt …" statt einem falschen Zwischenwert.
-`docker-compose.yml` mountet dafür neu
-`./pb_hooks:/pb_hooks` — auf einer bestehenden Instanz braucht es nach
-`git pull` ein `docker compose up -d` (Container-Neuerzeugung, ein
-reiner Neustart reicht nicht, siehe BETRIEB.md).
+**Depot** (`depot_positions`/`depot_trades`, eigener Tab `Depot.jsx`)
+trackt Wertpapiere über echte Kauf-/Verkaufstrades statt eines reinen
+Bestandsfelds — Bestand und Ø-Einstandspreis werden clientseitig nach
+der Durchschnittsmethode berechnet (`positionStats()`/
+`quantityAndCostAsOf()` in `Depot.jsx`, kein FIFO/LIFO). Ein
+bestehender Bestand lässt sich als ein einzelner "Kauf"-Trade mit
+Gesamtstückzahl und Ø-Einstandspreis erfassen, kein eigenes Feld nötig.
+Einzige Funktion der App mit echtem Internetzugriff:
+`pb_hooks/main.pb.js` registriert `GET /api/depot/quote`, das Yahoo
+Finance abfragt (kostenlos, kein API-Key) und das Ergebnis
+weiterreicht — Yahoo setzt keinen CORS-Header, ein `fetch()` direkt aus
+dem Browser scheitert deshalb, die Route umgeht das serverseitig. Drei
+Modi: `?isin=...` löst per Yahoo-Suche einen Ticker auf (beim Anlegen
+einer Position, `PositionEditor` in `Depot.jsx`), `?ticker=...` fragt
+den aktuellen Kurs ab, `?ticker=...&range=...&interval=...` liefert
+stattdessen eine historische Kursreihe (`{ symbol, currency, points:
+[{t, price}] }`) für den Verlaufs-Chart. Route ist über
+`$apis.requireAuth()` genauso zugriffsgeschützt wie alle Sammlungen.
+Bewusst kein Cron/Scheduler — Kurse werden nur beim Öffnen des
+Depot-Tabs, per "Aktualisieren"-Button oder beim Aufklappen eines
+Verlaufs-Charts geholt (`fetchQuote()`/`fetchHistory()` in `pb.js`),
+derselbe "nur bei Bedarf"-Ansatz wie bei den Daueraufträgen. Kein
+Server-Feld für den aktuellen Kurs — der Preis lebt nur als
+Session-State (`quotes` in `Depot.jsx`), nie in der Datenbank.
+`docker-compose.yml` mountet dafür `./pb_hooks:/pb_hooks` (Container-
+Neuerzeugung nötig, ein reiner Neustart reicht nicht, siehe
+BETRIEB.md).
 
-**Depot-Verlauf** (ab `0.20.0`) zeigt den Portfolio-Wert über die Zeit
-als Linienchart, mit Einstand als zweite Vergleichslinie — filterbar
-auf 3 Monate (täglich), 3 Jahre und 5 Jahre (wöchentlich,
-`CHART_RANGES` in `Depot.jsx`). Historische Kursreihen kommen von
-derselben `/api/depot/quote`-Route: `range`/`interval`-Query-Parameter
-werden unverändert an Yahoos Chart-Endpunkt durchgereicht (z. B.
-`range=5y&interval=1wk`), die Antwort liefert
-`{ symbol, currency, points: [{t, price}] }` statt eines einzelnen
-Kurses. Bestand und Einstand pro historischem Datenpunkt werden über
-`quantityAndCostAsOf()` rekonstruiert (dieselbe Durchschnittsmethode
-wie `positionStats()`, aber nur Trades bis zu einem Stichtag) — eine
-Position steht vor ihrem ersten Kauf also korrekt bei 0, nicht schon
-rückwirkend beim vollen heutigen Bestand. Mehrere Positionen mit
-leicht unterschiedlichen Handelstagen werden über die Vereinigung
-aller vorkommenden Kalendertage plus "letzter bekannter Kurs bei oder
-vor diesem Datum" (Forward-Fill) zusammengeführt. Bewusste
-Vereinfachung: der Wechselkurs für Fremdwährungs-Positionen ist auch
-hier nur der aktuelle (keine eigene historische FX-Reihe) — bei
-3 Monaten kaum relevant, bei 5 Jahren eine spürbare, aber akzeptierte
-Ungenauigkeit. Reines SVG (`<polyline>`, kein Diagramm-Paket, gleiches
-Prinzip wie `YearBars` in `Auswertung.jsx`).
+**Trade-Preise sind immer Euro** (`depot_trades.price_cents`/
+`fees_cents`), genau wie überall sonst in der App — der Preis, den man
+tatsächlich gezahlt hat, unabhängig davon, an welcher Börse und in
+welcher Währung das Wertpapier notiert. `TradeEditor` in `Depot.jsx`
+beschriftet die Felder entsprechend ("Kurs pro Stück (in Euro)").
+**Währungsumrechnung** betrifft deshalb ausschließlich den *Live-Kurs*:
+wenn der aufgelöste Ticker nicht in Euro notiert (z. B. wenn die
+Yahoo-Suche die Londoner USD- statt die Xetra-Euro-Notierung trifft),
+wird nur dieser eine Wert in Euro umgerechnet und mit dem Euro-Einstand
+verglichen — `positionStats()` gibt dafür `costCents` (immer Euro)
+getrennt von `priceCurrency`/`priceNativeValueCents` (native
+Kurswährung) zurück, `valueEurCents`/`gainEurCents` sind die einzigen
+für Vergleiche/Summen verwendeten Werte. Der Wechselkurs kommt vom
+selben Kurs-Proxy: Yahoo führt Währungspaare als ganz normale Ticker
+(`USDEUR=X`), `fxRates` in `Depot.jsx` holt pro vorkommender
+Live-Kurswährung einmal den Kurs, nicht pro Position. Bewusst eine
+einzige, aktuelle Umrechnung statt historischer Kurse zum jeweiligen
+Kaufzeitpunkt — eine Momentaufnahme, kein separates
+Fremdwährungs-Gewinn/Verlust-Tracking. Der Proxy liefert dafür
+zusätzlich zu `price_cents` (gerundet auf ganze Cent, reicht für
+Aktienkurse) ein rohes `price`-Feld — bei einem Wechselkurs wie
+`0,0068` (z. B. JPY→EUR) würde die Rundung auf Cent die Genauigkeit
+komplett zerstören. Solange der Live-Kurs oder sein Wechselkurs noch
+nicht geholt ist, bleibt `valueEurCents` `null` statt `0` und die
+Position zählt kurz nicht in der Gesamtsumme mit — sichtbar an "Kurs
+folgt …" statt einem falschen Zwischenwert.
 
-`DepotChart` (ab `0.21.0`) ist selbstverwaltend: eigener
-`expanded`-Zustand, **Default eingeklappt** — Klapp-Header exakt wie
-`showSparquote` in `Auswertung.jsx` (Chevron rotiert, Text "Verlauf
+**Depot-Verlauf** zeigt den Portfolio-Wert über die Zeit als
+Linienchart, mit Einstand als zweite Vergleichslinie — filterbar auf
+3 Monate (täglich), 3 Jahre und 5 Jahre (wöchentlich, `CHART_RANGES` in
+`Depot.jsx`). Bestand und Einstand pro historischem Datenpunkt werden
+über `quantityAndCostAsOf()` rekonstruiert — eine Position steht vor
+ihrem ersten Kauf korrekt bei 0, nicht rückwirkend beim vollen
+heutigen Bestand. Mehrere Positionen mit leicht unterschiedlichen
+Handelstagen werden über die Vereinigung aller vorkommenden
+Kalendertage plus "letzter bekannter Kurs bei oder vor diesem Datum"
+(Forward-Fill) zusammengeführt. Bewusste Vereinfachung: der
+Wechselkurs für Fremdwährungs-Positionen ist auch hier nur der
+aktuelle, keine eigene historische FX-Reihe. Reines SVG (`<polyline>`,
+kein Diagramm-Paket, gleiches Prinzip wie `YearBars` in
+`Auswertung.jsx`).
+
+`DepotChart` ist selbstverwaltend: eigener `expanded`-Zustand,
+Default eingeklappt — Klapp-Header wie `showSparquote` in
+`Auswertung.jsx` (Chevron rotiert, Text "Verlauf
 anzeigen/ausblenden"). Die Kursreihen-Abfrage steckt im Hook
 `useDepotChart({ positions, trades, fxRates, setFxRates, enabled })`
 und läuft nur, wenn `enabled` (= aufgeklappt) true ist — ein
-eingeklappter Chart löst keine Yahoo-Anfrage aus. `positions` ist der
-Freiheitsgrad, der denselben Chart zweimal nutzbar macht: der
-Portfolio-Chart übergibt `active` (alle nicht-archivierten
-Positionen), der Positions-Chart in `PositionDetail` übergibt
-`[position]` — beide teilen sich denselben `fxRates`-Cache aus dem
-`Depot`-Hauptkomponenten-State, damit der Wechselkurs nicht doppelt
-geholt wird.
+eingeklappter Chart löst keine Yahoo-Anfrage aus. `positions` macht
+denselben Chart zweimal nutzbar: der Portfolio-Chart übergibt `active`
+(alle nicht-archivierten Positionen), der Positions-Chart in
+`PositionDetail` übergibt `[position]` — beide teilen sich denselben
+`fxRates`-Cache aus dem `Depot`-Hauptkomponenten-State.
 
-**Depot abschaltbar** (ab `0.21.0`, `depotPref.js`): reine
-Anzeige-Präferenz nach exaktem Muster von `theme.js` (`localStorage`,
-kein Server-Feld). Ausgeschaltet verschwindet nur der Nav-Eintrag
-(Sidebar und mobile Bottom-Nav, die dafür zwischen
-`grid-cols-4`/`grid-cols-5` wechselt — beide Klassen bewusst als
-vollständige Literale im Quelltext, Tailwind kann keine dynamisch
-zusammengesetzten Klassennamen erkennen), Positionen und Trades
-bleiben unangetastet in der Datenbank. Umschalter "Depot an/aus" im
-eigenen Tab **Einstellungen** (ab `0.21.1`, `Einstellungen.jsx` —
-vorher im Konten-Tab, dort verschwamm die Grenze zwischen "Konten
-verwalten" und "App-weite Präferenzen"). Ist gerade der Depot-Tab
-offen, während er ausgeschaltet wird, springt `App.jsx` automatisch
-auf "Buchungen" zurück, statt auf einem aus der Navigation
-verschwundenen Tab stehen zu bleiben.
+**Depot abschaltbar** (`depotPref.js`): reine Anzeige-Präferenz nach
+exaktem Muster von `theme.js` (`localStorage`, kein Server-Feld) —
+Positionen und Trades bleiben in der Datenbank erhalten, nur der
+Nav-Eintrag verschwindet. Umschalter "Depot an/aus" im
+Einstellungen-Tab. Ist der Depot-Tab gerade offen, während er
+ausgeschaltet wird, springt `App.jsx` automatisch auf "Buchungen"
+zurück.
 
-**Einstellungen nicht in der mobilen Bottom-Nav** (ab `0.21.2`):
-sechs Sidebar-Einträge (mit Depot) quetschten sich auf dem Handy auf
-375px in sechs Spalten — "Einstellungen" als längstes Label sprengte
-dabei die Spaltenbreite sichtbar. `mobileNavItems` in `App.jsx`
-filtert den Eintrag `einstellungen` aus der Bottom-Nav-Liste heraus
-(Sidebar bleibt bei `navItems`, vollständig, unverändert), stattdessen
-öffnet ein Zahnrad-Icon rechts in der Kopfzeile (`sidebar:hidden`,
-`absolute right-5`) denselben Tab. Bottom-Nav ist dadurch wieder bei
-`grid-cols-4`/`grid-cols-5` (Depot an/aus) statt
-`grid-cols-5`/`grid-cols-6` — dieselbe Spaltenzahl wie vor der
-Einstellungen-Aufteilung. Bewusste Design-Entscheidung, keine reine
-Notlösung: Einstellungen wird seltener angetippt als
-Buchungen/Auswertung/Budgets/Konten/Depot, ein Ecken-Icon statt eines
-Dauerplatzes in der Haupt-Tableiste passt zur tatsächlichen
-Nutzungshäufigkeit.
-
-Die Monatsnavigation (`‹ September 2026 ›`) rückt auf Mobile dafür
-enger an den Titel heran (`justify-center gap-1`, `ChevronLeft`/
-`ChevronRight` ohne die randbündigen `-ml-1.5`/`-mr-1.5`) statt wie
-vorher auf die volle Kopfzeilenbreite gespreizt zu sein (`0.21.2`
-hatte das Zahnrad einfach `absolute right-5` über den bestehenden
-`justify-between`-Pfeil "Monat vor" gelegt — beide sassen an
-derselben Ecke, das Zahnrad lag optisch und im Klick-Handling darüber,
-der Pfeil war nicht mehr erreichbar). Ab der Sidebar-Breite (Desktop,
-kein Zahnrad im Header) spreizt `sidebar:justify-between` zusammen mit
-`sidebar:-ml-1.5`/`sidebar:-mr-1.5` exakt auf den vorherigen Zustand
-zurück — die Änderung ist rein mobil sichtbar.
+**Navigation** ist responsiv: ab 860px Sidebar-Layout, darunter
+Bottom-Nav + FAB (`sidebar:`-Breakpoint durchgehend in
+Tailwind-Klassen). Die Sidebar zeigt immer alle Einträge (`navItems`
+in `App.jsx`); die mobile Bottom-Nav lässt `einstellungen` bewusst weg
+(`mobileNavItems`) und wechselt zwischen `grid-cols-4`/`grid-cols-5`
+(Depot aus/an) — beide Klassen als vollständige Literale im
+Quelltext, Tailwind erkennt keine dynamisch zusammengesetzten
+Klassennamen. Grund: sechs Spalten sind auf 375px zu eng
+("Einstellungen" als längstes Label sprengt die Spaltenbreite), und
+Einstellungen wird ohnehin seltener angetippt als die übrigen Tabs.
+Auf Mobile öffnet stattdessen ein Zahnrad-Icon rechts in der Kopfzeile
+(`sidebar:hidden`, `absolute right-5`) denselben Tab. Die
+Monatsnavigation (`‹ September 2026 ›`) sitzt auf Mobile eng am Titel
+(`justify-center gap-1`, `ChevronLeft`/`ChevronRight` ohne die
+randbündigen `-ml-1.5`/`-mr-1.5`) statt über die volle
+Kopfzeilenbreite gespreizt — sonst würde sie mit dem Zahnrad an
+derselben Ecke kollidieren. Ab der Sidebar-Breite (Desktop, kein
+Zahnrad im Header) spreizt `sidebar:justify-between` zusammen mit
+`sidebar:-ml-1.5`/`sidebar:-mr-1.5` wieder auf die volle Breite.
 
 **Darstellung**
 
-Hell/Dunkel/System ist im Einstellungen-Tab umschaltbar (bis `0.21.0`
-im Konten-Tab, siehe oben),
-reines Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
-(`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System" folgt
-`prefers-color-scheme` live per `matchMedia`-Listener, auch wenn sich die
-Geräteeinstellung ändert, während die App offen ist — Standard ohne eigene
-Wahl ist ebenfalls "System", nicht mehr fest "Hell". Umsetzung über
-Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in `index.css`,
-`.dark`-Klasse auf `<html>`), ein Inline-Script in `index.html` verhindert
-Hell-Flackern beim Laden (berücksichtigt dort ebenfalls "System"). Neue
-Farben grundsätzlich mit `dark:`-Variante nach dem in `ui.jsx`/`App.jsx`
-etablierten Muster ergänzen (stone/emerald-Skala, keine neuen Farbwerte
-erfinden).
+Hell/Dunkel/System ist im Einstellungen-Tab umschaltbar, reines
+Client-Feature ohne Server-Feld — Präferenz liegt in `localStorage`
+(`haushaltsbuch-theme`), Hook dafür in `app/src/theme.js`. "System"
+folgt `prefers-color-scheme` live per `matchMedia`-Listener, auch wenn
+sich die Geräteeinstellung ändert, während die App offen ist —
+Standard ohne eigene Wahl ist ebenfalls "System", nicht fest "Hell".
+Umsetzung über Tailwind-4-Class-Dark-Mode (`@custom-variant dark` in
+`index.css`, `.dark`-Klasse auf `<html>`), ein Inline-Script in
+`index.html` verhindert Hell-Flackern beim Laden (berücksichtigt dort
+ebenfalls "System"). Neue Farben grundsätzlich mit `dark:`-Variante
+nach dem in `ui.jsx`/`App.jsx` etablierten Muster ergänzen
+(stone/emerald-Skala, keine neuen Farbwerte erfinden).
 
 **Homescreen-Icon**
 
 `app/public/manifest.json` plus `apple-touch-icon.png`/`icon-192.png`/
-`icon-512.png` (ab `0.21.0`) sorgen dafür, dass "Zum Startbildschirm
-hinzufügen" ein echtes Icon und den Namen "Haushaltsbuch" zeigt statt
-eines Screenshot-Platzhalters. Vorher verlinkte `apple-touch-icon` auf
-`favicon.svg` — iOS akzeptiert dort aber nur PNG/JPG und ignoriert SVGs
-kommentarlos, und ein Manifest fehlte komplett (auch von
-Android/Chrome fürs Icon gebraucht). Die PNGs sind mit Pillow direkt
-in Zielgröße gezeichnet (kein SVG-Renderer wie `cairosvg`/
+`icon-512.png` sorgen dafür, dass "Zum Startbildschirm hinzufügen" ein
+echtes Icon und den Namen "Haushaltsbuch" zeigt. iOS akzeptiert für
+`apple-touch-icon` nur PNG/JPG, keine SVGs — `favicon.svg` bleibt
+deshalb auf den Browser-Tab beschränkt. Die PNGs sind mit Pillow
+direkt in Zielgröße gezeichnet (kein SVG-Renderer wie `cairosvg`/
 `rsvg-convert` auf dem System verfügbar), dasselbe Design wie
 `favicon.svg` (abgerundetes Quadrat `#047857`, zentriertes „€" in
 `#FAFAF8`). Macht **nur** Icon/Name beim Homescreen-Shortcut richtig —
 eine echte installierte PWA mit Standalone-Fenster und Offline-Betrieb
 bräuchte zusätzlich einen Service Worker und einen sicheren Kontext
-(HTTPS), beides weiterhin bewusst nicht gebaut (siehe
-Tailscale-Hinweis in BETRIEB.md).
+(HTTPS), beides bewusst nicht gebaut (siehe Tailscale-Hinweis in
+BETRIEB.md).
 
 ## Feste Regeln — nicht ohne Rückfrage ändern
 
