@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
@@ -7,6 +7,7 @@ import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
 import Konten from "./screens/Konten.jsx";
+import Depot from "./screens/Depot.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
 
@@ -213,6 +214,7 @@ function Shell() {
     { id: "buchungen", label: "Buchungen", Icon: List },
     { id: "auswertung", label: "Auswertung", Icon: PieChart },
     { id: "budgets", label: "Budgets", Icon: Target },
+    { id: "depot", label: "Depot", Icon: TrendingUp },
     { id: "konten", label: "Konten", Icon: Settings },
   ];
 
@@ -285,6 +287,7 @@ function Shell() {
                 {tab === "buchungen" && <Buchungen {...shared} />}
                 {tab === "auswertung" && <Auswertung {...shared} />}
                 {tab === "budgets" && <BudgetScreen {...shared} />}
+                {tab === "depot" && <Depot {...shared} />}
                 {tab === "konten" && <Konten {...shared} />}
               </>
             )}
@@ -298,7 +301,7 @@ function Shell() {
             </button>
           )}
 
-          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid grid-cols-4">
+          <nav className="sidebar:hidden absolute bottom-0 inset-x-0 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 grid grid-cols-5">
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (

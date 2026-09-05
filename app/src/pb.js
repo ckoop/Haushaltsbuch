@@ -282,6 +282,42 @@ export async function deleteImportRun(runId) {
   return rows.length;
 }
 
+// -------------------------------------------------------------------- Depot
+
+export const listDepotPositions = () =>
+  pb.collection("depot_positions").getFullList({ sort: "name" });
+
+export const saveDepotPosition = (p) =>
+  p.id
+    ? pb.collection("depot_positions").update(p.id, p)
+    : pb.collection("depot_positions").create(p);
+
+export const deleteDepotPosition = (id) => pb.collection("depot_positions").delete(id);
+
+export const countDepotTradesByPosition = async (positionId) => {
+  const r = await pb.collection("depot_trades").getList(1, 1, {
+    filter: pb.filter("position = {:id}", { id: positionId }),
+  });
+  return r.totalItems;
+};
+
+export const listDepotTrades = () =>
+  pb.collection("depot_trades").getFullList({ sort: "-date,-created" });
+
+export const saveDepotTrade = (t) =>
+  t.id
+    ? pb.collection("depot_trades").update(t.id, t)
+    : pb.collection("depot_trades").create(t);
+
+export const deleteDepotTrade = (id) => pb.collection("depot_trades").delete(id);
+
+// Server-seitiger Kurs-Proxy (pb_hooks/main.pb.js) - Yahoo Finance setzt
+// keinen CORS-Header, ein fetch() direkt aus dem Browser wuerde scheitern.
+// Entweder { isin } (loest einmalig einen Ticker auf) oder { ticker } (der
+// uebliche Fall, sobald der Ticker an der Position gespeichert ist).
+export const fetchQuote = ({ isin, ticker }) =>
+  pb.send("/api/depot/quote", isin ? { isin } : { ticker });
+
 // ------------------------------------------------------------------- Erstbefüllung
 
 export const DEFAULT_CATEGORIES = [

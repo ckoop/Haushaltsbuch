@@ -6,8 +6,11 @@ import {
   ShoppingBag, Gift, Plane, Car, PawPrint, BookOpen, Baby, Wrench,
 } from "lucide-react";
 
-export const eur = (cents) =>
-  new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format((cents ?? 0) / 100);
+// Waehrung als Parameter, nicht fest auf Euro - das Depot zeigt Positionen
+// auch in ihrer Handelswaehrung (z. B. USD bei einer Londoner Notierung).
+export const money = (cents, currency = "EUR") =>
+  new Intl.NumberFormat("de-DE", { style: "currency", currency }).format((cents ?? 0) / 100);
+export const eur = (cents) => money(cents, "EUR");
 export const eurAbs = (cents) => eur(Math.abs(cents ?? 0)).replace("-", "");
 
 export const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli",

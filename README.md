@@ -2,7 +2,9 @@
 
 Ein selbst gehostetes Haushaltsbuch für zu Hause. Ein Docker-Container,
 kein Cloud-Abo, keine Werbung, keine dritte Partei sieht deine Kontodaten.
-Läuft im Heimnetz, erreichbar von unterwegs per WireGuard.
+Läuft im Heimnetz, erreichbar von unterwegs per WireGuard. Einzige Ausnahme:
+das Depot holt Kurse von Yahoo Finance aus dem Internet — dabei verlässt nur
+die abgefragte ISIN/Ticker das Heimnetz, keine Kontodaten.
 
 Gebaut für den deutschen Alltag: CSV-Importe aus dem Online-Banking
 funktionieren mit den üblichen Fallstricken deutscher Bank-Exporte out of
@@ -40,6 +42,8 @@ Vorspann-Zeilen, alles wird erkannt.
   Öffnen der App, inklusive Kategorie und Tags. Kein Server-Cron nötig.
 - **Umbuchungen als eine Buchung**, nicht zwei — Geld zwischen eigenen Konten
   verfälscht keine Auswertung.
+- **Depot** — Wertpapiere über echte Kauf-/Verkaufstrades, aktuelle Kurse
+  kostenlos von Yahoo Finance, Gewinn/Verlust nach der Durchschnittsmethode.
 - **Hell/Dunkel/System-Design**, responsive (Bottom-Nav auf dem Handy,
   Sidebar auf dem Desktop).
 

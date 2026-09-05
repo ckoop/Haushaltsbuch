@@ -10,6 +10,7 @@ services:
     volumes:
       - ./pb_data:/pb_data
       - ./pb_public:/pb_public
+      - ./pb_hooks:/pb_hooks
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/api/health"]
       interval: 30s

@@ -31,8 +31,10 @@ Eine lauffähige Web-App plus Backend, betrieben im Heimnetz.
 **Dateien**
 
 ```
-docker-compose.yml          Container, Port 8090, Healthcheck
+docker-compose.yml          Container, Port 8090, Healthcheck,
+                            mountet zusaetzlich pb_hooks (Kurs-Proxy)
 setup/schema.mjs            Legt alle Sammlungen an, wiederholbar
+pb_hooks/main.pb.js         Einzige Server-Route: Kurs-Proxy fuers Depot
 app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
 app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
 app/src/ui.jsx              Formatierung, Farben, gemeinsame Bausteine
@@ -43,16 +45,16 @@ app/src/App.jsx             Login, Datenladung, Monatswechsel, Tabs,
                             Buchungs-Detail-Sheet (State + Handler,
                             damit jeder Screen es via openDetail()
                             oeffnen kann, nicht nur Buchungen.jsx)
-app/src/screens/            Buchungen, Auswertung, Budgets, Konten,
-                            NewEntry, Import, TxDetail (Darstellung
-                            des Buchungs-Detail-Sheets)
+app/src/screens/            Buchungen, Auswertung, Budgets, Depot,
+                            Konten, NewEntry, Import, TxDetail
+                            (Darstellung des Buchungs-Detail-Sheets)
 ```
 
 **Sammlungen**
 
 `accounts`, `categories`, `transactions`, `budgets`, `import_profiles`,
-`imports`, `rules`, `recurring_rules`, `tags`. Zugriffsregel überall
-identisch: `@request.auth.id != ""`.
+`imports`, `rules`, `recurring_rules`, `tags`, `depot_positions`,
+`depot_trades`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
 
 `transactions.recurring` markiert eine Buchung als wiederkehrend
 (`monthly`/`quarterly`/`yearly`, leer = nein) — setzbar bei Neuanlage
@@ -160,6 +162,35 @@ rollierenden zwölf Monate (bewusste Entscheidung gegen "immer die
 letzten 12 Monate", weil ein festes Kalenderjahr vertrauter ist und
 sich mit dem bestehenden `budgets.month`-Format deckt).
 
+**Depot** (`depot_positions`/`depot_trades`, ab `0.18.0`, eigener Tab
+`Depot.jsx`) trackt Wertpapiere über echte Kauf-/Verkaufstrades statt
+eines reinen Bestandsfelds — Bestand und Ø-Einstandspreis werden
+clientseitig nach der Durchschnittsmethode berechnet (`positionStats()`
+in `Depot.jsx`, kein FIFO/LIFO). Erste Funktion der App mit echtem
+Internetzugriff: `pb_hooks/main.pb.js` registriert
+`GET /api/depot/quote`, das Yahoo Finance abfragt (kostenlos, kein
+API-Key) und das Ergebnis weiterreicht — Yahoo setzt keinen CORS-Header,
+ein `fetch()` direkt aus dem Browser scheitert deshalb, die Route
+umgeht das serverseitig. Zwei Modi: `?isin=...` löst einmalig per
+Yahoo-Suche einen Ticker auf (beim Anlegen einer Position,
+`PositionEditor` in `Depot.jsx`), `?ticker=...` fragt danach direkt den
+Kurs ab. Route ist über `$apis.requireAuth()` genauso zugriffsgeschützt
+wie alle Sammlungen. Bewusst kein Cron/Scheduler — Kurse werden nur
+beim Öffnen des Depot-Tabs und per "Aktualisieren"-Button geholt
+(`fetchQuote()` in `pb.js`), erstmalig ein Bruch mit der bisherigen
+"kein `pb_hooks`"-Haltung, aber derselbe "nur bei Bedarf"-Ansatz wie
+bei den Daueraufträgen. Kein Server-Feld für den aktuellen Kurs — der
+Preis lebt nur als Session-State (`quotes` in `Depot.jsx`), nie in der
+Datenbank, damit nie ein veralteter Kurs mit einem frischen verwechselt
+wird. Keine Währungsumrechnung: Positionen, deren Ticker nicht in Euro
+notiert (z. B. wenn die Yahoo-Suche die Londoner statt die
+Xetra-Notierung trifft), fließen nicht in die Euro-Gesamtsumme ein,
+sondern werden mit Hinweis separat ausgewiesen. `docker-compose.yml`
+mountet dafür neu `./pb_hooks:/pb_hooks` — auf einer bestehenden
+Instanz braucht es nach `git pull` ein `docker compose up -d`
+(Container-Neuerzeugung, ein reiner Neustart reicht nicht, siehe
+BETRIEB.md).
+
 **Darstellung**
 
 Hell/Dunkel/System ist in den Einstellungen (Konten-Tab) umschaltbar,
@@ -241,7 +272,10 @@ Falls Offline später doch gefordert wird, ist der richtige nächste Schritt
 **nicht** ein vollständiger Sync, sondern eine Warteschlange nur für neu
 erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit.
+Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit (auch im Depot
+keine Umrechnung Fremdwährung → Euro), FIFO/LIFO-Berechnung im Depot
+(nur Durchschnittsmethode), gespeicherte/historische Depot-Kurse (immer
+nur der zuletzt live abgerufene, nie in der DB).
 
 ## CSV-Import: der heikelste Teil
 

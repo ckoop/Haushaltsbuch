@@ -99,6 +99,8 @@ Hostnamen mit gültigem Zertifikat, ohne selbst etwas auszustellen.
 | `imports` | Protokoll je Importlauf, macht Rückgängigmachen möglich |
 | `rules` | Textmuster → Kategorie, für automatische Zuordnung |
 | `recurring_rules` | Daueraufträge, erzeugen künftige Buchungen automatisch |
+| `depot_positions` | Wertpapiere im Depot (ISIN, Name, Yahoo-Ticker) |
+| `depot_trades` | Kauf-/Verkaufstrades je Position |
 
 ### Entscheidungen, die im Schema stecken
 
@@ -148,6 +150,49 @@ npm i pocketbase
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
+
+**Depot: erste Sammlung mit externem Netzzugriff.** `depot_positions` und
+`depot_trades` sind eine komplett neue Sammlungspaar wie `recurring_rules`
+oben — dasselbe Setup-Skript erneut ausführen, um sie nachzuziehen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/schema.mjs
+```
+
+⚠️ Dazu kommt eine echte Infrastrukturänderung, kein reines Schema-Update:
+`docker-compose.yml` mountet jetzt zusätzlich `./pb_hooks:/pb_hooks`. Auf
+einer bestehenden Instanz nach `git pull` einmalig `docker compose up -d`
+ausführen, damit der Container neu erzeugt wird und den Mount übernimmt
+(ein reiner Neustart reicht nicht, Docker liest Volume-Definitionen nur bei
+der Container-Erstellung).
+
+In `pb_hooks/main.pb.js` liegt eine einzelne Route (`GET /api/depot/quote`),
+die Kurse bei Yahoo Finance abruft und ans Frontend weiterreicht — Yahoo
+liefert kostenlos und ohne API-Key, setzt aber keinen
+`Access-Control-Allow-Origin`-Header, ein `fetch()` direkt aus dem Browser
+scheitert deshalb an CORS. Die Route läuft stattdessen serverseitig (kein
+CORS-Problem dort) und ist über `$apis.requireAuth()` genauso zugriffsgeschützt
+wie alle Sammlungen (`wer angemeldet ist, sieht alles`). Bewusst **kein**
+Cron/Scheduler: die Route wird nur aufgerufen, wenn die App tatsächlich einen
+Kurs braucht (Depot-Tab geöffnet, "Aktualisieren" geklickt) — erstmalig ein
+Bruch mit der bisherigen "kein `pb_hooks`"-Haltung des Projekts, aber
+inhaltlich derselbe "nur bei Bedarf, nie im Hintergrund"-Ansatz wie bei den
+Daueraufträgen.
+
+Damit ist das Depot die **einzige Funktion der App, die das Internet
+braucht** — alles andere läuft rein im Heimnetz. Ohne Internetzugang vom
+Docker-Container aus bleiben Depot-Kurse einfach leer, der Rest der App ist
+unberührt.
+
+Zwei bewusste Vereinfachungen: Bestand und Einstandspreis laufen nach der
+**Durchschnittsmethode** (kein FIFO/LIFO) — für ein privates Depot
+nachvollziehbar genug. Und **keine Währungsumrechnung**: Positionen in
+Fremdwährung (z. B. wenn "Ticker suchen" die Londoner statt die
+Xetra-Notierung trifft) fließen nicht in die Euro-Gesamtsumme ein, sondern
+werden separat mit Hinweis ausgewiesen — lieber unvollständig als ein
+falsch umgerechneter Gesamtwert.
 
 ## Sicherung
 

@@ -187,4 +187,42 @@ await ensure({
   ],
 });
 
+// ------------------------------------------------------------------- Depot
+
+const depotPositionsId = await ensure({
+  name: "depot_positions", type: "base", ...rules,
+  fields: [
+    text("isin", { required: true, max: 12 }),
+    text("name", { required: true, max: 120 }),
+    // Von Yahoo Finance ueber die ISIN aufgeloest, einmalig zwischengespeichert
+    // statt bei jedem Kursabruf neu gesucht - siehe pb_hooks/main.pb.js.
+    // Manuell ueberschreibbar, falls Yahoo nicht die gewuenschte Boerse traf
+    // (z. B. Londoner USD-Notierung statt Xetra in Euro).
+    text("ticker", { max: 20 }),
+    text("currency", { max: 3 }),
+    bool("archived"),
+  ],
+  indexes: [
+    "CREATE UNIQUE INDEX idx_depot_pos_isin ON depot_positions (isin)",
+  ],
+});
+
+await ensure({
+  name: "depot_trades", type: "base", ...rules,
+  fields: [
+    rel("position", depotPositionsId, { required: true }),
+    { type: "date", name: "date", required: true },
+    sel("type", ["buy", "sell"], { required: true }),
+    // Bewusst kein onlyInt: Sparplaene buchen oft Bruchteile von Anteilen.
+    num("quantity", { required: true }),
+    num("price_cents", { required: true, onlyInt: true }),
+    num("fees_cents", { onlyInt: true }),
+    text("note", { max: 500 }),
+    { type: "autodate", name: "created", onCreate: true },
+  ],
+  indexes: [
+    "CREATE INDEX idx_depot_trade_position ON depot_trades (position)",
+  ],
+});
+
 console.log("\nFertig.");
