@@ -338,6 +338,18 @@ gespreizt, damit sie nicht mit dem Zahnrad an derselben Ecke kollidiert.
 Ab der Sidebar-Breite (Desktop, kein Zahnrad im Header) spreizt
 `sidebar:justify-between` wieder auf die volle Breite.
 
+**Zurück-Button/-Geste bleibt in der App**: Tab-Wechsel (`goToTab()`) und
+die drei zentral verwalteten Sheets (Neue Buchung, Buchungs-Detail,
+„Automatisch gebucht") pushen je einen `history`-Eintrag; ein
+`popstate`-Listener in `App.jsx` stellt bei Zurück den vorherigen Zustand
+wieder her, statt dass der mobile Browser die Seite verlässt. Schließen-
+Buttons dieser drei Sheets rufen `history.back()` statt direkt den State zu
+setzen, damit Stack und sichtbarer Zustand nicht auseinanderlaufen. Interne
+Refreshes eines schon offenen Detail-Sheets (`setDetail(updated)` nach
+Kategorie-/Tag-Änderung) laufen bewusst nicht darüber. Bildschirm-lokale
+Editor-Sheets (Konten.jsx, Depot.jsx, Drilldowns in Auswertung.jsx) sind
+davon **nicht** erfasst — das wäre praktisch echtes Routing.
+
 ### Homescreen-Icon
 
 `app/public/manifest.json` plus `apple-touch-icon.png`/`icon-192.png`/

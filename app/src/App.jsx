@@ -107,6 +107,26 @@ function Shell() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Ohne eigenes Routing hat die App sonst keinerlei Browser-History-Eintraege
+  // - der mobile Zurueck-Button wuerde die Seite verlassen statt innerhalb der
+  // App zurueckzugehen. Tab-Wechsel und die drei hier zentral verwalteten
+  // Sheets bekommen deshalb je einen History-Eintrag; popstate stellt den
+  // vorherigen Zustand wieder her. Bildschirm-lokale Sheets (Editoren in
+  // Konten.jsx/Depot.jsx, Drilldowns in Auswertung.jsx) sind bewusst
+  // aussen vor - das waere praktisch echtes Routing.
+  useEffect(() => {
+    history.replaceState({ tab: "buchungen" }, "");
+    const onPopState = (e) => {
+      const state = e.state ?? { tab: "buchungen" };
+      setTab(state.tab ?? "buchungen");
+      if (state.overlay !== "sheet") setSheet(false);
+      if (state.overlay !== "detail") setDetail(null);
+      if (state.overlay !== "autoBooked") setAutoBooked(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // Faellige Daueraufträge einmal pro Sitzung nachbuchen - nicht Teil von
   // load(), das feuert bei jedem Monatswechsel neu. Zeigt danach, welche
   // Buchungen konkret automatisch entstanden sind (nicht nur die Anzahl im
@@ -116,6 +136,7 @@ function Shell() {
       .then(async (rows) => {
         if (rows.length === 0) return;
         await load();
+        history.pushState({ tab, overlay: "autoBooked" }, "");
         setAutoBooked({ rows, checkedAt: new Date() });
       })
       .catch(console.error);
@@ -159,7 +180,7 @@ function Shell() {
   // auch andere Screens (Auswertung.jsx) eine Buchung per openDetail() oeffnen
   // koennen, nicht nur die Buchungsliste selbst.
   const removeTx = async (id) => {
-    try { await api.deleteTransaction(id); setDetail(null); flash("Buchung gelöscht"); load(); }
+    try { await api.deleteTransaction(id); history.back(); flash("Buchung gelöscht"); load(); }
     catch (e) { setError(e); }
   };
 
@@ -206,6 +227,19 @@ function Shell() {
   // schliessen, nur weil man nebenbei einen neuen Tag angelegt hat.
   const reloadTags = () => api.listTags().then(setTags).catch(setError);
 
+  // Diese drei pushen einen History-Eintrag, damit der Zurueck-Button sie
+  // wieder schliesst statt die Seite zu verlassen (siehe popstate-Handler
+  // oben). Interne Aktualisierungen eines schon offenen Sheets (z. B.
+  // setDetail(updated) nach einem Tag-Update) laufen bewusst NICHT darueber,
+  // sonst wuerde jede Aenderung einen weiteren Eintrag aufhaeufen.
+  const goToTab = (id) => {
+    if (id === tab) return;
+    history.pushState({ tab: id }, "");
+    setTab(id);
+  };
+  const openSheet = () => { history.pushState({ tab, overlay: "sheet" }, ""); setSheet(true); };
+  const openDetail = (tx) => { history.pushState({ tab, overlay: "detail" }, ""); setDetail(tx); };
+
   const shift = (d) => {
     let m = ym.m + d, y = ym.y;
     if (m < 0) { m = 11; y -= 1; }
@@ -217,7 +251,7 @@ function Shell() {
 
   const shared = {
     accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
-    balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail: setDetail,
+    balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
   };
 
@@ -238,7 +272,15 @@ function Shell() {
   // Wer das Depot gerade offen hat und es dann in den Einstellungen
   // ausschaltet, landet sonst auf einem Tab, der aus der Navigation
   // verschwunden ist.
-  useEffect(() => { if (!depotEnabled && tab === "depot") setTab("buchungen"); }, [depotEnabled, tab]);
+  useEffect(() => {
+    if (!depotEnabled && tab === "depot") {
+      // Programmierte Korrektur, keine Nutzer-Navigation - den aktuellen
+      // History-Eintrag ersetzen statt einen neuen zu pushen, sonst zeigt
+      // der oberste Eintrag weiter auf "depot", obwohl schon umgeschaltet ist.
+      history.replaceState({ tab: "buchungen" }, "");
+      setTab("buchungen");
+    }
+  }, [depotEnabled, tab]);
 
   // Kontextinfo je Tab, analog zu den Sidebar-/Bottom-Nav-Badges im epoch-Projekt.
   const navBadges = accounts.length > 0 ? {
@@ -258,7 +300,7 @@ function Shell() {
             {navItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (
-                <button key={id} onClick={() => setTab(id)}
+                <button key={id} onClick={() => goToTab(id)}
                   className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-left ${
                     active ? "bg-emerald-700/10 dark:bg-emerald-400/10 text-emerald-800 dark:text-emerald-400 font-medium"
                       : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}>
@@ -278,7 +320,7 @@ function Shell() {
             })}
           </nav>
           {!needsSetup && accounts.length > 0 && (
-            <button onClick={() => setSheet(true)}
+            <button onClick={openSheet}
               className="mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-700 dark:bg-emerald-600 text-white text-sm font-medium active:scale-[0.98] transition-transform">
               <Plus size={17} /> Neue Buchung
             </button>
@@ -304,7 +346,7 @@ function Shell() {
             </div>
             {/* Nur mobil - auf dem Desktop ist Einstellungen schon in der
                 Sidebar erreichbar, ein zweiter Zugang waere redundant. */}
-            <button onClick={() => setTab("einstellungen")} aria-label="Einstellungen"
+            <button onClick={() => goToTab("einstellungen")} aria-label="Einstellungen"
               className={`sidebar:hidden absolute right-5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${
                 tab === "einstellungen" ? "text-stone-900 dark:text-stone-50" : "text-stone-400 dark:text-stone-500"}`}>
               <Settings size={19} />
@@ -330,7 +372,7 @@ function Shell() {
           </main>
 
           {!needsSetup && accounts.length > 0 && (
-            <button onClick={() => setSheet(true)}
+            <button onClick={openSheet}
               className="sidebar:hidden absolute bottom-[calc(var(--nav-h)+12px)] right-5 w-14 h-14 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
               aria-label="Neue Buchung">
               <Plus size={26} />
@@ -342,7 +384,7 @@ function Shell() {
             {mobileNavItems.map(({ id, label, Icon }) => {
               const active = tab === id;
               return (
-                <button key={id} onClick={() => setTab(id)}
+                <button key={id} onClick={() => goToTab(id)}
                   className={`py-2.5 flex flex-col items-center gap-0.5 ${
                     active ? "text-stone-900 dark:text-stone-50" : "text-stone-400 dark:text-stone-500"}`}>
                   <Icon size={21} strokeWidth={iconStroke(active)} />
@@ -360,19 +402,19 @@ function Shell() {
           {sheet && (
             <NewEntry accounts={accounts} categories={categories}
               defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
-              onClose={() => setSheet(false)}
+              onClose={() => history.back()}
               onSaved={(msg) => { flash(msg); load(); }} />
           )}
 
           {detail && (
             <TxDetail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
-              onClose={() => setDetail(null)} onDelete={removeTx}
+              onClose={() => history.back()} onDelete={removeTx}
               onUpdateRecurring={updateRecurring} onUpdateCategory={updateCategory}
               onAddTag={addTag} onRemoveTag={removeTag} />
           )}
 
           {autoBooked && (
-            <Sheet title="Automatisch gebucht" onClose={() => setAutoBooked(null)}>
+            <Sheet title="Automatisch gebucht" onClose={() => history.back()}>
               <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
                 {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
               </p>
