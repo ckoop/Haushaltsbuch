@@ -201,6 +201,15 @@ Bausteine in `JahresAnsicht`:
 Jeder Balken ist klickbar und öffnet ein Sheet mit den zugrunde liegenden
 Buchungen, gleiches Prinzip wie der Kategorie-/Tag-Drilldown im Monatsmodus.
 
+### Tests
+
+`app/src/csv.test.js` (Vitest, `npm test` in `app/`) deckt die reinen
+Funktionen in `csv.js` ab — Encoding-Erkennung, alle drei Datumsformate,
+Betragsparsing, Header-Suche, Spaltenzuordnung, Batch-Dedup mit
+`#n`-Suffix, `applyRules()`. Bewusst nur dieser eine Kandidat: höchste
+Fehlerdichte pro Zeile in der App, einzige Logik, die sinnvoll ohne
+Browser testbar ist. Keine Tests für React-Komponenten.
+
 ### CSV-Import
 
 Deutsche Bank-Exporte haben durchgehend dieselben Fallen, `csv.js`
