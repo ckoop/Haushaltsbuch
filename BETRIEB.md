@@ -246,15 +246,80 @@ frisch angelegter Anfangsbestand (siehe oben, "ein einzelner Kauf-Trade als
 Bestand") erscheint im Chart deshalb erst ab seinem eingetragenen Datum,
 davor korrekt bei 0.
 
+## Umgebungen: Entwicklung vs. Produktion
+
+Zwei getrennte Instanzen, nicht zu verwechseln:
+
+- **Entwicklungsrechner** (dieser Rechner, `localhost:8090`) — Code wird
+  hier geschrieben und getestet. Die dortige `pb_data` ist eine
+  Wegwerf-Testdatenbank, kein Backup nötig.
+- **`bumblebeee` (192.168.178.55:8090)** — die **Produktionsumgebung**,
+  die echten Haushaltsbuch-Daten leben dort. Diese Datenbank ist die
+  wichtige und muss bei jedem Deploy erhalten bleiben.
+
+Deploys laufen deshalb ausschließlich als Code-Update in Richtung
+Entwicklungsrechner → `bumblebeee`, nie umgekehrt, und **nie** mit einem
+Daten-Sync, der `bumblebeee`s Datenbank überschreibt — siehe
+`deploy_bumblebeee.sh` unten (`SKIP_DATA=1` ist dort bewusst fest gesetzt,
+nicht nur ein Default).
+
 ## Sicherung
 
-PocketBase bringt eigene Sicherungen mit: *Settings → Backups*, dort einen
-Zeitplan setzen. Die Dateien liegen in `pb_data/backups`, also im selben
-Volume — kopier sie per Cron zusätzlich auf ein anderes Laufwerk:
+Gilt für die **Produktionsdatenbank auf `bumblebeee`**, nicht für die
+Testdatenbank auf dem Entwicklungsrechner. PocketBase bringt eigene
+Sicherungen mit: *Settings → Backups* (auf `http://192.168.178.55:8090/_/`),
+dort einen Zeitplan setzen. Die Dateien liegen in `pb_data/backups`, also im
+selben Volume — kopier sie per Cron zusätzlich auf ein anderes Laufwerk:
 
 ```
-0 4 * * * rsync -a /pfad/pb_data/backups/ /mnt/sicherung/haushaltsbuch/
+0 4 * * * rsync -a /home/bumblebeee/docker/haushaltsbuch/pb_data/backups/ /mnt/sicherung/haushaltsbuch/
 ```
 
 Und spiel eine Sicherung einmal testweise zurück. Ein Backup, das nie
 zurückgespielt wurde, ist eine Vermutung.
+
+**Stand 2026-09-06:** PocketBase-eigener Zeitplan ist auf `bumblebeee`
+aktiv (täglich `0 3 * * *` UTC, 7 Backups Aufbewahrung — Settings →
+Backups in der Admin-UI), ein manueller Testlauf hat erfolgreich
+`pb_data/backups/pb_backup_*.zip` erzeugt. **Der Cron-rsync auf ein
+zweites Laufwerk/einen zweiten Ort fehlt noch** — die Backups liegen
+bisher nur im selben `pb_data`-Volume wie die Live-Datenbank und würden
+einen Ausfall der Platte/des Servers selbst nicht überleben. Das ist die
+verbleibende Lücke.
+
+## Deploy auf einen zweiten Server
+
+`deploy/sync_to_server.sh <user@host> <remote_pfad>` kopiert das Projekt
+(ohne `node_modules`/`.git`, s. `.gitignore`) auf einen anderen Server und
+startet dort den Container — nach demselben Muster wie im Epoch-Projekt
+(`deploy/`-Ordner dort), an PocketBase angepasst:
+
+- **Kein Docker-Build nötig** (fertiges Image
+  `ghcr.io/muchobien/pocketbase:latest`) — dafür wird `pb_public/` (der
+  gebaute Frontend-Stand) explizit mitkopiert. Vorher lokal `npm run build`
+  in `app/` ausführen, sonst landet ein veralteter Stand auf dem Zielserver.
+- **Keine `.env`/SSL-Handhabung** wie bei Epoch nötig — die App läuft rein
+  über HTTP, keine feste Server-Adresse im Code (s. „Feste Regeln" in
+  `CLAUDE.md`).
+- **Keine Pfad-Ersetzung in der `docker-compose.yml`** nötig — die
+  Bind-Mounts sind relativ (`./pb_data:/pb_data` usw.), Docker Compose löst
+  sie automatisch relativ zum Zielverzeichnis auf.
+- `SKIP_DATA=1` überspringt `pb_data/` (für Code-only-Deploys auf einen
+  Server mit eigenständiger Datenbank), `HOST_PORT=...` schreibt den extern
+  erreichbaren Port um, falls 8090 auf dem Ziel belegt ist.
+
+`deploy/deploy_bumblebeee.sh` ist der fertige Aufruf für den Produktions-
+server im Heimnetz (`bumblebeee@192.168.178.55`, Port 8090 dort frei,
+`SKIP_DATA=1` fest gesetzt — **nicht** nur ein Default, sondern eine
+bewusste Sicherung: `bumblebeee` hält die echten Produktionsdaten, die bei
+keinem Code-Deploy überschrieben werden dürfen). Einmaliger Voll-Sync ohne
+`SKIP_DATA` (am 2026-09-06 für die Erstinstallation gelaufen) ist seitdem
+nicht mehr vorgesehen — jeder weitere Sync läuft über
+`deploy_bumblebeee.sh`.
+
+**Wichtig, falls als Backup gedacht:** Ein Code-Deploy mit `SKIP_DATA=1`
+ist **kein** Backup der Daten — es aktualisiert nur den Code auf einer
+eigenständig laufenden zweiten Instanz mit eigener Datenbank. Für eine
+echte zweite Kopie der Daten (Backup-Zweck) muss ein Sync ohne
+`SKIP_DATA=1` laufen — dann aber nicht mehr parallel als eigenständige
+Live-Instanz betreiben, sonst laufen beide Datenbanken auseinander.

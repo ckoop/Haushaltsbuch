@@ -26,6 +26,13 @@ Erreichbar von unterwegs per WireGuard-Tunnel, nicht über eine öffentliche
 Domain. Kein Multi-Tenant-Gedanke: alle angemeldeten Nutzer sehen dieselben
 Daten, der Haushalt ist die Zugriffsgrenze, nicht die einzelne Person.
 
+**Zwei getrennte Instanzen**: Entwicklung läuft auf dem Entwicklungsrechner
+mit einer Wegwerf-Testdatenbank, **Produktion mit den echten Daten läuft
+auf einem zweiten Server im Heimnetz (`bumblebeee`)**. Deploys dorthin
+ausschließlich über `deploy/deploy_bumblebeee.sh` (Code-only, `SKIP_DATA=1`
+fest gesetzt, überschreibt die Produktionsdatenbank nie). Details und
+IP/Pfad: `BETRIEB.md`, Abschnitt „Umgebungen".
+
 ## Stack & Betrieb
 
 - **PocketBase 0.39** in einem Docker-Container, Port 8090, kein Reverse
@@ -49,6 +56,8 @@ Daten, der Haushalt ist die Zugriffsgrenze, nicht die einzelne Person.
 ```
 docker-compose.yml       Container, Port 8090, Healthcheck, mountet
                          pb_data, pb_public und pb_hooks
+deploy/                 Sync-Skripte auf einen zweiten Server, siehe
+                         BETRIEB.md
 setup/schema.mjs         Legt alle Sammlungen an, wiederholbar/idempotent
 pb_hooks/main.pb.js      Einzige Server-Route: Kurs-Proxy fürs Depot
 app/src/pb.js            PocketBase-Client + gesamter Datenzugriff —

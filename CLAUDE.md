@@ -8,7 +8,13 @@ Du bist erfahrener Full-Stack-Entwickler mit Schwerpunkt auf selbst gehosteten, 
 
 ## Was existiert
 
-Eine lauffähige Web-App plus Backend, betrieben im Heimnetz.
+Eine lauffähige Web-App plus Backend, betrieben im Heimnetz. **Zwei
+getrennte Instanzen** (ab `0.22.1`, s. „Umgebungen" in `BETRIEB.md`):
+Entwicklung läuft auf diesem Rechner mit einer Wegwerf-Testdatenbank,
+**Produktion mit den echten Daten läuft auf `bumblebeee` im Heimnetz**
+(`192.168.178.55:8090`). Deploys dorthin ausschließlich über
+`deploy/deploy_bumblebeee.sh` (Code-only, `SKIP_DATA=1` fest gesetzt — die
+Produktionsdatenbank wird dabei nie überschrieben).
 
 ### Stack
 
@@ -22,6 +28,8 @@ Eine lauffähige Web-App plus Backend, betrieben im Heimnetz.
 ```
 docker-compose.yml          Container, Port 8090, Healthcheck,
                               mountet zusaetzlich pb_hooks (Kurs-Proxy)
+deploy/                     Sync-Skripte auf einen zweiten Server (Muster
+                              aus dem Epoch-Projekt uebernommen, s. BETRIEB.md)
 setup/schema.mjs            Legt alle Sammlungen an, wiederholbar
 pb_hooks/main.pb.js         Einzige Server-Route: Kurs-Proxy fuers Depot
 app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
