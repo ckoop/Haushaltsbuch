@@ -11,7 +11,7 @@ import Import from "./Import.jsx";
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, tags, balances, reload, flash }) {
+export default function Konten({ accounts, categories, tags, balances, reload, flash, reloadTags }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
@@ -27,7 +27,7 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
   useEffect(() => { loadRules(); loadAutoRules(); }, []);
 
   if (view === "import") {
-    return <Import accounts={accounts} categories={categories}
+    return <Import accounts={accounts} categories={categories} tags={tags}
       onBack={() => { setView("liste"); reload(); }} flash={flash} />;
   }
 
@@ -173,7 +173,10 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm truncate">„{r.pattern}"</span>
-                <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{cat.name}</span>
+                <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">
+                  {cat.name}
+                  {r.tags?.length > 0 && ` · ${r.tags.map((id) => byId(tags, id, UNKNOWN_TAG).name).join(", ")}`}
+                </span>
               </span>
               <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
             </button>
@@ -185,7 +188,7 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
       </div>
 
       <Button variant="ghost"
-        onClick={() => setEditingAutoRule({ id: "", pattern: "", category: categories[0]?.id ?? "", priority: 0 })}
+        onClick={() => setEditingAutoRule({ id: "", pattern: "", category: categories[0]?.id ?? "", tags: [], priority: 0 })}
         className="w-full mt-3 flex items-center justify-center gap-2">
         <Plus size={16} /> Regel hinzufügen
       </Button>
@@ -217,14 +220,14 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
         <RuleEditor draft={editingRule} accounts={accounts} categories={categories} tags={tags}
           onClose={() => setEditingRule(null)}
           onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); }}
-          onError={setError} onTagsChanged={reload} />
+          onError={setError} onTagsChanged={reloadTags} />
       )}
 
       {editingAutoRule && (
-        <AutoRuleEditor draft={editingAutoRule} categories={categories}
+        <AutoRuleEditor draft={editingAutoRule} categories={categories} tags={tags}
           onClose={() => setEditingAutoRule(null)}
           onSaved={(m) => { setEditingAutoRule(null); flash(m); loadAutoRules(); }}
-          onError={setError} />
+          onError={setError} onTagsChanged={reloadTags} />
       )}
     </div>
   );
@@ -608,13 +611,33 @@ function RuleEditor({ draft, accounts, categories, tags, onClose, onSaved, onErr
   );
 }
 
-function AutoRuleEditor({ draft, categories, onClose, onSaved, onError }) {
+function AutoRuleEditor({ draft, categories, tags, onClose, onSaved, onError, onTagsChanged }) {
   const isNew = !draft.id;
   const [pattern, setPattern] = useState(draft.pattern);
   const [category, setCategory] = useState(draft.category);
+  const [tagIds, setTagIds] = useState(draft.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
   const [priority, setPriority] = useState(draft.priority ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+
+  // Gleiches Muster wie in RuleEditor (Daueraufträge): Tags werden lokal
+  // gesammelt und erst beim Speichern der ganzen Regel uebernommen. Ein neu
+  // getippter Name, den es noch nicht gibt, wird sofort case-insensitiv
+  // gegen vorhandene Tags abgeglichen und bei Bedarf neu angelegt.
+  const addTag = async () => {
+    const trimmed = tagInput.trim();
+    if (!trimmed) return;
+    const existing = tags.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+    let id = existing?.id;
+    if (!id) {
+      try { id = (await api.createTag(trimmed)).id; onTagsChanged(); }
+      catch (e) { onError(e); return; }
+    }
+    if (!tagIds.includes(id)) setTagIds((v) => [...v, id]);
+    setTagInput("");
+  };
+  const removeTag = (id) => setTagIds((v) => v.filter((x) => x !== id));
 
   const submit = async () => {
     if (!pattern.trim()) return setError("Textmuster eingeben");
@@ -623,7 +646,7 @@ function AutoRuleEditor({ draft, categories, onClose, onSaved, onError }) {
     try {
       await api.saveRule({
         id: draft.id || undefined,
-        pattern: pattern.trim(), category, priority: Number(priority) || 0,
+        pattern: pattern.trim(), category, tags: tagIds, priority: Number(priority) || 0,
       });
       onSaved("Regel gesichert");
     } catch (e) { onError(e); onClose(); }
@@ -652,6 +675,38 @@ function AutoRuleEditor({ draft, categories, onClose, onSaved, onError }) {
           {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Tags (optional)</p>
+      <div className="mb-4">
+        {tagIds.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {tagIds.map((id) => {
+              const t = byId(tags, id, UNKNOWN_TAG);
+              return (
+                <span key={id}
+                  className="inline-flex items-center gap-1 text-xs bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 rounded-full pl-2.5 pr-1.5 py-1">
+                  {t.name}
+                  <button onClick={() => removeTag(id)} className="text-stone-400 dark:text-stone-500">
+                    <X size={12} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+            placeholder="Tag hinzufügen …" list="autorule-tag-suggestions" className={inputCls} />
+          <datalist id="autorule-tag-suggestions">
+            {tags.filter((t) => !tagIds.includes(t.id)).map((t) => <option key={t.id} value={t.name} />)}
+          </datalist>
+          <Button variant="ghost" onClick={addTag} className="px-4 shrink-0">+</Button>
+        </div>
+      </div>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-3 mb-4">
+        Werden zusätzlich zur Kategorie gesetzt, wenn die Regel beim CSV-Import trifft.
+      </p>
 
       <Field label="Priorität (höher = zuerst geprüft)">
         <input type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)}

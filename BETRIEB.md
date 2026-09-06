@@ -134,6 +134,19 @@ Einmalig manuell ergänzen: Admin-Oberfläche → *Collections* → `transaction
 → Feld hinzufügen → *Select*, Name `recurring`, Werte `monthly`/`quarterly`/
 `yearly`, nicht required.
 
+**`rules.tags` lässt eine automatische Zuordnung zusätzlich zur Kategorie
+auch Tags setzen** (Mehrfachauswahl-Relation, gleiches Muster wie
+`transactions.tags`). Trifft eine Regel beim CSV-Import, bekommt die
+Buchung die dort hinterlegten Tags automatisch mit.
+
+⚠️ Gleiches Problem wie oben: `setup/schema.mjs` patcht dieses Feld auf
+einer bestehenden Instanz **nicht** automatisch nach. Einmalig manuell
+ergänzen: Admin-Oberfläche → *Collections* → `rules` → Feld hinzufügen →
+*Relation*, Name `tags`, Ziel-Sammlung `tags`, Mehrfachauswahl, nicht
+required. Ohne dieses Feld läuft die App weiter, PocketBase verwirft das
+`tags`-Feld beim Speichern einer Regel einfach kommentarlos — die Regel
+selbst (Textmuster, Kategorie, Priorität) wird trotzdem gesichert.
+
 **`recurring_rules` erzeugt echte Buchungen automatisch**, anders als das
 `recurring`-Feld oben. Client-getriggert: Beim Öffnen der App wird geprüft,
 ob fällige Daueraufträge offen sind, und nachgebucht — kein Server-Cron,

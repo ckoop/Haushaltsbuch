@@ -3,12 +3,12 @@ import { ChevronLeft, FileUp, AlertTriangle, Check, Undo2 } from "lucide-react";
 import * as api from "../pb.js";
 import * as csv from "../csv.js";
 import {
-  eur, byId, typeIcon, inputCls, Field, Button, ErrorNote, Spinner, UNKNOWN_CAT,
+  eur, byId, typeIcon, inputCls, Field, Button, ErrorNote, Spinner, UNKNOWN_CAT, UNKNOWN_TAG,
 } from "../ui.jsx";
 
 const STEPS = ["Datei", "Zuordnung", "Vorschau"];
 
-export default function Import({ accounts, categories, onBack, flash }) {
+export default function Import({ accounts, categories, tags, onBack, flash }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,9 +97,11 @@ export default function Import({ accounts, categories, onBack, flash }) {
       const built = csv.buildRows(parsed, headerIndex, mapping, opts);
       const good = built.filter((r) => r.ok);
       setKnown(await api.existingHashes(good.map((r) => r.hash)));
-      setRows(built.map((r) => r.ok
-        ? { ...r, category: csv.applyRules(r, rules) || "" }
-        : r));
+      setRows(built.map((r) => {
+        if (!r.ok) return r;
+        const matched = csv.applyRules(r, rules);
+        return { ...r, category: matched?.category ?? "", tags: matched?.tags ?? [] };
+      }));
       setManualCats({});
       setStep(2);
     } catch (e) { setError(e); }
@@ -126,6 +128,10 @@ export default function Import({ accounts, categories, onBack, flash }) {
         fresh.map((r) => ({
           date: r.date, type: "tx", account,
           category: catOf(r) || undefined,
+          // Tags kommen ausschliesslich aus einer automatisch getroffenen
+          // Regel - fuer manuell zugeordnete Zeilen gibt's (noch) keinen
+          // eigenen Tag-Picker in der Vorschau.
+          tags: r.tags ?? [],
           amount_cents: r.cents,
           payee: r.payee || r.purpose.slice(0, 60),
           note: r.purpose,
@@ -368,6 +374,7 @@ export default function Import({ accounts, categories, onBack, flash }) {
                         r.batchDupeCount > 1 ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
                         {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
                         {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
+                        {r.tags?.length > 0 && ` · ${r.tags.map((id) => byId(tags, id, UNKNOWN_TAG).name).join(", ")}`}
                         {r.batchDupeCount > 1 && " · evtl. doppelt"}
                       </span>
                     </span>

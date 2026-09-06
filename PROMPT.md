@@ -78,7 +78,7 @@ app/src/screens/         Buchungen, Auswertung, Budgets, Depot, Konten,
 | `tags` | Freie Zusatz-Kennzeichnung quer zur Kategorie |
 | `transactions` | Buchungen und Umbuchungen |
 | `budgets` | Monats- oder Dauerlimit je Kategorie |
-| `rules` | Textmuster → Kategorie, für den CSV-Import |
+| `rules` | Textmuster → Kategorie (+ optional Tags), für den CSV-Import |
 | `recurring_rules` | Daueraufträge, erzeugen künftige Buchungen automatisch |
 | `import_profiles` / `imports` | Spaltenzuordnung je Bank / Protokoll je Importlauf |
 | `depot_positions` / `depot_trades` | Wertpapiere und ihre Kauf-/Verkaufstrades |
@@ -129,16 +129,26 @@ ein Ausklapp-Link für den Rest.
 **Tags** (`tags`) sind eine freie, mehrfache Zusatz-Kennzeichnung quer zur
 einen Pflicht-Kategorie — z. B. "Nebenkosten" auf einer als "Abos"
 kategorisierten Telekom-Buchung. Kein eigenes Verwaltungs-Screen: Tags
-entstehen direkt beim Zuweisen im Buchungen-Detail (`TagEditor` in
-`Buchungen.jsx`), ein vorhandener Tag wird case-insensitiv wiederverwendet
-statt dupliziert (`idx_tags_name` mit `COLLATE NOCASE`). `spentByTag` in
-`App.jsx` wird analog zu `spentByCat` berechnet, aber bewusst ohne
-Partition — eine Buchung mit zwei Tags zählt in beiden Tag-Summen mit.
+entstehen direkt beim Zuweisen (Buchungen-Detail, `AutoRuleEditor`,
+`RuleEditor` — überall dasselbe Muster), ein vorhandener Tag wird
+case-insensitiv wiederverwendet statt dupliziert (`idx_tags_name` mit
+`COLLATE NOCASE`). Neu angelegte Tags laden über `reloadTags()` in
+`App.jsx` nur die Tag-Liste neu, nicht die komplette App — ein voller
+`reload()` würde kurzzeitig `loading` setzen und dabei jeden Tab-Screen
+unmounten, inklusive eines gerade offenen Sheets mit screen-lokalem State.
+`spentByTag` in `App.jsx` wird analog zu `spentByCat` berechnet, aber
+bewusst ohne Partition — eine Buchung mit zwei Tags zählt in beiden
+Tag-Summen mit.
 
 **Regeln** (`rules`) ordnen beim CSV-Import automatisch eine Kategorie zu,
 wenn Empfänger oder Verwendungszweck ein Textmuster enthalten
-(`applyRules()` in `csv.js`). Im Konten-Tab verwaltbar (`AutoRuleEditor`),
-keine Löschsperre — eine Regel referenziert keine Buchungen.
+(`applyRules()` in `csv.js`), und können optional zusätzlich Tags setzen
+(`rules.tags`). Trifft eine Regel, gibt `applyRules()` `{ category, tags }`
+zurück, `Import.jsx` übernimmt beide beim Anlegen der Buchung — manuell
+im Import nachkategorisierte Zeilen ohne Regel-Treffer bekommen dagegen
+bewusst keinen eigenen Tag-Picker. Im Konten-Tab verwaltbar
+(`AutoRuleEditor`), keine Löschsperre — eine Regel referenziert keine
+Buchungen.
 
 ### Daueraufträge
 

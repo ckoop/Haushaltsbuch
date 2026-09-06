@@ -119,6 +119,9 @@ const rulesId = await ensure({
   fields: [
     text("pattern", { required: true, max: 120 }),
     rel("category", categoriesId, { required: true }),
+    // Optional - eine Regel setzt beim Treffer immer die Kategorie, Tags nur
+    // wenn welche hinterlegt sind. Gleiches Muster wie transactions.tags.
+    rel("tags", tagsId, { maxSelect: 10 }),
     num("priority", { onlyInt: true }),
   ],
 });

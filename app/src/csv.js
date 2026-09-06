@@ -207,11 +207,14 @@ export function buildRows(rows, headerIndex, mapping, opts) {
   return out;
 }
 
-// Textmuster aus der Sammlung "rules" auf Zahlungsempfaenger und Zweck anwenden.
+// Textmuster aus der Sammlung "rules" auf Zahlungsempfaenger und Zweck
+// anwenden. Eine Regel setzt beim Treffer immer die Kategorie, Tags nur
+// wenn welche an der Regel hinterlegt sind - deshalb getrennt zurueckgeben
+// statt nur die Kategorie, analog zu deren Behandlung in transactions.
 export function applyRules(row, rules) {
   const haystack = `${row.payee} ${row.purpose}`.toLowerCase();
   for (const r of rules) {
-    if (haystack.includes(r.pattern.toLowerCase())) return r.category;
+    if (haystack.includes(r.pattern.toLowerCase())) return { category: r.category, tags: r.tags ?? [] };
   }
-  return "";
+  return null;
 }

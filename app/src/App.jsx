@@ -199,6 +199,13 @@ function Shell() {
     } catch (e) { setError(e); }
   };
 
+  // Nur die Tag-Liste nachladen statt eines vollen reload(): load() setzt
+  // kurzzeitig loading=true, was jeden Tab-Screen unmountet (siehe unten,
+  // {!loading && ... <Konten/>}) - ein gerade offenes Sheet mit rein lokalem
+  // State (z. B. RuleEditor/AutoRuleEditor in Konten.jsx) wuerde dabei
+  // schliessen, nur weil man nebenbei einen neuen Tag angelegt hat.
+  const reloadTags = () => api.listTags().then(setTags).catch(setError);
+
   const shift = (d) => {
     let m = ym.m + d, y = ym.y;
     if (m < 0) { m = 11; y -= 1; }
@@ -211,7 +218,7 @@ function Shell() {
   const shared = {
     accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
     balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail: setDetail,
-    depotEnabled, setDepotEnabled,
+    depotEnabled, setDepotEnabled, reloadTags,
   };
 
   const navItems = [
