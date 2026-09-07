@@ -31,6 +31,9 @@ docker-compose.yml          Container, Port 8090, Healthcheck,
 deploy/                     Sync-Skripte auf einen zweiten Server (Muster
                               aus dem Epoch-Projekt uebernommen, s. BETRIEB.md)
 setup/schema.mjs            Legt alle Sammlungen an, wiederholbar
+setup/clear_months.mjs      Loescht Buchungen (+ verwaiste Import-Protokolle)
+                              ganzer Kalendermonate, Trockenlauf per Default,
+                              s. „Buchungen eines Monats loeschen" in BETRIEB.md
 pb_hooks/main.pb.js         Einzige Server-Route: Kurs-Proxy fuers Depot
 app/src/pb.js               PocketBase-Client + gesamter Datenzugriff
 app/src/csv.js              Parser, Kodierung, Datums-/Betragslogik, Hash
@@ -185,13 +188,6 @@ Jeder Lauf legt einen `imports`-Datensatz an, jede Zeile verweist per `import_ba
 **Tests** (`app/src/csv.test.js`, Vitest, `npm test` in `app/`): deckt die reinen Funktionen in `csv.js` ab — Encoding-Erkennung, alle drei Datumsformate, Betragsparsing (Tausenderpunkt, nachgestelltes Minus, Euro-Zeichen), Header-Suche, Spaltenzuordnung, Batch-Dedup mit `#n`-Suffix, `applyRules()`. Bewusst nur `csv.js`, nicht die UI-Komponenten — das ist der Teil mit der höchsten Fehlerdichte pro Zeile Code und der einzige, der sich sinnvoll ohne Browser testen lässt. Kein Test-Runner für React-Komponenten eingerichtet, das wäre für diese App-Größe Overkill.
 
 **Zwei Zeilen derselben Datei können denselben Dedup-Hash ergeben** (gleiches Datum, Betrag, Empfänger, Zweck — z. B. zweimal Parken am selben Tag zum selben Preis). Da `import_hash` einen eindeutigen Index hat, würde das den ganzen Batch-Block beim Schreiben abbrechen, nicht nur die eine Zeile. `buildRows()` in `csv.js` erkennt das jetzt selbst: die erste Zeile behält ihren Hash, jede weitere bekommt ein `#n`-Suffix, `batchDupeCount` markiert alle Beteiligten für einen Warnhinweis in der Vorschau (`Import.jsx`, Schritt 3) — beide werden angelegt, keine wird stillschweigend verworfen. Optional lässt sich zusätzlich eine Referenzspalte zuordnen (`col_reference`, z. B. `Kundenreferenz`/`Mandatsreferenz`), die dann mit in den Hash einfließt und solche Kollisionen von vornherein vermeidet — nur wenn die Spalte gemappt ist, sonst bleibt der Hash exakt wie bisher, damit ältere Importe ohne Referenzspalte nicht ihre Wiedererkennung verlieren.
-
-## Offene ToDos (Stand 2026-09-05)
-
-- **Rules-Tags-Feature (`0.22.0`) ist lokal fertig, aber noch nicht committet.** Betroffene Dateien: `setup/schema.mjs`, `app/src/csv.js`, `app/src/screens/Import.jsx`, `app/src/screens/Konten.jsx`, `app/src/App.jsx`, `app/package.json`, `CLAUDE.md`, `BETRIEB.md`, `PROMPT.md`. Vor dem Commit beim Nutzer nachfragen, nicht automatisch committen.
-- **Danach pushen** — nur auf explizite Ansage ("push it"), nicht von selbst.
-- ~~Manueller Schema-Schritt auf der laufenden Instanz aussteht~~ — erledigt am 2026-09-06: `rules.tags` (Relation → `tags`, Mehrfachauswahl, nicht required) wurde in der PocketBase-Admin-Oberfläche ergänzt.
-- ~~CSV-Import-Pipeline nicht end-to-end getestet~~ — erledigt am 2026-09-06: Datei-Upload per JS-injiziertem `File`-Objekt ins `<input type="file">` simuliert (Workaround, da das Browser-Tool keinen echten Datei-Dialog bedienen kann). Kompletter Ablauf mit Testregel/-tag durchgespielt: Vorschau zeigte Kategorie+Tag korrekt, Buchung landete mit Tag in der Liste, Budget/Kontostand stimmten. Test-Regel, -Tag und -Buchung danach vollständig entfernt.
 
 ## Arbeitsweise
 

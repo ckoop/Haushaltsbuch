@@ -287,6 +287,41 @@ bisher nur im selben `pb_data`-Volume wie die Live-Datenbank und würden
 einen Ausfall der Platte/des Servers selbst nicht überleben. Das ist die
 verbleibende Lücke.
 
+## Buchungen eines Monats löschen
+
+Für den Fall, dass Testdaten oder ein verunglückter Import ganze Monate
+verunreinigt haben: `setup/clear_months.mjs` löscht alle Buchungen eines
+oder mehrerer Kalendermonate und danach die `imports`-Protokolle, die
+dadurch keine einzige Buchung mehr referenzieren (ein Import-Batch, der
+auch Buchungen außerhalb der gewählten Monate enthält, bleibt erhalten —
+sonst blieben andere Buchungen mit einem verwaisten `import_batch`-Verweis
+zurück).
+
+**Vorher immer ein frisches Backup ziehen** (`http://<server-ip>:8090/_/` →
+Settings → Backups → „Backup jetzt", s. „Sicherung" oben) — das Skript
+prüft das nicht selbst.
+
+Standardmäßig ein Trockenlauf, der nur zählt und Beispielzeilen zeigt,
+nichts löscht:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  MONTHS=2026-09,2026-04 node setup/clear_months.mjs
+```
+
+Erst wenn die Ausgabe (Anzahl, Summe, Beispielzeilen) stimmt, mit
+`CONFIRM=1` wirklich löschen:
+
+```bash
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  MONTHS=2026-09,2026-04 CONFIRM=1 node setup/clear_months.mjs
+```
+
+`MONTHS` ist eine kommagetrennte Liste im Format `JJJJ-MM`, beliebig viele
+Monate in einem Lauf. Zuletzt genutzt am 2026-09-07 auf `bumblebeee` für
+`2026-09,2026-04` (67 Buchungen, 132,41 € Summe, 1 Import-Protokoll).
+
 ## Deploy auf einen zweiten Server
 
 `deploy/sync_to_server.sh <user@host> <remote_pfad>` kopiert das Projekt
