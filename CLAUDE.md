@@ -22,7 +22,7 @@ Produktionsdatenbank wird dabei nie überschrieben).
 
 ### Sammlungen
 
-`accounts`, `categories`, `transactions`, `budgets`, `import_profiles`, `imports`, `rules`, `recurring_rules`, `tags`, `depot_positions`, `depot_trades`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
+`accounts`, `categories`, `transactions`, `budgets`, `import_profiles`, `imports`, `rules`, `recurring_rules`, `tags`, `people`, `depot_positions`, `depot_trades`. Zugriffsregel überall identisch: `@request.auth.id != ""`.
 
 Feature-Rationale und Bugfix-Historie zu einzelnen Sammlungen (Wiederkehrend-Markierung, Kategorien, Regeln, Tags, Daueraufträge, Jahresansicht, Depot) stehen in [app/src/screens/CLAUDE.md](app/src/screens/CLAUDE.md) — lädt nur, wenn an diesen Screens gearbeitet wird. App-weite Darstellung (Theme, Homescreen-Icon, Zurück-Navigation) steht in [app/CLAUDE.md](app/CLAUDE.md).
 

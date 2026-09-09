@@ -47,6 +47,15 @@ async function ensure(def) {
 
 // ---------------------------------------------------------------- Stammdaten
 
+// Nur ein Label an Konten, kein eigener Login - eine Person, die den ganzen
+// Haushalt verwaltet, braucht dafuer kein zweites Nutzerkonto.
+const peopleId = await ensure({
+  name: "people", type: "base", ...rules,
+  fields: [
+    text("name", { required: true, max: 60 }),
+  ],
+});
+
 const accountsId = await ensure({
   name: "accounts", type: "base", ...rules,
   fields: [
@@ -56,6 +65,7 @@ const accountsId = await ensure({
     num("start_cents", { required: false, onlyInt: true }),
     num("sort", { onlyInt: true }),
     bool("archived"),
+    rel("person", peopleId),
   ],
 });
 

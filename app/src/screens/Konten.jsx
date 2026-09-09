@@ -11,11 +11,12 @@ import Import from "./Import.jsx";
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, tags, balances, reload, flash, reloadTags }) {
+export default function Konten({ accounts, categories, tags, people, balances, reload, flash, reloadTags }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
   const [editingAutoRule, setEditingAutoRule] = useState(null);
+  const [editingPerson, setEditingPerson] = useState(null);
   const [rules, setRules] = useState([]);
   const [autoRules, setAutoRules] = useState([]);
   const [catsExpanded, setCatsExpanded] = useState(false);
@@ -39,6 +40,7 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
       <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
         {accounts.map((a) => {
           const Icon = typeIcon(a.type);
+          const person = a.person ? byId(people, a.person, null) : null;
           return (
             <button key={a.id} onClick={() => setEditing(a)}
               className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
@@ -48,7 +50,7 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
               <span className="flex-1 min-w-0">
                 <span className="block text-sm truncate">{a.name}</span>
                 <span className="block text-xs text-stone-500 dark:text-stone-400 tabular-nums">
-                  Anfangssaldo {eur(a.start_cents ?? 0)}
+                  Anfangssaldo {eur(a.start_cents ?? 0)}{person && ` · ${person.name}`}
                 </span>
               </span>
               <span className={`text-sm font-medium tabular-nums ${
@@ -57,12 +59,46 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
             </button>
           );
         })}
+        {accounts.length > 0 && (
+          <div className="flex items-center gap-3 px-3.5 py-3">
+            <span className="flex-1 min-w-0 text-xs text-stone-500 dark:text-stone-400">Alle Konten zusammen</span>
+            <span className={`text-sm font-medium tabular-nums ${
+              (balances.alle ?? 0) < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>{eur(balances.alle ?? 0)}</span>
+            {/* Leerer Platzhalter in Chevron-Breite, damit der Betrag exakt
+                unter denen der Kontozeilen steht - die haben rechts noch den
+                ChevronRight, diese Zeile hier nicht. */}
+            <span className="w-4 shrink-0" />
+          </div>
+        )}
       </div>
 
       <Button variant="ghost"
-        onClick={() => setEditing({ id: "", name: "", short: "", type: "giro", start_cents: 0 })}
+        onClick={() => setEditing({ id: "", name: "", short: "", type: "giro", start_cents: 0, person: "" })}
         className="w-full mt-3 flex items-center justify-center gap-2">
         <Plus size={16} /> Konto hinzufügen
+      </Button>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Personen</p>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-1.5 mb-2.5">
+        Nur eine Kennzeichnung an Konten, kein eigener Login.
+      </p>
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+        {people.map((p) => (
+          <button key={p.id} onClick={() => setEditingPerson(p)}
+            className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+            <span className="flex-1 min-w-0 text-sm truncate">{p.name}</span>
+            <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
+          </button>
+        ))}
+        {people.length === 0 && (
+          <p className="px-3.5 py-3 text-sm text-stone-500 dark:text-stone-400">Noch keine Personen.</p>
+        )}
+      </div>
+
+      <Button variant="ghost"
+        onClick={() => setEditingPerson({ id: "", name: "" })}
+        className="w-full mt-3 flex items-center justify-center gap-2">
+        <Plus size={16} /> Person hinzufügen
       </Button>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Kategorien</p>
@@ -205,8 +241,14 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
       </button>
 
       {editing && (
-        <AccountEditor draft={editing} onClose={() => setEditing(null)}
+        <AccountEditor draft={editing} people={people} onClose={() => setEditing(null)}
           onSaved={(m) => { setEditing(null); flash(m); reload(); }}
+          onError={setError} />
+      )}
+
+      {editingPerson && (
+        <PersonEditor draft={editingPerson} onClose={() => setEditingPerson(null)}
+          onSaved={(m) => { setEditingPerson(null); flash(m); reload(); }}
           onError={setError} />
       )}
 
@@ -233,11 +275,12 @@ export default function Konten({ accounts, categories, tags, balances, reload, f
   );
 }
 
-function AccountEditor({ draft, onClose, onSaved, onError }) {
+function AccountEditor({ draft, people, onClose, onSaved, onError }) {
   const isNew = !draft.id;
   const [name, setName] = useState(draft.name);
   const [type, setType] = useState(draft.type);
   const [start, setStart] = useState((draft.start_cents ?? 0) / 100);
+  const [person, setPerson] = useState(draft.person ?? "");
   const [usage, setUsage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -256,6 +299,7 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
         id: draft.id || undefined,
         name: name.trim(), short: shortName(name), type,
         start_cents: Math.round((Number(start) || 0) * 100),
+        person: person || "",
       });
       onSaved("Konto gesichert");
     } catch (e) { onError(e); onClose(); }
@@ -301,6 +345,13 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
         </div>
       </Field>
 
+      <Field label="Person (optional)">
+        <select value={person} onChange={(e) => setPerson(e.target.value)} className={inputCls}>
+          <option value="">Keine</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+
       <ErrorNote error={error} />
       <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
@@ -316,6 +367,59 @@ function AccountEditor({ draft, onClose, onSaved, onError }) {
         <Button variant="danger" onClick={remove} disabled={busy}
           className="w-full mt-3 flex items-center justify-center gap-2">
           <Trash2 size={16} /> Konto löschen
+        </Button>
+      ))}
+    </Sheet>
+  );
+}
+
+function PersonEditor({ draft, onClose, onSaved, onError }) {
+  const isNew = !draft.id;
+  const [name, setName] = useState(draft.name);
+  const [usage, setUsage] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!isNew) api.countAccountsByPerson(draft.id).then(setUsage).catch(() => setUsage(null));
+  }, [draft.id, isNew]);
+
+  const submit = async () => {
+    if (!name.trim()) return setError("Name eingeben");
+    setBusy(true);
+    try {
+      await api.savePerson({ id: draft.id || undefined, name: name.trim() });
+      onSaved("Person gesichert");
+    } catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try { await api.deletePerson(draft.id); onSaved("Person gelöscht"); }
+    catch (e) { onError(e); onClose(); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Sheet title={isNew ? "Neue Person" : "Person bearbeiten"} onClose={onClose}>
+      <Field label="Name">
+        <input value={name} onChange={(e) => { setName(e.target.value); setError(null); }}
+          placeholder="Max, Mia …" className={inputCls} />
+      </Field>
+
+      <ErrorNote error={error} />
+      <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
+
+      {!isNew && usage !== null && (usage > 0 ? (
+        <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          Löschen geht erst, wenn {usage} {usage === 1 ? "Konto" : "Konten"} dieser Person eine andere Person bekommen oder ohne Zuordnung sind.
+        </p>
+      ) : (
+        <Button variant="danger" onClick={remove} disabled={busy}
+          className="w-full mt-3 flex items-center justify-center gap-2">
+          <Trash2 size={16} /> Person löschen
         </Button>
       ))}
     </Sheet>

@@ -73,6 +73,7 @@ function Shell() {
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
+  const [people, setPeople] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [running, setRunning] = useState([]);   // alles bis Monatsende, fuer Salden
   const [budgets, setBudgets] = useState([]);
@@ -90,13 +91,13 @@ function Shell() {
     const seq = ++loadSeq.current;
     setLoading(true); setError(null);
     try {
-      const [a, c, g, t, r, b] = await Promise.all([
-        api.listAccounts(), api.listCategories(), api.listTags(),
+      const [a, c, g, p, t, r, b] = await Promise.all([
+        api.listAccounts(), api.listCategories(), api.listTags(), api.listPeople(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
         api.listBudgets(key),
       ]);
       if (seq !== loadSeq.current) return;
-      setAccounts(a); setCategories(c); setTags(g); setTransactions(t); setRunning(r); setBudgets(b);
+      setAccounts(a); setCategories(c); setTags(g); setPeople(p); setTransactions(t); setRunning(r); setBudgets(b);
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setError(e);
@@ -250,10 +251,15 @@ function Shell() {
   const needsSetup = !loading && !error && accounts.length === 0 && categories.length === 0;
 
   const shared = {
-    accounts, categories, tags, transactions: visible, real, spentByCat, spentByTag, budgets,
+    accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
   };
+
+  // Nur diese drei Screens werten den Monat/Jahr-Zustand (ym) ueberhaupt aus -
+  // der Rest (Konten/Depot/Einstellungen) zeigt in der Kopfzeile sonst Pfeile
+  // ohne jede Wirkung.
+  const MONTH_NAV_TABS = ["buchungen", "auswertung", "budgets"];
 
   const navItems = [
     { id: "buchungen", label: "Buchungen", Icon: List },
@@ -335,15 +341,23 @@ function Shell() {
                 wurde von ihm verdeckt. Ab der Sidebar-Breite (Desktop, kein
                 Zahnrad im Header) wieder exakt wie zuvor auf die volle
                 Breite gespreizt. */}
-            <div className="flex items-center justify-center gap-1 sidebar:justify-between sidebar:gap-0">
-              <button onClick={() => shift(-1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-ml-1.5">
-                <ChevronLeft size={20} />
-              </button>
-              <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
-              <button onClick={() => shift(1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-mr-1.5">
-                <ChevronRight size={20} />
-              </button>
-            </div>
+            {MONTH_NAV_TABS.includes(tab) ? (
+              <div className="flex items-center justify-center gap-1 sidebar:justify-between sidebar:gap-0">
+                <button onClick={() => shift(-1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-ml-1.5">
+                  <ChevronLeft size={20} />
+                </button>
+                <h1 className="text-base font-medium">{MONTHS[ym.m]} {ym.y}</h1>
+                <button onClick={() => shift(1)} className="p-1.5 rounded-lg text-stone-500 dark:text-stone-400 hover:bg-stone-200/70 dark:hover:bg-stone-800 sidebar:-mr-1.5">
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            ) : (
+              // Konten/Depot/Einstellungen haengen an keinem Monat - eine
+              // klickbare Monatsnavigation waere hier Attrappe ohne Wirkung.
+              <div className="flex items-center justify-center">
+                <h1 className="text-base font-medium">{navItems.find((i) => i.id === tab)?.label}</h1>
+              </div>
+            )}
             {/* Nur mobil - auf dem Desktop ist Einstellungen schon in der
                 Sidebar erreichbar, ein zweiter Zugang waere redundant. */}
             <button onClick={() => goToTab("einstellungen")} aria-label="Einstellungen"

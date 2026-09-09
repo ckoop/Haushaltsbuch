@@ -48,6 +48,23 @@ export const saveCategory = (c) =>
 
 export const deleteCategory = (id) => pb.collection("categories").delete(id);
 
+// Nur ein Label an Konten, kein eigener Login - siehe CLAUDE.md.
+export const listPeople = () => pb.collection("people").getFullList({ sort: "name" });
+
+export const savePerson = (p) =>
+  p.id
+    ? pb.collection("people").update(p.id, p)
+    : pb.collection("people").create(p);
+
+export const deletePerson = (id) => pb.collection("people").delete(id);
+
+export const countAccountsByPerson = async (personId) => {
+  const r = await pb.collection("accounts").getList(1, 1, {
+    filter: pb.filter("person = {:id}", { id: personId }),
+  });
+  return r.totalItems;
+};
+
 export const countByCategory = async (categoryId) => {
   const r = await pb.collection("transactions").getList(1, 1, {
     filter: pb.filter("category = {:id}", { id: categoryId }),

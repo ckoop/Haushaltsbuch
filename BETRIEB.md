@@ -101,6 +101,7 @@ Hostnamen mit gültigem Zertifikat, ohne selbst etwas auszustellen.
 | `recurring_rules` | Daueraufträge, erzeugen künftige Buchungen automatisch |
 | `depot_positions` | Wertpapiere im Depot (ISIN, Name, Yahoo-Ticker) |
 | `depot_trades` | Kauf-/Verkaufstrades je Position |
+| `people` | Personen als reines Label an Konten, kein eigener Login |
 
 ### Entscheidungen, die im Schema stecken
 
