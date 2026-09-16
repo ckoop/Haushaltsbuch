@@ -2,8 +2,8 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, relDay, byId, typeIcon,
-  UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChip,
+  eur, relDay, byId,
+  UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChipRow,
 } from "../ui.jsx";
 
 export default function Buchungen({
@@ -29,16 +29,7 @@ export default function Buchungen({
 
   return (
     <>
-      <div className="flex gap-2 overflow-x-auto px-5 pt-3.5 pb-1">
-        <AccChip label="Alle Konten" value={balances.alle} on={acc === "alle"} onClick={() => setAcc("alle")} />
-        {accounts.map((a) => {
-          const Icon = typeIcon(a.type);
-          return (
-            <AccChip key={a.id} label={a.name} Icon={Icon} value={balances[a.id]}
-              on={acc === a.id} onClick={() => setAcc(a.id)} />
-          );
-        })}
-      </div>
+      <AccChipRow accounts={accounts} balances={balances} acc={acc} setAcc={setAcc} />
 
       <section className="px-5 py-4 grid grid-cols-2 gap-3">
         <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}

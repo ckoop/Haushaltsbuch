@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   ShoppingCart, UtensilsCrossed, Bus, Home, Zap, Film, HeartPulse, Shirt,
   Smartphone, MoreHorizontal, ArrowDownLeft, Landmark, Wallet, PiggyBank,
@@ -174,16 +174,47 @@ export function BudgetBar({ name, limit, spent }) {
 export function AccChip({ label, value, on, Icon, onClick }) {
   return (
     <button onClick={onClick}
-      className={`shrink-0 rounded-xl border px-3 py-2 text-left ${
+      className={`shrink-0 snap-start rounded-xl border px-2 py-1.5 sidebar:px-3 sidebar:py-2 text-left ${
         on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
           : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"}`}>
-      <span className="flex items-center gap-1.5">
-        {Icon && <Icon size={13} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />}
-        <span className={`text-[11px] ${on ? "text-stone-300" : "text-stone-500 dark:text-stone-400"}`}>{label}</span>
+      <span className="flex items-center gap-1">
+        {Icon && <Icon size={12} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />}
+        <span className={`text-[10px] sidebar:text-[11px] max-w-[64px] sidebar:max-w-none truncate ${
+          on ? "text-stone-300" : "text-stone-500 dark:text-stone-400"}`}>{label}</span>
       </span>
-      <span className={`block text-[13px] font-medium tabular-nums mt-0.5 ${
+      <span className={`block text-[12px] sidebar:text-[13px] font-medium tabular-nums mt-0.5 ${
         !on && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(value)}</span>
     </button>
+  );
+}
+
+// Zeile "Alle Konten" + ein Chip pro Konto, horizontal scrollbar auf dem
+// Handy. `w-max mx-auto` zentriert die Chips, wenn sie ohne Scrollen in die
+// Breite passen; passen sie nicht, hat das keinen sichtbaren Effekt mehr,
+// ausser dass der Browser dafuer die Scrollposition initial mittig statt bei
+// 0 ansetzt (Standardverhalten von margin:auto an einem ueberlaufenden
+// Element) - der Ref-Effekt unten setzt sie deshalb explizit zurueck auf 0,
+// sonst waere "Alle Konten" beim Oeffnen erst nach Links-Wischen sichtbar.
+export function AccChipRow({ accounts, balances, acc, setAcc }) {
+  const scrollRef = useRef(null);
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [accounts]);
+
+  return (
+    <div ref={scrollRef} className="overflow-x-auto snap-x snap-mandatory sidebar:snap-none px-5 pt-3.5 pb-1
+      [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-1.5 sidebar:gap-2 w-max mx-auto sidebar:mx-0">
+        <AccChip label="Alle Konten" value={balances.alle} on={acc === "alle"} onClick={() => setAcc("alle")} />
+        {accounts.map((a) => {
+          const Icon = typeIcon(a.type);
+          return (
+            <AccChip key={a.id} label={a.name} Icon={Icon} value={balances[a.id]}
+              on={acc === a.id} onClick={() => setAcc(a.id)} />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChip, byId, UNKNOWN_ACC, typeIcon,
+  eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChipRow, byId, UNKNOWN_ACC,
 } from "../ui.jsx";
 
 const toRow = (e) => ({ key: e.id, id: e.id, label: e.label ?? "", amount_cents: e.amount_cents });
@@ -120,16 +120,7 @@ export default function BudgetScreen({
 
   return (
     <>
-      <div className="flex gap-2 overflow-x-auto px-5 pt-3.5 pb-1">
-        <AccChip label="Alle Konten" value={balances.alle} on={acc === "alle"} onClick={() => setAcc("alle")} />
-        {accounts.map((a) => {
-          const Icon = typeIcon(a.type);
-          return (
-            <AccChip key={a.id} label={a.name} Icon={Icon} value={balances[a.id]}
-              on={acc === a.id} onClick={() => setAcc(a.id)} />
-          );
-        })}
-      </div>
+      <AccChipRow accounts={accounts} balances={balances} acc={acc} setAcc={setAcc} />
 
       <div className="px-5 py-4">
       <p className="text-sm text-stone-600 dark:text-stone-300 mb-3">
