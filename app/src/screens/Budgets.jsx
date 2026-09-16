@@ -13,6 +13,7 @@ export default function BudgetScreen({
   const incomeInputRef = useRef(null);
   const limitOf = (cid) => budgets.find((b) => b.category === cid)?.amount_cents ?? 0;
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount_cents, 0);
+  const remaining = incomeTarget - totalBudgeted;
 
   // Buchungen ohne Kategorie tauchen in keiner Budget-Zeile auf, weil Budgets
   // pro Kategorie laufen - ohne diesen Hinweis sieht die Ansicht faelschlich
@@ -109,6 +110,12 @@ export default function BudgetScreen({
       {incomeTarget > 0 && (
         <div className="mb-5">
           <BudgetBar name="Insgesamt verplant" limit={incomeTarget} spent={totalBudgeted} />
+          <p className={`text-xs mt-1.5 ${
+            remaining < 0 ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>
+            {remaining < 0
+              ? `${eur(-remaining)} mehr verplant als Einnahmen`
+              : `${eur(remaining)} noch nicht verplant`}
+          </p>
         </div>
       )}
 
