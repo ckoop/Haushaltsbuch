@@ -170,13 +170,16 @@ await ensure({
 await ensure({
   name: "budgets", type: "base", ...rules,
   fields: [
+    // Budgets gelten pro Konto, nicht kontouebergreifend - dasselbe Konto
+    // kann fuer "Lebensmittel" ein anderes Limit haben als ein zweites.
+    rel("account", accountsId, { required: true }),
     rel("category", categoriesId, { required: true }),
     // "2026-08" fuer einen einzelnen Monat, "*" als Dauerbudget
     text("month", { required: true, max: 7 }),
     num("amount_cents", { required: true, onlyInt: true }),
   ],
   indexes: [
-    "CREATE UNIQUE INDEX idx_budget_cat_month ON budgets (category, month)",
+    "CREATE UNIQUE INDEX idx_budget_acc_cat_month ON budgets (account, category, month)",
   ],
 });
 

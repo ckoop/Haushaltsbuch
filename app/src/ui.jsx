@@ -157,7 +157,7 @@ export function BudgetBar({ name, limit, spent }) {
   const color = over ? "bg-red-500" : pct >= 85 ? "bg-amber-500" : "bg-emerald-600 dark:bg-emerald-500";
   return (
     <div>
-      <div className="flex justify-between text-[13px] mb-1.5">
+      <div className="flex justify-between text-xs mb-1.5">
         <span>{name}</span>
         <span className={`tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>
           {eur(spent)} / {eur(limit)}

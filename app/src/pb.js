@@ -218,9 +218,12 @@ export async function runDueRecurringRules() {
 
 // ------------------------------------------------------------------- Budgets
 
-export async function listBudgets(monthKey) {
+// Budgets gelten pro Konto, nicht kontouebergreifend - ohne ein konkretes
+// Konto gibt es deshalb keine Budgets zu zeigen ("Alle Konten"-Ansicht).
+export async function listBudgets(monthKey, accountId) {
+  if (!accountId || accountId === "alle") return [];
   const rows = await pb.collection("budgets").getFullList({
-    filter: pb.filter("month = {:m} || month = '*'", { m: monthKey }),
+    filter: pb.filter("account = {:a} && (month = {:m} || month = '*')", { a: accountId, m: monthKey }),
   });
   // Ein Monatsbudget schlaegt das Dauerbudget derselben Kategorie.
   const out = new Map();
@@ -231,9 +234,9 @@ export async function listBudgets(monthKey) {
   return [...out.values()];
 }
 
-export async function setBudget(categoryId, month, cents) {
+export async function setBudget(accountId, categoryId, month, cents) {
   const found = await pb.collection("budgets").getFullList({
-    filter: pb.filter("category = {:c} && month = {:m}", { c: categoryId, m: month }),
+    filter: pb.filter("account = {:a} && category = {:c} && month = {:m}", { a: accountId, c: categoryId, m: month }),
   });
   if (cents <= 0) {
     if (found[0]) await pb.collection("budgets").delete(found[0].id);
@@ -241,7 +244,7 @@ export async function setBudget(categoryId, month, cents) {
   }
   return found[0]
     ? pb.collection("budgets").update(found[0].id, { amount_cents: cents })
-    : pb.collection("budgets").create({ category: categoryId, month, amount_cents: cents });
+    : pb.collection("budgets").create({ account: accountId, category: categoryId, month, amount_cents: cents });
 }
 
 // ------------------------------------------------------------- Einnahmenziel

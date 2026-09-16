@@ -1,5 +1,15 @@
 Gilt für Buchungen, Auswertung, Budgets, Depot, Konten, Einstellungen, NewEntry, Import, TxDetail. Feature-Rationale und Bugfix-Historie, die nicht in jeder Session gebraucht wird — ergänzt die Root-`CLAUDE.md`.
 
+## Budgets pro Konto (`budgets.account`)
+
+Budgets liefen bis `0.24.x` kontoübergreifend (eine Kategorie = ein Limit über alle Konten). Ab `0.25.0` auf ausdrücklichen Nutzerwunsch umgestellt: `budgets.account` ist jetzt Pflichtfeld, ein Budget gilt nur noch für genau ein Konto — derselbe Haushalt kann für "Lebensmittel" auf dem Girokonto ein anderes Limit haben als auf einer Kreditkarte. Unique-Index entsprechend erweitert (`account, category, month` statt nur `category, month`).
+
+`Budgets.jsx` zeigt die Kategorie-Liste und die Einnahmen-Vergleichsleiste deshalb nur noch, wenn ein einzelnes Konto ausgewählt ist (`acc !== "alle"`) — bei "Alle Konten" nur ein Hinweis, das Konto in der Buchungsliste zu wechseln. Kein eigener Konto-Umschalter auf dem Budgets-Tab selbst: die Kontoauswahl passiert wie schon bei `Auswertung.jsx` ausschließlich über die Konten-Chips in `Buchungen.jsx`, der gewählte `acc`-Zustand lebt auf `App.jsx`-Ebene und gilt tab-übergreifend. `App.jsx`s `load()` bekam dafür `acc` als zusätzliche Abhängigkeit (vorher lud `load()` unabhängig vom gewählten Konto, weil nichts Server-seitiges davon abhing).
+
+Das Einnahmenziel (`income_targets`, siehe unten) bleibt bewusst **kontoübergreifend** — ein Gehalt lässt sich nicht sinnvoll einem einzelnen Konto zuordnen, wenn ein Haushalt mehrere Konten hat. Die "Insgesamt verplant"-Vergleichsleiste stellt deshalb die Budgets *eines* Kontos den *gesamten* Haushaltseinnahmen gegenüber — ein bewusst unscharfer, aber nützlicher Vergleich, keine exakte Kontobilanz.
+
+Bereits bestehende Budgets aus der Zeit vor `0.25.0` haben kein `account` und tauchen deshalb in keiner Konto-Ansicht mehr auf (verwaist, nicht gelöscht) — müssen nach dem Update manuell pro Konto neu gesetzt werden.
+
 ## Einnahmenziel (`income_targets`, Budgets.jsx)
 
 **Einnahmenziel** (`income_targets`, ab `0.24.0`) macht die Summe der Kategorie-Budgets in `Budgets.jsx` gegen etwas Sinnvolles vergleichbar, statt frei zu schweben. Eigene, komplett neue Sammlung (nicht Teil von `budgets`, da kategorielos) — gleiches `"*"`/`"JJJJ-MM"`-Muster wie `budgets.month`: ein Monatsziel schlägt das Dauerziel (`api.getIncomeTarget()` merged genau wie `listBudgets()`). Bedient dieselbe "Jeden Monat"/"Nur `<Monat>`"-Umschaltfläche wie die Kategorie-Budgets darunter — ein eigener zweiter Umschalter nur fürs Einnahmenfeld hätte den Screen verdoppelt, ohne dass ein Haushalt typischerweise "Budget-Dauer" und "Einnahmen-Dauer" unabhängig voneinander pflegen wollte. Ist ein Ziel gesetzt, erscheint eine Zusammenfassungs-Leiste "Insgesamt verplant" — bewusst die bestehende `BudgetBar`-Komponente wiederverwendet (`limit` = Einnahmenziel, `spent` = Summe aller aktuell wirksamen Kategorie-Budgets) statt einer eigenen Balken-Variante.

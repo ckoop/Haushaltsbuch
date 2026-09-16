@@ -95,7 +95,7 @@ function Shell() {
       const [a, c, g, p, t, r, b, it] = await Promise.all([
         api.listAccounts(), api.listCategories(), api.listTags(), api.listPeople(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
-        api.listBudgets(key), api.getIncomeTarget(key),
+        api.listBudgets(key, acc), api.getIncomeTarget(key),
       ]);
       if (seq !== loadSeq.current) return;
       setAccounts(a); setCategories(c); setTags(g); setPeople(p); setTransactions(t); setRunning(r); setBudgets(b);
@@ -106,7 +106,7 @@ function Shell() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [ym.y, ym.m, key]);
+  }, [ym.y, ym.m, key, acc]);
 
   useEffect(() => { load(); }, [load]);
 

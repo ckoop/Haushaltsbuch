@@ -124,6 +124,27 @@ statt 200 Zeilen einzeln zu suchen.
 **`budgets.month` ist Text.** `"2026-08"` für einen einzelnen Monat, `"*"` als
 Dauerbudget. So musst du nicht jeden Monat alles neu anlegen.
 
+**`budgets.account` (ab `0.25.0`): Budgets gelten pro Konto**, nicht mehr
+kontoübergreifend — dieselbe Kategorie kann auf zwei Konten unterschiedliche
+Limits haben. Pflichtfeld, Unique-Index erweitert auf
+`(account, category, month)` statt vorher nur `(category, month)`.
+
+⚠️ Anders als bei einem reinen neuen Feld (siehe `recurring` unten) ändert
+sich hier zusätzlich der Unique-Index — das lässt sich nicht sauber über die
+Admin-Oberfläche allein nachziehen (Feld hinzufügen, *dann* den alten Index
+`idx_budget_cat_month` löschen und durch den neuen ersetzen). Einfacher per
+Skript, das die `budgets`-Sammlung einmalig patcht:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/migrate_budgets_account.mjs
+```
+
+Bereits bestehende Budgets ohne `account` werden dadurch **verwaist**
+(nicht gelöscht, aber in keiner Konto-Ansicht mehr sichtbar) — nach der
+Migration einmalig pro Konto neu setzen.
+
 **`transactions.recurring` markiert Wiederkehrendes** (`monthly`/`quarterly`/
 `yearly`, leer = nein). Erzeugt keine künftigen Buchungen automatisch, macht
 nur bereits erfasste Zeilen in der Buchungsliste und in der Auswertung

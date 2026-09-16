@@ -40,7 +40,7 @@ Löschen eines Kontos ist gesperrt, solange Buchungen daran hängen. Sonst entst
 
 `transactions.import_hash` hat einen eindeutigen Index, der nur für nicht-leere Werte gilt. Manuell erfasste Buchungen haben einen leeren Hash und dürfen sich nicht gegenseitig blockieren.
 
-Budgets gelten kontoübergreifend. `budgets.month` ist Text: `"2026-08"` für einen Monat, `"*"` als Dauerbudget. Ein Monatsbudget schlägt das Dauerbudget derselben Kategorie.
+Budgets gelten pro Konto (bis `0.24.x` kontoübergreifend, ab `0.25.0` auf ausdrücklichen Wunsch umgestellt — `budgets.account`, Pflichtfeld). `budgets.month` ist Text: `"2026-08"` für einen Monat, `"*"` als Dauerbudget. Ein Monatsbudget schlägt das Dauerbudget derselben Kategorie.
 
 ## Versionierung
 
