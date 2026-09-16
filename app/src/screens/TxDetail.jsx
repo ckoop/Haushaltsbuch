@@ -54,7 +54,10 @@ export default function TxDetail({
           <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Kategorie</p>
           <select className={`${inputCls} mb-4`} value={tx.category}
             onChange={(e) => onUpdateCategory(tx.id, e.target.value)}>
-            {!tx.category && <option value="">{UNKNOWN_CAT.name}</option>}
+            {/* Immer waehlbar, nicht nur wenn schon leer - sonst laesst sich
+                eine bereits gesetzte (z. B. per Auto-Regel falsch zugeordnete)
+                Kategorie ueber dieses Feld nie wieder entfernen. */}
+            <option value="">{UNKNOWN_CAT.name}</option>
             {catOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </>
