@@ -104,7 +104,7 @@ export default function BudgetScreen({
           <input ref={incomeInputRef} type="number" min="0" step="10" placeholder="—"
             defaultValue={incomeTarget ? incomeTarget / 100 : ""}
             onBlur={(e) => saveIncome(e.target.value)}
-            className={`${inputCls} w-20! shrink-0 text-right tabular-nums`} />
+            className={`${inputCls} w-24! shrink-0 text-right tabular-nums`} />
           <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
         </span>
       </div>
@@ -142,7 +142,7 @@ export default function BudgetScreen({
                     <input type="number" min="0" step="10" placeholder="—"
                       defaultValue={limitOf(c.id) ? limitOf(c.id) / 100 : ""}
                       onBlur={(e) => save(c.id, e.target.value)}
-                      className={`${inputCls} w-20! shrink-0 text-right tabular-nums`} />
+                      className={`${inputCls} w-24! shrink-0 text-right tabular-nums`} />
                     <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
                   </span>
                 </div>
