@@ -90,7 +90,7 @@ export default function Auswertung({
             })}
           </div>
 
-          {openCat && (() => {
+          {openCat !== null && (() => {
             const cat = byId(categories, openCat, UNKNOWN_CAT);
             const catTx = real
               .filter((t) => t.category === openCat && t.amount_cents < 0)

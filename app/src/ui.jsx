@@ -165,7 +165,7 @@ export function BudgetBar({ name, limit, spent }) {
       </div>
       <div className="h-1.5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
         <div className={`h-full ${color} transition-all duration-300`}
-          style={{ width: `${Math.max(pct, 2)}%` }} />
+          style={{ width: `${spent > 0 ? Math.max(pct, 2) : 0}%` }} />
       </div>
     </div>
   );
