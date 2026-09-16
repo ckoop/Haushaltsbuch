@@ -24,7 +24,7 @@ export default function BudgetScreen({
   const uncategorizedSum = uncategorized.reduce((s, t) => s - t.amount_cents, 0);
 
   const save = async (cid, euros) => {
-    const cents = Math.max(0, Math.round(Number(euros) || 0) * 100);
+    const cents = Math.max(0, Math.round((Number(euros) || 0) * 100));
     try {
       await api.setBudget(cid, dauer ? "*" : monthKey, cents);
       flash(cents ? "Budget gesichert" : "Budget entfernt");
@@ -33,7 +33,7 @@ export default function BudgetScreen({
   };
 
   const saveIncome = async (euros) => {
-    const cents = Math.max(0, Math.round(Number(euros) || 0) * 100);
+    const cents = Math.max(0, Math.round((Number(euros) || 0) * 100));
     try {
       await api.setIncomeTarget(dauer ? "*" : monthKey, cents);
       flash(cents ? "Einnahmen gesichert" : "Einnahmen entfernt");
