@@ -332,8 +332,8 @@ startet dort den Container — nach demselben Muster wie im Epoch-Projekt
 
 - **Kein Docker-Build nötig** (fertiges Image
   `ghcr.io/muchobien/pocketbase:latest`) — dafür wird `pb_public/` (der
-  gebaute Frontend-Stand) explizit mitkopiert. Vorher lokal `npm run build`
-  in `app/` ausführen, sonst landet ein veralteter Stand auf dem Zielserver.
+  gebaute Frontend-Stand) explizit mitkopiert. Das Skript baut dafür selbst
+  per `npm run build` in `app/`, kein manueller Schritt vorher nötig.
 - **Keine `.env`/SSL-Handhabung** wie bei Epoch nötig — die App läuft rein
   über HTTP, keine feste Server-Adresse im Code (s. „Feste Regeln" in
   `CLAUDE.md`).

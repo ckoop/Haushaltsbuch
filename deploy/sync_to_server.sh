@@ -19,9 +19,10 @@
 #
 # Anders als beim Epoch-Projekt: kein Docker-Build (PocketBase ist ein
 # fertiges Image, `ghcr.io/muchobien/pocketbase:latest`), deshalb muss
-# pb_public/ (der gebaute Frontend-Stand) explizit mitkopiert werden - dafuer
-# VORHER lokal `npm run build` in app/ ausfuehren, sonst landet ein
-# veralteter Stand auf dem Zielserver. Auch keine .env/SSL-Handhabung noetig
+# pb_public/ (der gebaute Frontend-Stand) explizit mitkopiert werden - das
+# Skript baut dafuer selbst per `npm run build` in app/ (s. u.), damit nie
+# unbemerkt ein veralteter Stand auf dem Zielserver landet. Auch keine
+# .env/SSL-Handhabung noetig
 # (PocketBase laeuft rein ueber HTTP, keine feste Server-Adresse im Code -
 # siehe CLAUDE.md), und keine Pfad-Ersetzung in der docker-compose.yml
 # noetig, weil deren Bind-Mounts relativ sind (./pb_data:/pb_data etc.) und
@@ -46,14 +47,17 @@ ssh "$TARGET_HOST" "mkdir -p '$REMOTE_PATH'"
 rsync -avz --exclude-from="$PROJECT_DIR/.gitignore" --exclude='.git' --exclude='deploy/' \
   "$PROJECT_DIR/" "$TARGET_HOST:$REMOTE_PATH/"
 
+# Frontend frisch bauen - pb_public/ ist gitignored und wird lokal beim
+# Entwickeln (`npm run dev`) nie angefasst, ein vorhandener Stand dort waere
+# also fast immer veraltet. Baut deshalb bei jedem Sync neu, statt sich auf
+# einen manuellen `npm run build`-Schritt davor zu verlassen.
+echo "Baue Frontend (npm run build in app/)..."
+npm --prefix "$PROJECT_DIR/app" run build
+
 # Gebauter Frontend-Stand (pb_public/) - immer kopieren, da PocketBase ihn nur
 # ausliefert, nie selbst baut. Ohne diesen Schritt liefe auf dem Zielserver
 # der zuletzt dort vorhandene (oder gar kein) Stand.
-if [ -d "$PROJECT_DIR/pb_public" ]; then
-  rsync -avz --delete "$PROJECT_DIR/pb_public/" "$TARGET_HOST:$REMOTE_PATH/pb_public/"
-else
-  echo "WARNUNG: pb_public/ existiert lokal nicht - vorher 'npm run build' in app/ ausfuehren."
-fi
+rsync -avz --delete "$PROJECT_DIR/pb_public/" "$TARGET_HOST:$REMOTE_PATH/pb_public/"
 
 # Datenbank kopieren (ueberspringbar via SKIP_DATA=1, s. Kopf des Skripts)
 if [ "${SKIP_DATA:-0}" != "1" ]; then
