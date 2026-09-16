@@ -77,6 +77,7 @@ function Shell() {
   const [transactions, setTransactions] = useState([]);
   const [running, setRunning] = useState([]);   // alles bis Monatsende, fuer Salden
   const [budgets, setBudgets] = useState([]);
+  const [incomeTarget, setIncomeTarget] = useState(0);
 
   const { key } = api.monthRange(ym.y, ym.m);
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 1800); };
@@ -91,13 +92,14 @@ function Shell() {
     const seq = ++loadSeq.current;
     setLoading(true); setError(null);
     try {
-      const [a, c, g, p, t, r, b] = await Promise.all([
+      const [a, c, g, p, t, r, b, it] = await Promise.all([
         api.listAccounts(), api.listCategories(), api.listTags(), api.listPeople(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
-        api.listBudgets(key),
+        api.listBudgets(key), api.getIncomeTarget(key),
       ]);
       if (seq !== loadSeq.current) return;
       setAccounts(a); setCategories(c); setTags(g); setPeople(p); setTransactions(t); setRunning(r); setBudgets(b);
+      setIncomeTarget(it);
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setError(e);
@@ -252,7 +254,7 @@ function Shell() {
 
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
-    balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
+    incomeTarget, balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
   };
 

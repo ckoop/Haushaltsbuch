@@ -165,6 +165,19 @@ PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
 
+**`income_targets` (ab `0.24.0`): Einnahmenziel pro Monat**, damit sich die
+Summe der Kategorie-Budgets im Budgets-Tab gegen etwas Sinnvolles vergleichen
+lässt. Gleiches `"*"`/`"JJJJ-MM"`-Muster wie `budgets.month`, nur ohne
+Kategorie-Bezug (ein Datensatz pro Monat/Dauer-Eintrag).
+
+⚠️ Ebenfalls eine **komplett neue Sammlung** — Setup-Skript erneut ausführen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/schema.mjs
+```
+
 **Depot: erste Sammlung mit externem Netzzugriff.** `depot_positions` und
 `depot_trades` sind eine komplett neue Sammlungspaar wie `recurring_rules`
 oben — dasselbe Setup-Skript erneut ausführen, um sie nachzuziehen:

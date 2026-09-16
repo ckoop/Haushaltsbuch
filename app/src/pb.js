@@ -244,6 +244,46 @@ export async function setBudget(categoryId, month, cents) {
     : pb.collection("budgets").create({ category: categoryId, month, amount_cents: cents });
 }
 
+// ------------------------------------------------------------- Einnahmenziel
+
+export async function getIncomeTarget(monthKey) {
+  const rows = await pb.collection("income_targets").getFullList({
+    filter: pb.filter("month = {:m} || month = '*'", { m: monthKey }),
+  });
+  // Ein Monatsziel schlaegt das Dauerziel, gleiches Prinzip wie bei Budgets.
+  const specific = rows.find((r) => r.month === monthKey);
+  return (specific ?? rows.find((r) => r.month === "*"))?.amount_cents ?? 0;
+}
+
+export async function setIncomeTarget(month, cents) {
+  const found = await pb.collection("income_targets").getFullList({
+    filter: pb.filter("month = {:m}", { m: month }),
+  });
+  if (cents <= 0) {
+    if (found[0]) await pb.collection("income_targets").delete(found[0].id);
+    return null;
+  }
+  return found[0]
+    ? pb.collection("income_targets").update(found[0].id, { amount_cents: cents })
+    : pb.collection("income_targets").create({ month, amount_cents: cents });
+}
+
+// Fuer den "Vorschlag"-Button im Budgets-Tab: tatsaechlich gebuchte Einnahmen
+// eines Monats, nur auf Anfrage geladen (nicht bei jedem Tab-Aufruf), damit
+// das Eintragen des Einnahmenziels nicht jedes Mal komplett neu geschaetzt
+// werden muss.
+export async function actualIncomeForMonth(y, m) {
+  const { start, end } = monthRange(y, m);
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "date >= {:start} && date < {:end} && type != 'transfer' && amount_cents > 0",
+      { start, end }
+    ),
+    fields: "amount_cents",
+  });
+  return rows.reduce((s, t) => s + t.amount_cents, 0);
+}
+
 // ------------------------------------------------------------------- Import
 
 export const listProfiles = () => pb.collection("import_profiles").getFullList();
