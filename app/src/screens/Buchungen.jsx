@@ -12,6 +12,12 @@ export default function Buchungen({
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
+  // Einnahmen minus Ausgaben fuer den sichtbaren Zeitraum - anders als die
+  // "Ausgaben"-Kachel vorher (nur negative Betraege) rechnet das Einnahmen
+  // mit gegen, damit die Zahl mit einer eigenen Kontrollsumme aus der
+  // Bank-CSV uebereinstimmt. Gleiche Rechnung wie "Netto" in Auswertung.jsx.
+  const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
+  const net = income - expense;
 
   const groups = [];
   for (const t of transactions) {
@@ -37,7 +43,7 @@ export default function Buchungen({
       <section className="px-5 py-4 grid grid-cols-2 gap-3">
         <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}
           value={balances[acc] ?? 0} signed />
-        <Metric label="Ausgaben" value={-expense} />
+        <Metric label="Saldo" value={net} signed />
       </section>
 
       {budgets.length > 0 && acc !== "alle" && (
