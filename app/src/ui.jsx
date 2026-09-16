@@ -171,6 +171,22 @@ export function BudgetBar({ name, limit, spent }) {
   );
 }
 
+export function AccChip({ label, value, on, Icon, onClick }) {
+  return (
+    <button onClick={onClick}
+      className={`shrink-0 rounded-xl border px-3 py-2 text-left ${
+        on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
+          : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"}`}>
+      <span className="flex items-center gap-1.5">
+        {Icon && <Icon size={13} className={on ? "text-stone-300" : "text-stone-400 dark:text-stone-500"} />}
+        <span className={`text-[11px] ${on ? "text-stone-300" : "text-stone-500 dark:text-stone-400"}`}>{label}</span>
+      </span>
+      <span className={`block text-[13px] font-medium tabular-nums mt-0.5 ${
+        !on && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(value)}</span>
+    </button>
+  );
+}
+
 export function TxRow({ tx, accounts, categories, showAccount, onClick }) {
   const isTransfer = tx.type === "transfer";
   const cat = isTransfer ? null : byId(categories, tx.category, UNKNOWN_CAT);
