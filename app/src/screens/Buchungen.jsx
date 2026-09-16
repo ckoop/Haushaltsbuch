@@ -43,8 +43,8 @@ export default function Buchungen({
       {budgets.length > 0 && acc !== "alle" && (
         <section className="px-5 pb-4">
           <button onClick={() => setShowBudgets((v) => !v)}
-            className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mb-2.5">
-            <ChevronRight size={13} className={`transition-transform ${showBudgets ? "rotate-90" : ""}`} />
+            className="flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400 mb-2.5">
+            <ChevronRight size={12} className={`transition-transform ${showBudgets ? "rotate-90" : ""}`} />
             Budgets {showBudgets ? "ausblenden" : `anzeigen (${budgets.length})`}
           </button>
           {showBudgets && (
