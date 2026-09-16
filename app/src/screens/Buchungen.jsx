@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, relDay, byId, typeIcon,
@@ -8,6 +10,7 @@ export default function Buchungen({
   accounts, categories, transactions, real, spentByCat, budgets,
   balances, acc, setAcc, openDetail,
 }) {
+  const [showBudgets, setShowBudgets] = useState(false);
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
 
   const groups = [];
@@ -39,13 +42,19 @@ export default function Buchungen({
 
       {budgets.length > 0 && acc === "alle" && (
         <section className="px-5 pb-4">
-          <p className="text-xs text-stone-500 dark:text-stone-400 mb-2.5">Budgets · kontoübergreifend</p>
-          <div className="space-y-3">
-            {budgets.map((b) => (
-              <BudgetBar key={b.id} name={byId(categories, b.category, UNKNOWN_CAT).name}
-                limit={b.amount_cents} spent={spentByCat[b.category] ?? 0} />
-            ))}
-          </div>
+          <button onClick={() => setShowBudgets((v) => !v)}
+            className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400 mb-2.5">
+            <ChevronRight size={13} className={`transition-transform ${showBudgets ? "rotate-90" : ""}`} />
+            Budgets · kontoübergreifend {showBudgets ? "ausblenden" : `anzeigen (${budgets.length})`}
+          </button>
+          {showBudgets && (
+            <div className="space-y-3">
+              {budgets.map((b) => (
+                <BudgetBar key={b.id} name={byId(categories, b.category, UNKNOWN_CAT).name}
+                  limit={b.amount_cents} spent={spentByCat[b.category] ?? 0} />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
