@@ -185,15 +185,18 @@ await ensure({
 
 // Einnahmenziel pro Monat, damit sich die Summe der Kategorie-Budgets gegen
 // etwas Sinnvolles vergleichen laesst statt frei zu schweben. Gleiches
-// "*"/"YYYY-MM"-Muster wie budgets.month, nur ohne Kategorie-Bezug.
+// "*"/"YYYY-MM"-Muster wie budgets.month, nur ohne Kategorie-Bezug. Mehrere
+// Posten pro Monat/Dauer-Eintrag moeglich (z. B. "Gehalt" + "Nebenmiet-
+// einnahmen"), deshalb kein Unique-Index auf month allein.
 await ensure({
   name: "income_targets", type: "base", ...rules,
   fields: [
     text("month", { required: true, max: 7 }),
+    text("label", { max: 60 }),
     num("amount_cents", { required: true, onlyInt: true }),
   ],
   indexes: [
-    "CREATE UNIQUE INDEX idx_income_targets_month ON income_targets (month)",
+    "CREATE INDEX idx_income_targets_month ON income_targets (month)",
   ],
 });
 

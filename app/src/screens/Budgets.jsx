@@ -1,22 +1,85 @@
-import { useRef, useState } from "react";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChip, byId, UNKNOWN_ACC, typeIcon,
 } from "../ui.jsx";
 
+const toRow = (e) => ({ key: e.id, id: e.id, label: e.label ?? "", amount_cents: e.amount_cents });
+let newRowSeq = 0;
+
+// Ein Einnahmen-Posten (z. B. "Gehalt", "Nebenmieteinnahmen") - Label und
+// Betrag sitzen in einer eigenen Zeile statt einem einzelnen Gesamtfeld,
+// damit sich Einnahmen aus mehreren Quellen einzeln nachvollziehen lassen.
+// Beide Eingaben speichern wie ueberall sonst im Screen erst beim Verlassen
+// des Feldes (onBlur), nicht bei jedem Tastendruck.
+function IncomeRow({ row, dauer, monthKey, onCreated, onRemoved, flash, setError, reload }) {
+  const labelRef = useRef(null);
+  const amountRef = useRef(null);
+
+  const persist = async () => {
+    const label = labelRef.current.value.trim();
+    const cents = Math.max(0, Math.round((Number(amountRef.current.value) || 0) * 100));
+    if (!row.id && cents <= 0) return; // leere neue Zeile ohne Betrag nicht anlegen
+    try {
+      if (row.id) {
+        await api.updateIncomeEntry(row.id, label, cents);
+      } else {
+        const created = await api.createIncomeEntry(dauer ? "*" : monthKey, label, cents);
+        onCreated(row.key, created);
+      }
+      flash("Einnahmen gesichert");
+      reload();
+    } catch (e) { setError(e); }
+  };
+
+  const remove = async () => {
+    if (!row.id) { onRemoved(row.key); return; }
+    try {
+      await api.deleteIncomeEntry(row.id);
+      flash("Einnahmen entfernt");
+      onRemoved(row.key);
+      reload();
+    } catch (e) { setError(e); }
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-3.5 py-1.5">
+      <input ref={labelRef} type="text" maxLength={60} placeholder="z. B. Gehalt" defaultValue={row.label}
+        onBlur={persist} className={`${inputCls} flex-1 min-w-0 text-[13px]! px-2.5! py-1.5!`} />
+      <span className="flex items-center gap-1 shrink-0">
+        {/* Breite bewusst wie bei den Kategorie-Budgets bei w-28 belassen -
+            vierstellige Betraege mit Cent-Anteil (z. B. "1234,56") passen
+            sonst nicht mehr, siehe 0.25.1-0.25.3. Nur Schriftgroesse/Padding
+            verkleinert. */}
+        <input ref={amountRef} type="number" min="0" step="10" placeholder="—"
+          defaultValue={row.amount_cents ? row.amount_cents / 100 : ""}
+          onBlur={persist}
+          className={`${inputCls} w-28! shrink-0 text-right tabular-nums text-[13px]! px-2.5! py-1.5!`} />
+        <span className="text-xs text-stone-400 dark:text-stone-500">€</span>
+      </span>
+      <button type="button" onClick={remove} aria-label="Einnahme entfernen"
+        className="shrink-0 text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400 p-1">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
 export default function BudgetScreen({
-  categories, accounts, budgets, incomeTarget, real, spentByCat, monthKey, acc, setAcc, balances,
+  categories, accounts, budgets, incomeEntries, real, spentByCat, monthKey, acc, setAcc, balances,
   reload, flash, openDetail,
 }) {
   const [error, setError] = useState(null);
   const [dauer, setDauer] = useState(true);
   const [showUncat, setShowUncat] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const incomeInputRef = useRef(null);
+  const [rows, setRows] = useState(() => incomeEntries.map(toRow));
+  useEffect(() => { setRows(incomeEntries.map(toRow)); }, [incomeEntries]);
   const limitOf = (cid) => budgets.find((b) => b.category === cid)?.amount_cents ?? 0;
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount_cents, 0);
-  const remaining = incomeTarget - totalBudgeted;
+  const incomeTotal = rows.reduce((s, r) => s + (r.amount_cents || 0), 0);
+  const remaining = incomeTotal - totalBudgeted;
 
   // Buchungen ohne Kategorie tauchen in keiner Budget-Zeile auf, weil Budgets
   // pro Kategorie laufen - ohne diesen Hinweis sieht die Ansicht faelschlich
@@ -35,26 +98,22 @@ export default function BudgetScreen({
     } catch (e) { setError(e); }
   };
 
-  const saveIncome = async (euros) => {
-    const cents = Math.max(0, Math.round((Number(euros) || 0) * 100));
-    try {
-      await api.setIncomeTarget(dauer ? "*" : monthKey, cents);
-      flash(cents ? "Einnahmen gesichert" : "Einnahmen entfernt");
-      reload();
-    } catch (e) { setError(e); }
+  const addIncomeRow = () => {
+    setRows((rs) => [...rs, { key: `new-${++newRowSeq}`, id: null, label: "", amount_cents: 0 }]);
   };
 
-  // Fuellt das Einnahmen-Feld mit der Summe der tatsaechlich gebuchten
-  // Einnahmen des Vormonats - nur auf Klick geladen (eigener Request), damit
-  // das nicht bei jedem Tab-Aufruf mitgeholt werden muss. Speichert noch
-  // nicht selbst, der Wert muss wie ueberall sonst per Blur bestaetigt werden.
+  // Fuellt einen neuen Einnahmen-Posten mit der Summe der tatsaechlich
+  // gebuchten Einnahmen des Vormonats - nur auf Klick geladen (eigener
+  // Request), damit das nicht bei jedem Tab-Aufruf mitgeholt werden muss.
+  // Speichert noch nicht selbst, der Posten muss wie jede andere Zeile per
+  // Blur bestaetigt werden.
   const applySuggestion = async () => {
     setSuggesting(true);
     try {
       const prevDate = api.addMonths(`${monthKey}-01`, -1);
       const [py, pm] = prevDate.split("-").map(Number);
       const cents = await api.actualIncomeForMonth(py, pm - 1);
-      if (incomeInputRef.current) incomeInputRef.current.value = cents ? cents / 100 : "";
+      setRows((rs) => [...rs, { key: `new-${++newRowSeq}`, id: null, label: "Gesamt", amount_cents: cents }]);
     } catch (e) { setError(e); }
     finally { setSuggesting(false); }
   };
@@ -105,28 +164,39 @@ export default function BudgetScreen({
 
       <ErrorNote error={error} />
 
-      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 px-3.5 py-2.5 mb-4 flex items-center gap-3">
-        <span className="flex-1 min-w-0">
-          <span className="block text-sm">Einnahmen {dauer ? "jeden Monat" : `nur ${monthKey}`}</span>
-          {incomeTarget === 0 && (
+      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 mb-4">
+        <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between gap-3">
+          <span className="text-sm">Einnahmen {dauer ? "jeden Monat" : `nur ${monthKey}`}</span>
+          <span className="text-sm tabular-nums text-stone-500 dark:text-stone-400 shrink-0">{eur(incomeTotal)}</span>
+        </div>
+        {rows.length > 0 && (
+          <div className="divide-y divide-stone-100 dark:divide-stone-700 border-t border-stone-100 dark:border-stone-700">
+            {rows.map((row) => (
+              <IncomeRow key={row.key} row={row} dauer={dauer} monthKey={monthKey}
+                onCreated={(key, created) => setRows((rs) => rs.map((r) =>
+                  r.key === key ? { key: created.id, id: created.id, label: created.label, amount_cents: created.amount_cents } : r))}
+                onRemoved={(key) => setRows((rs) => rs.filter((r) => r.key !== key))}
+                flash={flash} setError={setError} reload={reload} />
+            ))}
+          </div>
+        )}
+        <div className="px-3.5 py-2 flex items-center gap-3 border-t border-stone-100 dark:border-stone-700">
+          {rows.length === 0 && (
             <button type="button" onClick={applySuggestion} disabled={suggesting}
-              className="block text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+              className="text-xs text-emerald-700 dark:text-emerald-400">
               {suggesting ? "Lädt …" : "Vorschlag aus Vormonat übernehmen"}
             </button>
           )}
-        </span>
-        <span className="flex items-center gap-1 shrink-0">
-          <input ref={incomeInputRef} type="number" min="0" step="10" placeholder="—"
-            defaultValue={incomeTarget ? incomeTarget / 100 : ""}
-            onBlur={(e) => saveIncome(e.target.value)}
-            className={`${inputCls} w-28! shrink-0 text-right tabular-nums`} />
-          <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
-        </span>
+          <button type="button" onClick={addIncomeRow}
+            className="ml-auto flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
+            <Plus size={14} /> Einnahme hinzufügen
+          </button>
+        </div>
       </div>
 
-      {acc !== "alle" && incomeTarget > 0 && (
+      {acc !== "alle" && incomeTotal > 0 && (
         <div className="mb-5">
-          <BudgetBar name="Insgesamt verplant" limit={incomeTarget} spent={totalBudgeted} />
+          <BudgetBar name="Insgesamt verplant" limit={incomeTotal} spent={totalBudgeted} />
           <p className={`text-xs mt-1.5 ${
             remaining < 0 ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>
             {remaining < 0
@@ -154,11 +224,16 @@ export default function BudgetScreen({
                     </span>
                   </span>
                   <span className="flex items-center gap-1 shrink-0">
+                    {/* Breite bewusst bei w-28 belassen - vierstellige
+                        Betraege mit Cent-Anteil (z. B. "1234,56") passen
+                        sonst nicht mehr, siehe 0.25.1-0.25.3. Nur
+                        Schriftgroesse/Padding verkleinert, gleiche Groesse
+                        wie die Einnahmen-Zeilen darueber. */}
                     <input type="number" min="0" step="10" placeholder="—"
                       defaultValue={limitOf(c.id) ? limitOf(c.id) / 100 : ""}
                       onBlur={(e) => save(c.id, e.target.value)}
-                      className={`${inputCls} w-28! shrink-0 text-right tabular-nums`} />
-                    <span className="text-sm text-stone-400 dark:text-stone-500">€</span>
+                      className={`${inputCls} w-28! shrink-0 text-right tabular-nums text-[13px]! px-2.5! py-1.5!`} />
+                    <span className="text-xs text-stone-400 dark:text-stone-500">€</span>
                   </span>
                 </div>
               );

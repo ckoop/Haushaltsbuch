@@ -249,26 +249,32 @@ export async function setBudget(accountId, categoryId, month, cents) {
 
 // ------------------------------------------------------------- Einnahmenziel
 
-export async function getIncomeTarget(monthKey) {
+// Einnahmen setzen sich aus mehreren Posten zusammen (z. B. "Gehalt" +
+// "Nebenmieteinnahmen"), jeder mit eigener Beschriftung. Ein Monatsposten
+// schlaegt die Dauerposten als Ganzes, gleiches Prinzip wie bei Budgets, nur
+// ohne Kategorie zum Abgleichen pro Posten - entweder alle Dauerposten oder
+// alle Monatsposten zaehlen, nicht gemischt.
+export async function listIncomeEntries(monthKey) {
+  // Kein sort: income_targets hat anders als z. B. transactions kein
+  // created-Feld, "id" ist die einzige stabile, immer vorhandene Sortierung.
   const rows = await pb.collection("income_targets").getFullList({
     filter: pb.filter("month = {:m} || month = '*'", { m: monthKey }),
+    sort: "id",
   });
-  // Ein Monatsziel schlaegt das Dauerziel, gleiches Prinzip wie bei Budgets.
-  const specific = rows.find((r) => r.month === monthKey);
-  return (specific ?? rows.find((r) => r.month === "*"))?.amount_cents ?? 0;
+  const specific = rows.filter((r) => r.month === monthKey);
+  return specific.length ? specific : rows.filter((r) => r.month === "*");
 }
 
-export async function setIncomeTarget(month, cents) {
-  const found = await pb.collection("income_targets").getFullList({
-    filter: pb.filter("month = {:m}", { m: month }),
-  });
-  if (cents <= 0) {
-    if (found[0]) await pb.collection("income_targets").delete(found[0].id);
-    return null;
-  }
-  return found[0]
-    ? pb.collection("income_targets").update(found[0].id, { amount_cents: cents })
-    : pb.collection("income_targets").create({ month, amount_cents: cents });
+export async function createIncomeEntry(month, label, cents) {
+  return pb.collection("income_targets").create({ month, label, amount_cents: cents });
+}
+
+export async function updateIncomeEntry(id, label, cents) {
+  return pb.collection("income_targets").update(id, { label, amount_cents: cents });
+}
+
+export async function deleteIncomeEntry(id) {
+  return pb.collection("income_targets").delete(id);
 }
 
 // Fuer den "Vorschlag"-Button im Budgets-Tab: tatsaechlich gebuchte Einnahmen

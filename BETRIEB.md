@@ -199,6 +199,23 @@ PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
 
+**`income_targets.label` (ab `0.26.0`): Einnahmen bestehen jetzt aus mehreren
+Posten** (z. B. "Gehalt" + "Nebenmieteinnahmen") statt einem einzelnen
+Gesamtbetrag. Neues Feld `label`, außerdem entfällt der alte Unique-Index auf
+`month` allein (mehrere Posten pro Monat/Dauer-Eintrag sind jetzt erlaubt).
+
+⚠️ Wie bei `budgets.account` lässt sich der geänderte Index nicht sauber über
+die Admin-Oberfläche allein nachziehen — per Skript patchen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/migrate_income_label.mjs
+```
+
+Bereits bestehende Einnahmenziele bleiben als ein Posten ohne Beschriftung
+erhalten (leeres `label`) und zählen weiterhin normal in die Summe mit.
+
 **Depot: erste Sammlung mit externem Netzzugriff.** `depot_positions` und
 `depot_trades` sind eine komplett neue Sammlungspaar wie `recurring_rules`
 oben — dasselbe Setup-Skript erneut ausführen, um sie nachzuziehen:
