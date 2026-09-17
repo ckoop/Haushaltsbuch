@@ -122,11 +122,23 @@ export function listTransactionsForYear(y) {
 // Historie statt nur den gerade sichtbaren Monat - eine gesuchte Buchung
 // liegt so gut wie nie zufaellig im aktuellen Zeitraum. "~" ist PocketBase/
 // SQLite LIKE, dadurch automatisch case-insensitiv (ASCII).
-export function searchTransactions(query) {
+// Kategorie/Tags sind Relationen, kein Text - ein Treffer auf ihrem Namen
+// laeuft deshalb ueber vom Aufrufer schon client-seitig aufgeloeste IDs
+// (Name-Abgleich gegen die eh schon geladene Kategorie-/Tag-Liste), nicht
+// ueber einen eigenen Server-Textvergleich. "?=" ist der PocketBase-Operator
+// fuer "mindestens einer der Werte trifft" auf der Mehrfachauswahl-Relation
+// tags; category ist eine einfache Relation, dafuer reicht "=" pro ID.
+export function searchTransactions(query, { categoryIds = [], tagIds = [] } = {}) {
   const q = query.trim();
   if (!q) return Promise.resolve([]);
+  const parts = [
+    pb.filter("payee ~ {:q}", { q }),
+    pb.filter("note ~ {:q}", { q }),
+    ...categoryIds.map((id, i) => pb.filter(`category = {:c${i}}`, { [`c${i}`]: id })),
+    ...tagIds.map((id, i) => pb.filter(`tags ?= {:t${i}}`, { [`t${i}`]: id })),
+  ];
   return pb.collection("transactions").getFullList({
-    filter: pb.filter("payee ~ {:q} || note ~ {:q}", { q }),
+    filter: parts.join(" || "),
     sort: "-date,-created",
   });
 }

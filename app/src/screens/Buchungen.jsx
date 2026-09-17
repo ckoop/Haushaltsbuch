@@ -13,7 +13,7 @@ const searchDayLabel = (iso) =>
   new Date(iso + "T12:00:00").toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
 
 export default function Buchungen({
-  accounts, categories, transactions, real, spentByCat, budgets,
+  accounts, categories, tags, transactions, real, spentByCat, budgets,
   balances, acc, setAcc, openDetail,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
@@ -22,17 +22,23 @@ export default function Buchungen({
   const [searching, setSearching] = useState(false);
 
   // Debounced Suche ueber die komplette Historie (nicht nur den sichtbaren
-  // Monat/das gewaehlte Konto) - siehe pb.js searchTransactions().
+  // Monat/das gewaehlte Konto) - siehe pb.js searchTransactions(). Kategorie-/
+  // Tag-Treffer werden hier gegen die schon geladenen Listen aufgeloest
+  // (Name enthaelt den Suchbegriff) und als IDs mitgegeben, da der
+  // Server-Filter selbst keine Relationsnamen durchsuchen kann.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) { setSearchResults(null); setSearching(false); return; }
     setSearching(true);
+    const lower = q.toLowerCase();
+    const categoryIds = categories.filter((c) => c.name.toLowerCase().includes(lower)).map((c) => c.id);
+    const tagIds = tags.filter((t) => t.name.toLowerCase().includes(lower)).map((t) => t.id);
     const t = setTimeout(() => {
-      api.searchTransactions(q).then(setSearchResults).catch(() => setSearchResults([]))
+      api.searchTransactions(q, { categoryIds, tagIds }).then(setSearchResults).catch(() => setSearchResults([]))
         .finally(() => setSearching(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, categories, tags]);
 
   const isSearching = searchResults !== null;
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
@@ -62,7 +68,7 @@ export default function Buchungen({
         <div className="relative">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 dark:text-stone-500" />
           <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Empfänger oder Verwendungszweck suchen …"
+            placeholder="Empfänger, Verwendungszweck, Kategorie oder Tag suchen …"
             className="w-full pl-9 pr-8 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-sm placeholder:text-stone-400 dark:placeholder:text-stone-500" />
           {query && (
             <button onClick={() => setQuery("")} aria-label="Suche löschen"
