@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronRight, Search, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
@@ -13,33 +13,11 @@ const searchDayLabel = (iso) =>
   new Date(iso + "T12:00:00").toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
 
 export default function Buchungen({
-  accounts, categories, tags, transactions, real, spentByCat, budgets,
+  accounts, categories, transactions, real, spentByCat, budgets,
   balances, acc, setAcc, openDetail,
+  query, setQuery, searchResults, searching,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
-  const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState(null); // null = keine aktive Suche
-  const [searching, setSearching] = useState(false);
-
-  // Debounced Suche ueber die komplette Historie (nicht nur den sichtbaren
-  // Monat/das gewaehlte Konto) - siehe pb.js searchTransactions(). Kategorie-/
-  // Tag-Treffer werden hier gegen die schon geladenen Listen aufgeloest
-  // (Name enthaelt den Suchbegriff) und als IDs mitgegeben, da der
-  // Server-Filter selbst keine Relationsnamen durchsuchen kann.
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) { setSearchResults(null); setSearching(false); return; }
-    setSearching(true);
-    const lower = q.toLowerCase();
-    const categoryIds = categories.filter((c) => c.name.toLowerCase().includes(lower)).map((c) => c.id);
-    const tagIds = tags.filter((t) => t.name.toLowerCase().includes(lower)).map((t) => t.id);
-    const t = setTimeout(() => {
-      api.searchTransactions(q, { categoryIds, tagIds }).then(setSearchResults).catch(() => setSearchResults([]))
-        .finally(() => setSearching(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [query, categories, tags]);
-
   const isSearching = searchResults !== null;
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   // Einnahmen minus Ausgaben fuer den sichtbaren Zeitraum - anders als die

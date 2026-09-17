@@ -63,6 +63,9 @@ function Shell() {
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [tab, setTab] = useState("buchungen");
   const [acc, setAcc] = useState("alle");
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null); // null = keine aktive Suche
+  const [searching, setSearching] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
@@ -109,6 +112,26 @@ function Shell() {
   }, [ym.y, ym.m, key, acc]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Suche (Buchungen.jsx) lebt bewusst hier statt als lokaler State im
+  // Screen: load() setzt bei jedem Monatswechsel kurz loading=true, was
+  // jeden Tab-Screen unmountet (s. u., {!loading && ...}) - ein Suchbegriff
+  // im Screen-lokalen State ginge dabei verloren, obwohl die Suche selbst
+  // absichtlich monatsunabhaengig ist (siehe searchTransactions() in
+  // pb.js). Gleiches Prinzip wie beim bereits hier lebenden acc-Zustand.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setSearchResults(null); setSearching(false); return; }
+    setSearching(true);
+    const lower = q.toLowerCase();
+    const categoryIds = categories.filter((c) => c.name.toLowerCase().includes(lower)).map((c) => c.id);
+    const tagIds = tags.filter((t) => t.name.toLowerCase().includes(lower)).map((t) => t.id);
+    const t = setTimeout(() => {
+      api.searchTransactions(q, { categoryIds, tagIds }).then(setSearchResults).catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, categories, tags]);
 
   // Ohne eigenes Routing hat die App sonst keinerlei Browser-History-Eintraege
   // - der mobile Zurueck-Button wuerde die Seite verlassen statt innerhalb der
@@ -256,6 +279,7 @@ function Shell() {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     incomeEntries, balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
+    query, setQuery, searchResults, searching,
   };
 
   // Nur diese drei Screens werten den Monat/Jahr-Zustand (ym) ueberhaupt aus -
