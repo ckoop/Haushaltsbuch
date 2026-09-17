@@ -1,5 +1,13 @@
 Gilt für Buchungen, Auswertung, Budgets, Depot, Konten, Einstellungen, NewEntry, Import, TxDetail. Feature-Rationale und Bugfix-Historie, die nicht in jeder Session gebraucht wird — ergänzt die Root-`CLAUDE.md`.
 
+## Suche (`Buchungen.jsx`, ab `0.27.0`)
+
+Durchsucht `payee`/`note` server-seitig (`api.searchTransactions()` in `pb.js`, PocketBase-Filter mit `~`) über die **komplette Historie**, nicht nur den in `Buchungen.jsx` sonst über `listTransactions(y, m)` geladenen sichtbaren Monat — eine gesuchte Buchung liegt so gut wie nie zufällig im gerade offenen Zeitraum, eine reine Client-Filterung des schon geladenen Monats wäre für eine Suche praktisch nutzlos gewesen. Ignoriert bewusst auch den gewählten Konto-Filter (`acc`) — Suchergebnisse zeigen den Kontonamen stattdessen inline (`showAccount`), wie sonst bei "Alle Konten". Debounced (300ms), erst ab zwei Zeichen, um nicht bei jedem Tastendruck eine Anfrage zu feuern.
+
+Solange ein Suchbegriff aktiv ist, ersetzt eine flache, nach Tag gruppierte Trefferliste die normale Ansicht komplett — Konto-Chips, Kontostand/Saldo-Kacheln und die Budget-Übersicht sind ausgeblendet, weil sie sich alle auf den sichtbaren Monat/das gewählte Konto beziehen und für Treffer aus anderen Monaten irreführend wären. Tageskopfzeilen nutzen dafür `searchDayLabel` statt des sonst verwendeten `relDay` (`ui.jsx`) — `relDay` zeigt nie ein Jahr, weil das im normalen Monats-Kontext eindeutig ist; bei über mehrere Jahre gestreuten Suchtreffern nicht mehr.
+
+Bewusst **kein** Treffer auf Kategorie- oder Tag-Namen — beide sind Relationen, kein Text, ein Treffer darauf bräuchte einen zweiten clientseitigen Abgleich (Name → IDs) vor dem eigentlichen Server-Filter. `payee`/`note` deckt den eigentlichen Anwendungsfall ("wo war ich zuletzt bei X einkaufen") ab; lässt sich bei Bedarf ergänzen.
+
 ## Budgets pro Konto (`budgets.account`)
 
 Budgets liefen bis `0.24.x` kontoübergreifend (eine Kategorie = ein Limit über alle Konten). Ab `0.25.0` auf ausdrücklichen Nutzerwunsch umgestellt: `budgets.account` ist jetzt Pflichtfeld, ein Budget gilt nur noch für genau ein Konto — derselbe Haushalt kann für "Lebensmittel" auf dem Girokonto ein anderes Limit haben als auf einer Kreditkarte. Unique-Index entsprechend erweitert (`account, category, month` statt nur `category, month`).

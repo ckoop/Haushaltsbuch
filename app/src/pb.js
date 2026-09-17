@@ -118,6 +118,19 @@ export function listTransactionsForYear(y) {
   });
 }
 
+// Suche ueber Empfaenger/Verwendungszweck, bewusst ueber die komplette
+// Historie statt nur den gerade sichtbaren Monat - eine gesuchte Buchung
+// liegt so gut wie nie zufaellig im aktuellen Zeitraum. "~" ist PocketBase/
+// SQLite LIKE, dadurch automatisch case-insensitiv (ASCII).
+export function searchTransactions(query) {
+  const q = query.trim();
+  if (!q) return Promise.resolve([]);
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("payee ~ {:q} || note ~ {:q}", { q }),
+    sort: "-date,-created",
+  });
+}
+
 export const createTransaction = (t) => pb.collection("transactions").create(t);
 export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
 export const deleteTransaction = (id) => pb.collection("transactions").delete(id);
