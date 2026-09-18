@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ChevronRight, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, relDay, byId,
@@ -63,7 +63,7 @@ export default function Buchungen({
         <section className="px-5 py-4 grid grid-cols-2 gap-3">
           <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}
             value={balances[acc] ?? 0} signed />
-          <Metric label="Saldo" value={net} signed />
+          <Metric label="Saldo" value={net} signed trend />
         </section>
       )}
 
@@ -114,12 +114,22 @@ export default function Buchungen({
   );
 }
 
-function Metric({ label, value, signed }) {
+// trend faerbt zusaetzlich auch den positiven Fall gruen und zeigt einen
+// Pfeil - anders als das einfache "signed" (nur rot bei negativ), das fuer
+// einen Kontostand reicht, hier soll auf einen Blick die Tendenz des Monats
+// erkennbar sein, nicht nur "im Minus oder nicht".
+function Metric({ label, value, signed, trend }) {
+  const negative = value < 0;
   return (
     <div className="bg-white dark:bg-stone-800 rounded-xl px-4 py-3 border border-stone-200 dark:border-stone-700">
       <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{label}</p>
-      <p className={`text-xl font-medium tabular-nums mt-0.5 ${
-        signed && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+      <p className={`flex items-center gap-1 text-xl font-medium tabular-nums mt-0.5 ${
+        trend
+          ? negative ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"
+          : signed && negative ? "text-red-600 dark:text-red-400" : ""}`}>
+        {trend && (negative
+          ? <TrendingDown size={16} className="shrink-0" />
+          : <TrendingUp size={16} className="shrink-0" />)}
         {eur(value)}
       </p>
     </div>
