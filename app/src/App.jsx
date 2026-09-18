@@ -13,6 +13,10 @@ import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
 import { useDepotEnabled } from "./depotPref.js";
 
+// Wie viele volle Vormonate die Einkommens-Hochrechnung in Buchungen.jsx
+// fuer den Ausgaben-Durchschnitt heranzieht (s. avgExpense in Shell()).
+const AVG_MONTHS_BACK = 3;
+
 export default function App() {
   const [authed, setAuthed] = useState(pb.authStore.isValid);
   useEffect(() => pb.authStore.onChange(() => setAuthed(pb.authStore.isValid)), []);
@@ -81,6 +85,7 @@ function Shell() {
   const [running, setRunning] = useState([]);   // alles bis Monatsende, fuer Salden
   const [budgets, setBudgets] = useState([]);
   const [incomeEntries, setIncomeEntries] = useState([]);
+  const [avgTx, setAvgTx] = useState([]);   // vorherige Monate, fuer die Einkommens-Hochrechnung
 
   const { key } = api.monthRange(ym.y, ym.m);
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 1800); };
@@ -95,14 +100,15 @@ function Shell() {
     const seq = ++loadSeq.current;
     setLoading(true); setError(null);
     try {
-      const [a, c, g, p, t, r, b, ie] = await Promise.all([
+      const [a, c, g, p, t, r, b, ie, at] = await Promise.all([
         api.listAccounts(), api.listCategories(), api.listTags(), api.listPeople(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
         api.listBudgets(key, acc), api.listIncomeEntries(key),
+        api.listTransactionsForAverage(ym.y, ym.m, AVG_MONTHS_BACK),
       ]);
       if (seq !== loadSeq.current) return;
       setAccounts(a); setCategories(c); setTags(g); setPeople(p); setTransactions(t); setRunning(r); setBudgets(b);
-      setIncomeEntries(ie);
+      setIncomeEntries(ie); setAvgTx(at);
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setError(e);
@@ -189,6 +195,20 @@ function Shell() {
     [transactions, acc]
   );
   const real = visible.filter((t) => t.type !== "transfer");
+
+  // Durchschnittliche Ausgaben der letzten AVG_MONTHS_BACK vollen Monate,
+  // gleiche Konto-/Umbuchungsfilterung wie bei "real" - Grundlage fuer die
+  // Einkommens-Hochrechnung in Buchungen.jsx. Durch ganze Monate zu teilen
+  // (nicht Tage) macht das unempfindlich dagegen, an welchem Tag einzelne
+  // grosse Buchungen (Miete, Versicherungen) landen.
+  const avgExpense = useMemo(() => {
+    const visibleAvg = avgTx.filter((t) => acc === "alle" || t.account === acc || t.to_account === acc);
+    const total = visibleAvg
+      .filter((t) => t.type !== "transfer" && t.amount_cents < 0)
+      .reduce((s, t) => s - t.amount_cents, 0);
+    return Math.round(total / AVG_MONTHS_BACK);
+  }, [avgTx, acc]);
+
   const spentByCat = useMemo(() => {
     const o = {};
     for (const t of real) if (t.amount_cents < 0) o[t.category] = (o[t.category] ?? 0) - t.amount_cents;
@@ -277,7 +297,7 @@ function Shell() {
 
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
-    incomeEntries, balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
+    incomeEntries, avgExpense, balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
     query, setQuery, searchResults, searching,
   };

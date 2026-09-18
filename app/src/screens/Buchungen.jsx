@@ -13,7 +13,7 @@ const searchDayLabel = (iso) =>
   new Date(iso + "T12:00:00").toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
 
 export default function Buchungen({
-  accounts, categories, transactions, real, spentByCat, budgets, incomeEntries,
+  accounts, categories, transactions, real, spentByCat, budgets, incomeEntries, avgExpense,
   balances, acc, setAcc, openDetail, monthKey,
   query, setQuery, searchResults, searching,
 }) {
@@ -27,42 +27,29 @@ export default function Buchungen({
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const net = income - expense;
 
-  // Hochrechnung "reicht das Geld diesen Monat": rechnet die bisherigen
-  // Ausgaben (Tagesdurchschnitt mal Tage im Monat) gegen das im Budgets-Tab
-  // hinterlegte Einnahmenziel (income_targets, kontouebergreifend, s.
-  // screens/CLAUDE.md) statt gegen die tatsaechlich schon gebuchten
-  // Einnahmen - das Gehalt kommt oft erst spaet im Monat, ohne Ziel waere
-  // die Hochrechnung fast immer faelschlich negativ. Ohne eingetragenes Ziel
-  // (totalIncomeTarget === 0) gibt es nichts, wogegen sich rechnen liesse -
-  // dann bleibt der Hinweis ganz weg. Bewusst nur der laufende Kalendermonat
-  // - bei einem bereits abgeschlossenen Monat steht das tatsaechliche
-  // Ergebnis schon fest, bei einem zukuenftigen liegen noch keine Buchungen
-  // vor.
-  //
-  // Als "wiederkehrend" markierte Ausgaben (transactions.recurring, z. B.
-  // die Miete am 1.) fliessen mit ihrem vollen Betrag ein, nicht in die
-  // Tagesdurchschnitt-Hochrechnung - sie fallen im laufenden Monat nicht
-  // nochmal an, wuerden den Tagesschnitt sonst aber genau so verzerren, als
-  // kaeme im Rest des Monats taeglich ein Bruchteil der Miete oben drauf.
-  // Nur die uebrigen, tatsaechlich unregelmaessigen Ausgaben (Lebensmittel,
-  // Freizeit etc.) werden hochgerechnet. Bleibt trotzdem ein grober
-  // Fingerzeig, kein Budget-Ersatz: eine einzelne fruehe, nicht als
-  // wiederkehrend markierte Grossbuchung kann die Hochrechnung fuer den
-  // Rest des Monats weiterhin sichtbar verzerren.
-  const today = todayISO();
-  const isCurrentMonth = monthKey === today.slice(0, 7);
-  const daysElapsed = isCurrentMonth ? Number(today.slice(8, 10)) : 0;
+  // Hochrechnung "reicht das Geld diesen Monat": vergleicht das im
+  // Budgets-Tab hinterlegte Einnahmenziel (income_targets, s.
+  // screens/CLAUDE.md) mit den erwarteten Ausgaben - als erwartete Ausgaben
+  // zaehlt der groessere der beiden Werte aus "avgExpense" (Durchschnitt der
+  // letzten Monate, aus App.jsx) und "expense" (bereits tatsaechlich
+  // gebucht diesen Monat). Bewusst KEINE Tagesdurchschnitt-Hochrechnung des
+  // laufenden Monats mehr (fruehere Version) - eine fruehe Grossbuchung wie
+  // die Miete am 1. verzerrte die pro Resttag hochgerechnete Zahl massiv,
+  // und das "wiederkehrend"-Haekchen an der Buchung als Ausweg loest das in
+  // der Praxis nicht, weil es kaum gesetzt wird. Ein Durchschnitt ueber
+  // ganze Monate ist unempfindlich dagegen, an welchem Tag im Monat einzelne
+  // Buchungen landen. max() mit dem Ist-Wert verhindert, dass ein bereits
+  // ueberdurchschnittlich teurer Monat trotzdem als "reicht" durchgeht.
+  // Ohne eingetragenes Einnahmenziel (totalIncomeTarget === 0) gibt es
+  // nichts, wogegen sich rechnen liesse - dann bleibt der Hinweis ganz weg.
+  // Bewusst nur der laufende Kalendermonat - bei einem bereits
+  // abgeschlossenen Monat steht das tatsaechliche Ergebnis schon fest, bei
+  // einem zukuenftigen liegen noch keine Buchungen vor.
+  const isCurrentMonth = monthKey === todayISO().slice(0, 7);
   const totalIncomeTarget = incomeEntries.reduce((s, e) => s + e.amount_cents, 0);
-  const forecast = isCurrentMonth && daysElapsed > 0 && totalIncomeTarget > 0 ? (() => {
-    const [fy, fm] = monthKey.split("-").map(Number);
-    const daysInMonth = new Date(fy, fm, 0).getDate();
-    const recurringExpense = real
-      .filter((t) => t.amount_cents < 0 && t.recurring)
-      .reduce((s, t) => s - t.amount_cents, 0);
-    const variableExpense = expense - recurringExpense;
-    const projectedExpense = recurringExpense + Math.round((variableExpense / daysElapsed) * daysInMonth);
-    return totalIncomeTarget - projectedExpense;
-  })() : null;
+  const forecast = isCurrentMonth && totalIncomeTarget > 0
+    ? totalIncomeTarget - Math.max(avgExpense, expense)
+    : null;
 
   // Waehrend einer aktiven Suche ersetzt die flache Trefferliste (ueber die
   // komplette Historie, kontouebergreifend) die normale Monats-/Konto-Sicht
@@ -114,7 +101,7 @@ export default function Buchungen({
               ? <TrendingUp size={15} className="mt-0.5 shrink-0" />
               : <TrendingDown size={15} className="mt-0.5 shrink-0" />}
             <span>
-              Beim aktuellen Tempo {forecast >= 0
+              Nach dem Durchschnitt der letzten Monate {forecast >= 0
                 ? <>reicht das Einkommen voraussichtlich, mit <strong>{eurAbs(forecast)}</strong> übrig.</>
                 : <>reicht das Einkommen voraussichtlich nicht — es fehlen etwa <strong>{eurAbs(forecast)}</strong>.</>}
             </span>

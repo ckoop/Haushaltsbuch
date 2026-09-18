@@ -118,6 +118,23 @@ export function listTransactionsForYear(y) {
   });
 }
 
+// Fuer die Einkommens-Hochrechnung in Buchungen.jsx: Buchungen der
+// vorherigen `monthsBack` VOLLEN Monate vor y/m in einem Rutsch statt
+// monthsBack Einzelabfragen - der aktuelle Monat selbst ist nicht enthalten,
+// der laeuft ja gerade erst und waere als Vergleichswert fuer sich selbst
+// sinnlos. Ein Durchschnitt ueber ganze Monate ist unabhaengig davon, an
+// welchem Tag einzelne grosse Buchungen (Miete, Versicherungen) landen -
+// anders als eine Tagesdurchschnitt-Hochrechnung des laufenden, erst
+// teilweise vergangenen Monats, die genau dadurch verzerrt wird.
+export function listTransactionsForAverage(y, m, monthsBack = 3) {
+  const { start: end } = monthRange(y, m);
+  const start = addMonths(end, -monthsBack);
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date >= {:start} && date < {:end}", { start, end }),
+    fields: "date,type,amount_cents,account,to_account",
+  });
+}
+
 // Suche ueber Empfaenger/Verwendungszweck, bewusst ueber die komplette
 // Historie statt nur den gerade sichtbaren Monat - eine gesuchte Buchung
 // liegt so gut wie nie zufaellig im aktuellen Zeitraum. "~" ist PocketBase/
