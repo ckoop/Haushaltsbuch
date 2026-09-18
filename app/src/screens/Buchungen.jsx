@@ -13,7 +13,7 @@ const searchDayLabel = (iso) =>
   new Date(iso + "T12:00:00").toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
 
 export default function Buchungen({
-  accounts, categories, transactions, real, spentByCat, budgets,
+  accounts, categories, transactions, real, spentByCat, budgets, incomeEntries,
   balances, acc, setAcc, openDetail, monthKey,
   query, setQuery, searchResults, searching,
 }) {
@@ -27,22 +27,28 @@ export default function Buchungen({
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const net = income - expense;
 
-  // Hochrechnung "reicht das Geld diesen Monat": nimmt den Tagesdurchschnitt
-  // aus den bereits gebuchten Umsaetzen des laufenden Monats (Saldo geteilt
-  // durch die bisher vergangenen Tage) und rechnet ihn auf den ganzen Monat
-  // hoch. Bewusst nur der laufende Kalendermonat - bei einem bereits
-  // abgeschlossenen Monat steht das tatsaechliche Ergebnis schon fest, eine
-  // Hochrechnung waere da sinnlos; bei einem zukuenftigen liegen noch keine
-  // Buchungen vor. Nur ein grober Fingerzeig, kein Budget-Ersatz: eine
-  // einzelne fruehe Buchung (z. B. die Miete am 1.) kann die Hochrechnung
-  // fuer den Rest des Monats sichtbar verzerren.
+  // Hochrechnung "reicht das Geld diesen Monat": rechnet die bisherigen
+  // Ausgaben (Tagesdurchschnitt mal Tage im Monat) gegen das im Budgets-Tab
+  // hinterlegte Einnahmenziel (income_targets, kontouebergreifend, s.
+  // screens/CLAUDE.md) statt gegen die tatsaechlich schon gebuchten
+  // Einnahmen - das Gehalt kommt oft erst spaet im Monat, ohne Ziel waere
+  // die Hochrechnung fast immer faelschlich negativ. Ohne eingetragenes Ziel
+  // (totalIncomeTarget === 0) gibt es nichts, wogegen sich rechnen liesse -
+  // dann bleibt der Hinweis ganz weg. Bewusst nur der laufende Kalendermonat
+  // - bei einem bereits abgeschlossenen Monat steht das tatsaechliche
+  // Ergebnis schon fest, bei einem zukuenftigen liegen noch keine Buchungen
+  // vor. Nur ein grober Fingerzeig, kein Budget-Ersatz: eine einzelne fruehe
+  // Buchung (z. B. die Miete am 1.) kann die Hochrechnung fuer den Rest des
+  // Monats sichtbar verzerren.
   const today = todayISO();
   const isCurrentMonth = monthKey === today.slice(0, 7);
   const daysElapsed = isCurrentMonth ? Number(today.slice(8, 10)) : 0;
-  const forecast = isCurrentMonth && daysElapsed > 0 ? (() => {
+  const totalIncomeTarget = incomeEntries.reduce((s, e) => s + e.amount_cents, 0);
+  const forecast = isCurrentMonth && daysElapsed > 0 && totalIncomeTarget > 0 ? (() => {
     const [fy, fm] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(fy, fm, 0).getDate();
-    return Math.round((net / daysElapsed) * daysInMonth);
+    const projectedExpense = Math.round((expense / daysElapsed) * daysInMonth);
+    return totalIncomeTarget - projectedExpense;
   })() : null;
 
   // Waehrend einer aktiven Suche ersetzt die flache Trefferliste (ueber die
@@ -81,7 +87,7 @@ export default function Buchungen({
         <section className="px-5 py-4 grid grid-cols-2 gap-3">
           <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}
             value={balances[acc] ?? 0} signed />
-          <Metric label="Saldo" value={net} signed trend />
+          <Metric label="Saldo" value={net} signed />
         </section>
       )}
 
@@ -96,8 +102,8 @@ export default function Buchungen({
               : <TrendingDown size={15} className="mt-0.5 shrink-0" />}
             <span>
               Beim aktuellen Tempo {forecast >= 0
-                ? <>bleiben am Monatsende voraussichtlich <strong>{eurAbs(forecast)}</strong> übrig.</>
-                : <>fehlen am Monatsende voraussichtlich <strong>{eurAbs(forecast)}</strong>.</>}
+                ? <>reicht das Einkommen voraussichtlich, mit <strong>{eurAbs(forecast)}</strong> übrig.</>
+                : <>reicht das Einkommen voraussichtlich nicht — es fehlen etwa <strong>{eurAbs(forecast)}</strong>.</>}
             </span>
           </div>
         </section>
@@ -150,22 +156,12 @@ export default function Buchungen({
   );
 }
 
-// trend faerbt zusaetzlich auch den positiven Fall gruen und zeigt einen
-// Pfeil - anders als das einfache "signed" (nur rot bei negativ), das fuer
-// einen Kontostand reicht, hier soll auf einen Blick die Tendenz des Monats
-// erkennbar sein, nicht nur "im Minus oder nicht".
-function Metric({ label, value, signed, trend }) {
-  const negative = value < 0;
+function Metric({ label, value, signed }) {
   return (
     <div className="bg-white dark:bg-stone-800 rounded-xl px-4 py-3 border border-stone-200 dark:border-stone-700">
       <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{label}</p>
-      <p className={`flex items-center gap-1 text-xl font-medium tabular-nums mt-0.5 ${
-        trend
-          ? negative ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"
-          : signed && negative ? "text-red-600 dark:text-red-400" : ""}`}>
-        {trend && (negative
-          ? <TrendingDown size={16} className="shrink-0" />
-          : <TrendingUp size={16} className="shrink-0" />)}
+      <p className={`text-xl font-medium tabular-nums mt-0.5 ${
+        signed && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
         {eur(value)}
       </p>
     </div>
