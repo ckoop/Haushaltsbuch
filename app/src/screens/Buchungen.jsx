@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, relDay, byId,
+  eur, eurAbs, relDay, todayISO, byId,
   UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChipRow,
 } from "../ui.jsx";
 
@@ -14,7 +14,7 @@ const searchDayLabel = (iso) =>
 
 export default function Buchungen({
   accounts, categories, transactions, real, spentByCat, budgets,
-  balances, acc, setAcc, openDetail,
+  balances, acc, setAcc, openDetail, monthKey,
   query, setQuery, searchResults, searching,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
@@ -26,6 +26,24 @@ export default function Buchungen({
   // Bank-CSV uebereinstimmt. Gleiche Rechnung wie "Netto" in Auswertung.jsx.
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const net = income - expense;
+
+  // Hochrechnung "reicht das Geld diesen Monat": nimmt den Tagesdurchschnitt
+  // aus den bereits gebuchten Umsaetzen des laufenden Monats (Saldo geteilt
+  // durch die bisher vergangenen Tage) und rechnet ihn auf den ganzen Monat
+  // hoch. Bewusst nur der laufende Kalendermonat - bei einem bereits
+  // abgeschlossenen Monat steht das tatsaechliche Ergebnis schon fest, eine
+  // Hochrechnung waere da sinnlos; bei einem zukuenftigen liegen noch keine
+  // Buchungen vor. Nur ein grober Fingerzeig, kein Budget-Ersatz: eine
+  // einzelne fruehe Buchung (z. B. die Miete am 1.) kann die Hochrechnung
+  // fuer den Rest des Monats sichtbar verzerren.
+  const today = todayISO();
+  const isCurrentMonth = monthKey === today.slice(0, 7);
+  const daysElapsed = isCurrentMonth ? Number(today.slice(8, 10)) : 0;
+  const forecast = isCurrentMonth && daysElapsed > 0 ? (() => {
+    const [fy, fm] = monthKey.split("-").map(Number);
+    const daysInMonth = new Date(fy, fm, 0).getDate();
+    return Math.round((net / daysElapsed) * daysInMonth);
+  })() : null;
 
   // Waehrend einer aktiven Suche ersetzt die flache Trefferliste (ueber die
   // komplette Historie, kontouebergreifend) die normale Monats-/Konto-Sicht
@@ -64,6 +82,24 @@ export default function Buchungen({
           <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}
             value={balances[acc] ?? 0} signed />
           <Metric label="Saldo" value={net} signed trend />
+        </section>
+      )}
+
+      {!isSearching && forecast !== null && (
+        <section className="px-5 pb-4">
+          <div className={`rounded-xl px-4 py-3 border flex items-start gap-2 text-[13px] ${
+            forecast >= 0
+              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400"
+              : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"}`}>
+            {forecast >= 0
+              ? <TrendingUp size={15} className="mt-0.5 shrink-0" />
+              : <TrendingDown size={15} className="mt-0.5 shrink-0" />}
+            <span>
+              Beim aktuellen Tempo {forecast >= 0
+                ? <>bleiben am Monatsende voraussichtlich <strong>{eurAbs(forecast)}</strong> übrig.</>
+                : <>fehlen am Monatsende voraussichtlich <strong>{eurAbs(forecast)}</strong>.</>}
+            </span>
+          </div>
         </section>
       )}
 
