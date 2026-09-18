@@ -200,6 +200,25 @@ await ensure({
   ],
 });
 
+// -------------------------------------------------------- Monatsabschluss
+
+// Ein abgeschlossener Monat sperrt gezielt nur den Ruecknahme-Weg eines
+// Imports (deleteImportRun in pb.js) - manuelle Buchungen/Bearbeitung
+// bleiben bewusst unangetastet, das war nicht Teil des Wunsches. Pro
+// Konto statt global: ein Haushalt mit mehreren Konten schliesst sie
+// typischerweise nicht alle im selben Moment ab (gleiches Prinzip wie
+// budgets.account).
+await ensure({
+  name: "closed_months", type: "base", ...rules,
+  fields: [
+    rel("account", accountsId, { required: true }),
+    text("month", { required: true, max: 7 }), // "2026-08"
+  ],
+  indexes: [
+    "CREATE UNIQUE INDEX idx_closed_month_acc_month ON closed_months (account, month)",
+  ],
+});
+
 // ------------------------------------------------------------- Daueraufträge
 
 await ensure({

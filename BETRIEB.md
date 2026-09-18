@@ -102,6 +102,7 @@ Hostnamen mit gültigem Zertifikat, ohne selbst etwas auszustellen.
 | `depot_positions` | Wertpapiere im Depot (ISIN, Name, Yahoo-Ticker) |
 | `depot_trades` | Kauf-/Verkaufstrades je Position |
 | `people` | Personen als reines Label an Konten, kein eigener Login |
+| `closed_months` | Abgeschlossene Monate je Konto, sperrt Import-Rückzug |
 
 ### Entscheidungen, die im Schema stecken
 
@@ -297,6 +298,24 @@ gehaltenen Bestand zu jedem Zeitpunkt, nicht rückwirkend den heutigen — ein
 frisch angelegter Anfangsbestand (siehe oben, "ein einzelner Kauf-Trade als
 Bestand") erscheint im Chart deshalb erst ab seinem eingetragenen Datum,
 davor korrekt bei 0.
+
+**`closed_months` (ab `0.29.0`): Monatsabschluss pro Konto.** Sperrt gezielt
+nur das "Zurücknehmen" eines Imports (`Import.jsx`) — sobald mindestens eine
+seiner Buchungen in einen für das Import-Konto abgeschlossenen Monat fällt,
+lässt sich der ganze Import nicht mehr zurücknehmen (kein Teilrückzug).
+Manuelle Buchungen/Bearbeitung bleiben bewusst unberührt. `account` + `month`
+(`"JJJJ-MM"`), Unique-Index auf beide zusammen — pro Konto, nicht global,
+gleiches Prinzip wie `budgets.account`. Bedienung im Monats-Sheet der
+Jahresansicht (Auswertung-Tab → Jahr → Monat antippen), nur sichtbar bei
+einem konkret ausgewählten Konto.
+
+⚠️ Ebenfalls eine **komplett neue Sammlung** — Setup-Skript erneut ausführen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/schema.mjs
+```
 
 ## Umgebungen: Entwicklung vs. Produktion
 

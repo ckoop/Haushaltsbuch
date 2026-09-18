@@ -318,6 +318,30 @@ export async function actualIncomeForMonth(y, m) {
   return rows.reduce((s, t) => s + t.amount_cents, 0);
 }
 
+// -------------------------------------------------------- Monatsabschluss
+
+// Pro Konto, nicht global - siehe schema.mjs. Gibt ein Set von "JJJJ-MM"
+// zurueck, praktischer als die rohen Datensaetze fuer den .has()-Check in
+// der Jahresansicht.
+export async function listClosedMonths(accountId) {
+  if (!accountId) return new Set();
+  const rows = await pb.collection("closed_months").getFullList({
+    filter: pb.filter("account = {:a}", { a: accountId }),
+    fields: "month",
+  });
+  return new Set(rows.map((r) => r.month));
+}
+
+export const closeMonth = (accountId, month) =>
+  pb.collection("closed_months").create({ account: accountId, month });
+
+export async function reopenMonth(accountId, month) {
+  const found = await pb.collection("closed_months").getFullList({
+    filter: pb.filter("account = {:a} && month = {:m}", { a: accountId, m: month }),
+  });
+  if (found[0]) await pb.collection("closed_months").delete(found[0].id);
+}
+
 // ------------------------------------------------------------------- Import
 
 export const listProfiles = () => pb.collection("import_profiles").getFullList();
@@ -359,11 +383,24 @@ export async function batchCreateTransactions(rows, onProgress) {
   return done;
 }
 
+// Sobald mindestens eine Buchung des Imports in einem fuer das Import-Konto
+// abgeschlossenen Monat liegt, ist der ganze Ruecknahme-Vorgang gesperrt -
+// lieber komplett blockiert als nur einzelne Zeilen still uebrig zu lassen.
 export async function deleteImportRun(runId) {
+  const run = await pb.collection("imports").getOne(runId, { fields: "id,account" });
   const rows = await pb.collection("transactions").getFullList({
     filter: pb.filter("import_batch = {:id}", { id: runId }),
-    fields: "id",
+    fields: "id,date",
   });
+  const months = new Set(rows.map((r) => dateOnly(r.date).slice(0, 7)));
+  if (months.size > 0) {
+    const closed = await listClosedMonths(run.account);
+    if ([...months].some((m) => closed.has(m))) {
+      throw new Error(
+        "Dieser Import betrifft einen abgeschlossenen Monat und kann nicht mehr zurückgenommen werden."
+      );
+    }
+  }
   for (let i = 0; i < rows.length; i += 100) {
     const batch = pb.createBatch();
     for (const r of rows.slice(i, i + 100)) batch.collection("transactions").delete(r.id);

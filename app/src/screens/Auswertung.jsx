@@ -3,7 +3,7 @@ import { ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, MONTHS, byId, colorOf, inputCls,
-  UNKNOWN_CAT, UNKNOWN_TAG, UNKNOWN_ACC, TxRow, Sheet, ErrorNote, Spinner,
+  UNKNOWN_CAT, UNKNOWN_TAG, UNKNOWN_ACC, TxRow, Sheet, ErrorNote, Spinner, Button,
 } from "../ui.jsx";
 
 const monthIdx = (dateStr) => Number(dateStr.slice(5, 7)) - 1;
@@ -252,6 +252,7 @@ function JahresAnsicht({ categories, accounts, acc, monthKey, openDetail }) {
   const [showSparquote, setShowSparquote] = useState(false);
   const [openMonthIdx, setOpenMonthIdx] = useState(null);
   const [openTrendMonthIdx, setOpenTrendMonthIdx] = useState(null);
+  const [closedMonths, setClosedMonths] = useState(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -262,6 +263,27 @@ function JahresAnsicht({ categories, accounts, acc, monthKey, openDetail }) {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [year]);
+
+  // Abschluss gilt pro Konto - bei "Alle Konten" gibt es keinen eindeutigen
+  // Geltungsbereich, deshalb dort erst gar nicht laden.
+  useEffect(() => {
+    let cancelled = false;
+    if (acc === "alle") { setClosedMonths(new Set()); return; }
+    api.listClosedMonths(acc).then((s) => { if (!cancelled) setClosedMonths(s); });
+    return () => { cancelled = true; };
+  }, [acc]);
+
+  const toggleMonthClosed = async (mk, wasClosed) => {
+    try {
+      if (wasClosed) await api.reopenMonth(acc, mk);
+      else await api.closeMonth(acc, mk);
+      setClosedMonths((s) => {
+        const next = new Set(s);
+        wasClosed ? next.delete(mk) : next.add(mk);
+        return next;
+      });
+    } catch (e) { setError(e); }
+  };
 
   const scoped = useMemo(
     () => rows.filter((t) => acc === "alle" || t.account === acc || t.to_account === acc),
@@ -385,9 +407,21 @@ function JahresAnsicht({ categories, accounts, acc, monthKey, openDetail }) {
           {openMonthIdx !== null && (() => {
             const m = monthly[openMonthIdx];
             const tx = monthTx(openMonthIdx);
+            const mk = `${year}-${String(openMonthIdx + 1).padStart(2, "0")}`;
+            const closed = closedMonths.has(mk);
             return (
               <Sheet title={`${MONTHS[openMonthIdx]} ${year}`} onClose={() => setOpenMonthIdx(null)}>
                 <SummaryCard income={m.income} expense={m.expense} net={m.income - m.expense} />
+                {acc !== "alle" && (
+                  <Button variant="ghost" className="w-full mb-4" onClick={() => toggleMonthClosed(mk, closed)}>
+                    {closed ? "Monat wieder öffnen" : "Monat abschließen"}
+                  </Button>
+                )}
+                {closed && (
+                  <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
+                    Importe, die diesen Monat betreffen, lassen sich nicht mehr zurücknehmen.
+                  </p>
+                )}
                 <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
                   {tx.length === 0
                     ? <p className="text-sm text-stone-500 dark:text-stone-400 px-4 py-6 text-center">Keine Buchungen.</p>
