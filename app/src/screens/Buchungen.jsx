@@ -37,9 +37,18 @@ export default function Buchungen({
   // dann bleibt der Hinweis ganz weg. Bewusst nur der laufende Kalendermonat
   // - bei einem bereits abgeschlossenen Monat steht das tatsaechliche
   // Ergebnis schon fest, bei einem zukuenftigen liegen noch keine Buchungen
-  // vor. Nur ein grober Fingerzeig, kein Budget-Ersatz: eine einzelne fruehe
-  // Buchung (z. B. die Miete am 1.) kann die Hochrechnung fuer den Rest des
-  // Monats sichtbar verzerren.
+  // vor.
+  //
+  // Als "wiederkehrend" markierte Ausgaben (transactions.recurring, z. B.
+  // die Miete am 1.) fliessen mit ihrem vollen Betrag ein, nicht in die
+  // Tagesdurchschnitt-Hochrechnung - sie fallen im laufenden Monat nicht
+  // nochmal an, wuerden den Tagesschnitt sonst aber genau so verzerren, als
+  // kaeme im Rest des Monats taeglich ein Bruchteil der Miete oben drauf.
+  // Nur die uebrigen, tatsaechlich unregelmaessigen Ausgaben (Lebensmittel,
+  // Freizeit etc.) werden hochgerechnet. Bleibt trotzdem ein grober
+  // Fingerzeig, kein Budget-Ersatz: eine einzelne fruehe, nicht als
+  // wiederkehrend markierte Grossbuchung kann die Hochrechnung fuer den
+  // Rest des Monats weiterhin sichtbar verzerren.
   const today = todayISO();
   const isCurrentMonth = monthKey === today.slice(0, 7);
   const daysElapsed = isCurrentMonth ? Number(today.slice(8, 10)) : 0;
@@ -47,7 +56,11 @@ export default function Buchungen({
   const forecast = isCurrentMonth && daysElapsed > 0 && totalIncomeTarget > 0 ? (() => {
     const [fy, fm] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(fy, fm, 0).getDate();
-    const projectedExpense = Math.round((expense / daysElapsed) * daysInMonth);
+    const recurringExpense = real
+      .filter((t) => t.amount_cents < 0 && t.recurring)
+      .reduce((s, t) => s - t.amount_cents, 0);
+    const variableExpense = expense - recurringExpense;
+    const projectedExpense = recurringExpense + Math.round((variableExpense / daysElapsed) * daysInMonth);
     return totalIncomeTarget - projectedExpense;
   })() : null;
 
