@@ -81,9 +81,11 @@ export const UNKNOWN_ACC = { id: "?", name: "Gelöschtes Konto", short: "?", typ
 export const UNKNOWN_CAT = { id: "?", name: "Ohne Kategorie", icon: "dots", color: "stone" };
 export const UNKNOWN_TAG = { id: "?", name: "Gelöschter Tag" };
 export const byId = (list, id, fallback) => list.find((x) => x.id === id) ?? fallback;
-// 14 statt 8 Zeichen, sonst kappt das gängige Wörter wie "Girokonto" (9) oder
-// "Kreditkarte" (11) mitten im Wort ab, ohne Auslassungspunkte anzuzeigen.
-export const shortName = (n) => (n ?? "").trim().split(/\s+/)[0].slice(0, 14) || "Konto";
+// 12 Zeichen, weil accounts.short (setup/schema.mjs) max: 12 hat - laenger
+// wuerde PocketBase beim Speichern mit validation_max_text_constraint
+// ablehnen. Deckt trotzdem gaengige Woerter wie "Girokonto" (9) oder
+// "Kreditkarte" (11) vollstaendig ab, ohne mitten im Wort zu kappen.
+export const shortName = (n) => (n ?? "").trim().split(/\s+/)[0].slice(0, 12) || "Konto";
 
 export const RECURRING = [
   ["", "Nie"], ["monthly", "Monatlich"], ["quarterly", "Quartalsweise"], ["yearly", "Jährlich"],

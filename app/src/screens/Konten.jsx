@@ -52,15 +52,19 @@ export default function Konten({ accounts, categories, tags, people, balances, r
           const person = a.person ? byId(people, a.person, null) : null;
           // Virtuelle Unterkonten (Sparziele auf demselben echten Konto, s.
           // accounts.parent_account) werden eingerueckt direkt darunter
-          // gruppiert, mit einer zusaetzlichen kombinierten Saldo-Zeile fuer
-          // den Abgleich mit dem tatsaechlichen Bank-Kontostand. Bei vielen
-          // Toepfen liesse sich die Liste sonst schnell unuebersichtlich -
-          // die Gruppe laesst sich deshalb ueber die Summenzeile einklappen,
-          // gleiches Klapp-Muster wie "Sparquote pro Monat" in Auswertung.jsx.
+          // gruppiert. Das Konto selbst zeigt immer den kombinierten Saldo
+          // (eigener Saldo + Summe der Toepfe) - das ist der Betrag, der
+          // tatsaechlich auf dem Bankkonto liegt, eine separate Zeile dafuer
+          // war auf Nutzerwunsch redundant und erforderte erst ein Aufklappen.
+          // Bei vielen Toepfen liesse sich die Liste sonst trotzdem schnell
+          // unuebersichtlich - die Gruppe laesst sich deshalb ueber eine
+          // eigene Klapp-Zeile ein-/ausblenden, gleiches Klapp-Muster wie
+          // "Sparquote pro Monat" in Auswertung.jsx.
           const children = accounts.filter((c) => c.parent_account === a.id);
           const combined = children.length > 0
             ? (balances[a.id] ?? 0) + children.reduce((s, c) => s + (balances[c.id] ?? 0), 0)
             : null;
+          const shown = combined ?? balances[a.id] ?? 0;
           const expanded = !collapsedParents.has(a.id);
           return (
             <Fragment key={a.id}>
@@ -76,7 +80,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
                   </span>
                 </span>
                 <span className={`text-sm font-medium tabular-nums ${
-                  (balances[a.id] ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(balances[a.id] ?? 0)}</span>
+                  shown < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(shown)}</span>
                 <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
               </button>
               {combined !== null && (
@@ -85,10 +89,8 @@ export default function Konten({ accounts, categories, tags, people, balances, r
                   <ChevronRight size={13}
                     className={`text-stone-400 dark:text-stone-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
                   <span className="flex-1 min-w-0 text-xs text-stone-500 dark:text-stone-400">
-                    {children.length} {children.length === 1 ? "Topf" : "Töpfe"} · {a.name} + Töpfe (Bank-Kontostand)
+                    {children.length} {children.length === 1 ? "Topf" : "Töpfe"} {expanded ? "ausblenden" : "anzeigen"}
                   </span>
-                  <span className={`text-xs font-medium tabular-nums ${
-                    combined < 0 ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>{eur(combined)}</span>
                 </button>
               )}
               {expanded && children.map((c) => {

@@ -50,6 +50,13 @@ export default function Buchungen({
   const forecast = isCurrentMonth && totalIncomeTarget > 0
     ? totalIncomeTarget - Math.max(avgExpense, expense)
     : null;
+  // Fuer den Banner-Text: nur bei laufendem Monat sinnvoll, deshalb an
+  // dieselbe isCurrentMonth-Bedingung wie forecast gekoppelt statt separat
+  // berechnet.
+  const today = new Date();
+  const daysLeft = isCurrentMonth
+    ? new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate()
+    : null;
 
   // Waehrend einer aktiven Suche ersetzt die flache Trefferliste (ueber die
   // komplette Historie, kontouebergreifend) die normale Monats-/Konto-Sicht
@@ -101,9 +108,7 @@ export default function Buchungen({
               ? <TrendingUp size={15} className="mt-0.5 shrink-0" />
               : <TrendingDown size={15} className="mt-0.5 shrink-0" />}
             <span>
-              Nach dem Durchschnitt der letzten Monate {forecast >= 0
-                ? <>reicht das Einkommen voraussichtlich, mit <strong>{eurAbs(forecast)}</strong> übrig.</>
-                : <>reicht das Einkommen voraussichtlich nicht — es fehlen etwa <strong>{eurAbs(forecast)}</strong>.</>}
+              <strong>{eurAbs(forecast)}</strong> {forecast >= 0 ? "übrig" : "fehlen"} · noch {daysLeft} {daysLeft === 1 ? "Tag" : "Tage"}
             </span>
           </div>
         </section>

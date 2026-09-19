@@ -55,21 +55,27 @@ ebenfalls kein neues Feature — ein normales Budget auf dem virtuellen Konto
 (`budgets.account` ist schon seit `0.25.0` Pflichtfeld) reicht dafür aus.
 
 **Kontenliste** (`Konten.jsx`) gruppiert Töpfe eingerückt unter ihrem realen
-Konto und zeigt zusätzlich eine kombinierte Saldo-Zeile (eigener Saldo + Summe
-der Töpfe) für den Abgleich mit dem tatsächlichen Bank-Kontostand — der reale
-Kontostand in der App weicht sonst legitim vom Bank-Saldo ab, sobald Geld in
-Töpfe aufgeteilt wurde. Löschsperre (`countChildAccounts` in `pb.js`, gleiches
-Prinzip wie `countByAccount`) verhindert das Löschen eines Kontos, solange
-noch Töpfe daran hängen.
+Konto. Das Konto selbst zeigt als seinen Betrag immer den **kombinierten
+Saldo** (eigener Saldo + Summe der Töpfe, Variable `shown`) statt nur seines
+eigenen — das entspricht dem, was tatsächlich auf dem Bankkonto liegt. Bis
+`0.33.0` stand hier nur der eigene (durch die Aufteilung meist kleine oder
+0-)Saldo, der tatsächliche Kontostand war erst nach Aufklappen der Töpfe in
+einer separaten Zeile sichtbar — auf Nutzerwunsch ab `0.33.1` korrigiert,
+da man sonst fälschlich einen viel niedrigeren Kontostand ablas als real
+vorhanden. Löschsperre (`countChildAccounts` in `pb.js`, gleiches Prinzip wie
+`countByAccount`) verhindert das Löschen eines Kontos, solange noch Töpfe
+daran hängen.
 
 **Töpfe-Gruppe einklappbar** (`collapsedParents`-Set in `Konten.jsx`, Default
-alle aufgeklappt): die kombinierte Saldo-Zeile ist selbst der Klapp-Auslöser
-(Klick togglet, `ChevronRight` rotiert 90°), gleiches Muster wie "Sparquote
-pro Monat" in `Auswertung.jsx`. Auf Nutzerwunsch, nachdem mehrere Töpfe pro
-Konto die Liste sonst schnell überladen wirken ließen. Bewusst nicht
-persistiert (kein `localStorage`, kein Server-Feld) — reine, unkritische
-UI-Bequemlichkeit wie `catsExpanded` im selben Screen, ein Reset beim
-Neuladen ist kein Problem.
+alle aufgeklappt): eine eigene Klapp-Zeile unter dem Konto ("N Töpfe
+ein-/ausblenden", Klick togglet, `ChevronRight` rotiert 90°) blendet nur noch
+die Topf-Liste selbst ein/aus, ohne dabei — anders als bis `0.33.0` — einen
+zweiten, redundanten Betrag neben den kombinierten Saldo zu stellen. Gleiches
+Klapp-Muster wie "Sparquote pro Monat" in `Auswertung.jsx`. Auf Nutzerwunsch,
+nachdem mehrere Töpfe pro Konto die Liste sonst schnell überladen wirken
+ließen. Bewusst nicht persistiert (kein `localStorage`, kein Server-Feld) —
+reine, unkritische UI-Bequemlichkeit wie `catsExpanded` im selben Screen, ein
+Reset beim Neuladen ist kein Problem.
 
 **Frei wählbares Konto-Icon** (`accounts.icon`, optional, ebenfalls
 `0.33.0`): bisher hing das Icon eines Kontos starr am `type`
