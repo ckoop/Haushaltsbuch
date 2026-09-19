@@ -15,11 +15,11 @@ Vorspann-Zeilen, alles wird erkannt.
 
 | Buchungen | Auswertung |
 |---|---|
-| ![Buchungen](docs/screenshots/buchungen.png) | ![Auswertung](docs/screenshots/auswertung.png?v=2) |
+| ![Buchungen](docs/screenshots/buchungen.png?v=2) | ![Auswertung](docs/screenshots/auswertung.png?v=3) |
 
 | Budgets | Konten & Kategorien |
 |---|---|
-| ![Budgets](docs/screenshots/budgets.png) | ![Konten](docs/screenshots/konten.png) |
+| ![Budgets](docs/screenshots/budgets.png?v=2) | ![Konten](docs/screenshots/konten.png?v=2) |
 
 ## Funktionen
 
@@ -32,8 +32,12 @@ Vorspann-Zeilen, alles wird erkannt.
 - **Kategorien** — frei im UI verwaltbar, mit Icons und Farben.
 - **Tags** — freie, mehrfache Zusatz-Kennzeichnung quer zur Kategorie (z. B.
   "Nebenkosten" auf einer als "Abos" kategorisierten Buchung).
-- **Budgets pro Kategorie**, mit Warnhinweis für Buchungen ohne Kategorie —
-  die sonst unsichtbar aus jeder Budgetrechnung herausfallen würden.
+- **Budgets pro Konto und Kategorie**, mit Warnhinweis für Buchungen ohne
+  Kategorie — die sonst unsichtbar aus jeder Budgetrechnung herausfallen würden.
+- **Virtuelle Unterkonten** — ein Konto (z. B. ein Sparkonto) lässt sich in
+  mehrere Töpfe aufteilen, etwa wenn die Bank keine weiteren Sparkonten
+  erlaubt, aber mehrere Sparziele getrennt verfolgt werden sollen. Eigenes,
+  frei wählbares Icon je Konto/Topf statt nur dem festen Kontotyp-Symbol.
 - **Auswertung** mit Drilldown: Kategorie oder Tag anklicken zeigt die
   zugrunde liegenden Buchungen, direkt bearbeitbar.
 - **Jahresansicht** — Einnahmen und Ausgaben im Monatsvergleich, Sparquote,
