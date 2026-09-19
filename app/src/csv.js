@@ -153,6 +153,45 @@ export function parseAmountCents(value, decimalComma) {
   return Math.round(n * 100) * (negative ? -1 : 1);
 }
 
+// --------------------------------------------------- Kontostand im Vorspann
+
+// Manche Bank-Exporte tragen den aktuellen Kontostand als eigene Zeile im
+// Vorspann vor der echten Kopfzeile (z. B. "Kontostand am 19.09.2026";
+// "1.201,90 EUR"). Rein informativ fuer den Sanity-Check in Import.jsx.
+// Bewusst keine feste Zeilen-/Spaltenposition (z. B. "immer Zelle B3") -
+// die Bank hat allein in einem Monat schon zwei unterschiedliche
+// Export-Varianten geliefert, eine feste Position wuerde beim naechsten
+// Formatwechsel still und leise den falschen Wert lesen. Stattdessen
+// Textsuche nach einem Kontostand-Label in derselben Zeile wie ein Betrag.
+const BALANCE_LABEL = /kontostand|saldo/i;
+
+function looksLikeAmountCell(s, decimalComma) {
+  const t = (s ?? "").trim();
+  if (!t) return false;
+  if (/^\d{1,2}[./]\d{1,2}[./]\d{2,4}$/.test(t)) return false; // Datum, kein Betrag
+  const re = decimalComma
+    ? /^[+-]?[\d.]+,\d{2}\s*(€|EUR)?-?$/
+    : /^[+-]?[\d,]+\.\d{2}\s*(€|EUR)?-?$/;
+  return re.test(t);
+}
+
+export function findStatementBalance(rows, headerIndex, decimalComma) {
+  for (let i = 0; i < headerIndex; i++) {
+    const cells = rows[i] ?? [];
+    if (!cells.some((c) => BALANCE_LABEL.test(c))) continue;
+    for (const c of cells) {
+      if (BALANCE_LABEL.test(c) || !looksLikeAmountCell(c, decimalComma)) continue;
+      // parseAmountCents entfernt nur das Symbol "€", nicht das ausgeschriebene
+      // "EUR" - das kommt in Kontostand-Zeilen haeufiger vor als in der
+      // eigentlichen Betragsspalte, deshalb hier lokal mit abschneiden statt
+      // parseAmountCents selbst (und damit den Haupt-Importpfad) anzufassen.
+      const cents = parseAmountCents(c.replace(/\s*EUR$/i, ""), decimalComma);
+      if (cents !== null) return cents;
+    }
+  }
+  return null;
+}
+
 // ------------------------------------------------------------ Zeilen bauen
 
 export function buildRows(rows, headerIndex, mapping, opts) {

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   hashRow, decodeFile, looksMisdecoded, parseCsv, findHeaderRow, guessDelimiter,
   guessMapping, parseDate, parseAmountCents, buildRows, applyRules, delimChar,
+  findStatementBalance,
 } from "./csv.js";
 
 describe("hashRow", () => {
@@ -276,5 +277,56 @@ describe("applyRules", () => {
     const rulesOhneTags = [{ pattern: "rewe", category: "cat-lebensmittel" }];
     expect(applyRules({ payee: "Rewe", purpose: "" }, rulesOhneTags))
       .toEqual({ category: "cat-lebensmittel", tags: [] });
+  });
+});
+
+describe("findStatementBalance", () => {
+  it("findet den Kontostand in einer Vorspann-Zeile (Label und Betrag getrennt)", () => {
+    const rows = [
+      ["Kontostand am 15.03.2026", "2.345,67 EUR"],
+      ["Buchungstag", "Betrag", "Empfänger"],
+      ["15.03.2026", "-10,00", "Test"],
+    ];
+    expect(findStatementBalance(rows, 1, true)).toBe(234567);
+  });
+
+  it("erkennt auch 'Saldo' als Label und einen negativen Betrag", () => {
+    const rows = [
+      ["Saldo", "-88,12 €"],
+      ["Datum", "Betrag"],
+    ];
+    expect(findStatementBalance(rows, 1, true)).toBe(-8812);
+  });
+
+  it("verwechselt ein Datum in derselben Zeile nicht mit dem Betrag", () => {
+    const rows = [
+      ["Kontostand am 15.03.2026", "2.345,67 EUR"],
+      ["Datum", "Betrag"],
+    ];
+    expect(findStatementBalance(rows, 1, true)).toBe(234567);
+  });
+
+  it("gibt null zurück, wenn keine Kontostand-Zeile im Vorspann vorkommt", () => {
+    const rows = [
+      ["Buchungstag", "Betrag", "Empfänger"],
+      ["15.03.2026", "-10,00", "Test"],
+    ];
+    expect(findStatementBalance(rows, 0, true)).toBeNull();
+  });
+
+  it("berücksichtigt nur Zeilen vor der Kopfzeile", () => {
+    const rows = [
+      ["Buchungstag", "Betrag", "Empfänger"],
+      ["15.03.2026", "-10,00", "Kontostand-Auszug"],
+    ];
+    expect(findStatementBalance(rows, 1, true)).toBeNull();
+  });
+
+  it("respektiert das Dezimaltrennzeichen (Punkt statt Komma)", () => {
+    const rows = [
+      ["Kontostand", "2345.67"],
+      ["Date", "Amount"],
+    ];
+    expect(findStatementBalance(rows, 1, false)).toBe(234567);
   });
 });

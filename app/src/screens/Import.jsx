@@ -30,6 +30,10 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
   const [rows, setRows] = useState([]);
   const [headerIndex, setHeaderIndex] = useState(0);
   const [known, setKnown] = useState(new Set());
+  const [possibleDupes, setPossibleDupes] = useState(new Set());
+  const [excluded, setExcluded] = useState(new Set());
+  const [statementBalance, setStatementBalance] = useState(null);
+  const [balanceBefore, setBalanceBefore] = useState(null);
   const [progress, setProgress] = useState(null);
   // Manuelle Zuordnung fuer Zeilen ohne Regel-Treffer, je Zeilen-Hash:
   // { category, saveRule }. saveRule legt beim Import zusaetzlich eine
@@ -97,12 +101,40 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       const built = csv.buildRows(parsed, headerIndex, mapping, opts);
       const good = built.filter((r) => r.ok);
       setKnown(await api.existingHashes(good.map((r) => r.hash)));
+      // Weicher Zusatz-Check zum exakten Hash-Vergleich oben: derselbe
+      // Bank-Umsatz kann je nach Export-Format unterschiedlichen
+      // Empfaenger-/Zwecktext haben, dann greift der Hash-Vergleich nicht
+      // (siehe CLAUDE.md/pb.js). Datum+Betrag allein sind stabiler, deshalb
+      // hier nur als Warnhinweis, nicht als automatischer Ausschluss.
+      if (good.length > 0) {
+        const dates = good.map((r) => r.date).sort();
+        setPossibleDupes(await api.existingByDateAmount(account, dates[0], dates[dates.length - 1]));
+
+        // Kontostand-Sanity-Check: manche Bank-Exporte nennen im Vorspann den
+        // aktuellen Kontostand. Falls gefunden, wird er hier schon mit dem
+        // App-Saldo *vor* dem Import verglichen (der Saldo *nach* Import
+        // haengt von den Nutzer-Abwahlen in der Vorschau ab und wird deshalb
+        // erst dort beim Rendern dazugerechnet, s. `toImport`).
+        const stmt = csv.findStatementBalance(parsed, headerIndex, opts.decimal_comma);
+        if (stmt !== null) {
+          setStatementBalance(stmt);
+          setBalanceBefore(await api.accountBalanceAsOf(account, dates[dates.length - 1]));
+        } else {
+          setStatementBalance(null);
+          setBalanceBefore(null);
+        }
+      } else {
+        setPossibleDupes(new Set());
+        setStatementBalance(null);
+        setBalanceBefore(null);
+      }
       setRows(built.map((r) => {
         if (!r.ok) return r;
         const matched = csv.applyRules(r, rules);
         return { ...r, category: matched?.category ?? "", tags: matched?.tags ?? [] };
       }));
       setManualCats({});
+      setExcluded(new Set());
       setStep(2);
     } catch (e) { setError(e); }
     finally { setBusy(false); }
@@ -113,7 +145,17 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
   const good = rows.filter((r) => r.ok);
   const bad = rows.filter((r) => !r.ok);
   const dupes = good.filter((r) => known.has(r.hash));
-  const fresh = good.filter((r) => !known.has(r.hash));
+  const fresh = good.filter((r) => !known.has(r.hash)).map((r) => ({
+    ...r, possibleDupe: possibleDupes.has(`${r.date}|${r.cents}`),
+  }));
+  const toImport = fresh.filter((r) => !excluded.has(r.hash));
+
+  const balanceAfter = balanceBefore !== null
+    ? balanceBefore + toImport.reduce((s, r) => s + r.cents, 0)
+    : null;
+  const balanceDiff = statementBalance !== null && balanceAfter !== null
+    ? statementBalance - balanceAfter
+    : null;
 
   const catOf = (r) => r.category || manualCats[r.hash]?.category || "";
 
@@ -121,11 +163,11 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
     setBusy(true); setError(null);
     try {
       const run = await api.createImportRun({
-        account, filename: file?.name ?? "", row_count: fresh.length,
-        skipped_count: dupes.length + bad.length,
+        account, filename: file?.name ?? "", row_count: toImport.length,
+        skipped_count: dupes.length + bad.length + excluded.size,
       });
       await api.batchCreateTransactions(
-        fresh.map((r) => ({
+        toImport.map((r) => ({
           date: r.date, type: "tx", account,
           category: catOf(r) || undefined,
           // Tags kommen ausschliesslich aus einer automatisch getroffenen
@@ -145,14 +187,14 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       // hoechstens eine Regel anlegen, auch wenn mehrere Zeilen denselben
       // Empfaenger haben.
       const newRules = new Map();
-      for (const r of fresh) {
+      for (const r of toImport) {
         const m = manualCats[r.hash];
         const pattern = r.payee?.trim();
         if (m?.saveRule && m.category && pattern) newRules.set(pattern.toLowerCase(), { pattern, category: m.category });
       }
       for (const rule of newRules.values()) await api.saveRule(rule);
 
-      flash(`${fresh.length} Buchungen importiert`
+      flash(`${toImport.length} Buchungen importiert`
         + (newRules.size > 0 ? `, ${newRules.size} ${newRules.size === 1 ? "Regel" : "Regeln"} angelegt` : ""));
       onBack();
     } catch (e) { setError(e); setProgress(null); }
@@ -337,10 +379,27 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       {step === 2 && (
         <>
           <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-            <Stat n={fresh.length} label="neu" tone="text-emerald-700 dark:text-emerald-400" />
+            <Stat n={toImport.length} label="neu" tone="text-emerald-700 dark:text-emerald-400" />
             <Stat n={dupes.length} label="schon da" tone="text-stone-500 dark:text-stone-400" />
             <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600 dark:text-red-400" : "text-stone-400 dark:text-stone-500"} />
           </div>
+
+          {statementBalance !== null && (
+            balanceDiff === 0 ? (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-3 flex items-start gap-1.5">
+                <Check size={13} className="mt-0.5 shrink-0" />
+                Kontostand laut Bank-Export ({eur(statementBalance)}) stimmt mit dem Kontostand nach
+                diesem Import überein.
+              </p>
+            ) : (
+              <p className="text-xs text-red-600 dark:text-red-400 mb-3 flex items-start gap-1.5">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                Kontostand laut Bank-Export: {eur(statementBalance)} · nach diesem Import voraussichtlich:{" "}
+                {eur(balanceAfter)} · Differenz: {eur(balanceDiff)}. Kann an fehlenden, doppelten oder noch
+                nicht exportierten Buchungen liegen — kein automatischer Abbruch, aber einen Blick wert.
+              </p>
+            )
+          )}
 
           {dupes.length > 0 && (
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
@@ -362,21 +421,40 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
               einzeln angelegt, unten mit „evtl. doppelt" markiert. Prüf sie kurz, falls das nicht stimmen kann.
             </p>
           )}
+          {fresh.some((r) => r.possibleDupe) && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              {fresh.filter((r) => r.possibleDupe).length} Buchungen haben Datum und Betrag wie eine
+              bereits vorhandene Buchung auf diesem Konto, aber anderen Empfänger-/Zwecktext — evtl.
+              derselbe Umsatz aus einem anders formatierten Export (z. B. gekürzter Empfängername).
+              Unten mit „evtl. schon vorhanden" markiert, abwählbar.
+            </p>
+          )}
 
           <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-4 max-h-96 overflow-y-auto">
             {fresh.map((r, i) => {
               const manual = manualCats[r.hash];
+              const skip = excluded.has(r.hash);
               return (
-                <div key={i} className="px-3.5 py-2.5">
+                <div key={i} className={`px-3.5 py-2.5 ${skip ? "opacity-50" : ""}`}>
                   <div className="flex items-center gap-3">
+                    {r.possibleDupe && (
+                      <input type="checkbox" checked={!skip} title="Diese Buchung importieren"
+                        onChange={(e) => setExcluded((s) => {
+                          const next = new Set(s);
+                          if (e.target.checked) next.delete(r.hash); else next.add(r.hash);
+                          return next;
+                        })} />
+                    )}
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm truncate">{r.payee || r.purpose || "—"}</span>
                       <span className={`block text-xs truncate ${
-                        r.batchDupeCount > 1 ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
+                        r.batchDupeCount > 1 || r.possibleDupe ? "text-amber-700 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"}`}>
                         {new Date(r.date + "T12:00:00").toLocaleDateString("de-DE")}
                         {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
                         {r.tags?.length > 0 && ` · ${r.tags.map((id) => byId(tags, id, UNKNOWN_TAG).name).join(", ")}`}
                         {r.batchDupeCount > 1 && " · evtl. doppelt"}
+                        {r.possibleDupe && " · evtl. schon vorhanden"}
                       </span>
                     </span>
                     <span className={`text-sm font-medium tabular-nums ${
@@ -416,8 +494,8 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
             </p>
           )}
 
-          <Button onClick={runImport} disabled={busy || fresh.length === 0} className="w-full">
-            {busy ? "Importiere …" : `${fresh.length} Buchungen importieren`}
+          <Button onClick={runImport} disabled={busy || toImport.length === 0} className="w-full">
+            {busy ? "Importiere …" : `${toImport.length} Buchungen importieren`}
           </Button>
           <Button variant="ghost" onClick={() => setStep(1)} disabled={busy} className="w-full mt-2">
             Zurück zur Zuordnung

@@ -387,6 +387,48 @@ export async function existingHashes(hashes) {
   return found;
 }
 
+// Weicher Duplikat-Check gegen den exakten Hash-Vergleich oben: derselbe
+// Bank-Umsatz kann in zwei Export-Formaten unterschiedlich formatierten
+// Empfaenger-/Zwecktext haben ("Supermarkt XY Filiale 123" vs. "Supermarkt XY") - dann
+// weicht der Hash ab und existingHashes() erkennt die Dublette nicht. Datum
+// und Betrag allein sind dagegen stabil, deshalb hier als reiner Hinweis
+// (nicht blockierend, siehe Import.jsx) fuer alle Buchungen im Datumsbereich
+// der Datei auf dem Zielkonto.
+export async function existingByDateAmount(account, minDate, maxDate) {
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter("account = {:account} && date >= {:min} && date <= {:max}", {
+      account, min: minDate, max: `${maxDate} 23:59:59`,
+    }),
+    fields: "date,amount_cents",
+  });
+  return new Set(rows.map((r) => `${r.date.slice(0, 10)}|${r.amount_cents}`));
+}
+
+// Kontostand eines Kontos zu einem Stichtag, fuer den Kontostand-Sanity-Check
+// beim CSV-Import (Import.jsx) - dieselbe Formel wie `balances` in App.jsx
+// (Anfangssaldo + alle Buchungen bis zu diesem Datum, Umbuchungen richtig
+// verrechnet), nur als eigener Request statt aus dem schon geladenen
+// App-weiten State, weil Import.jsx dessen "running"-Liste nicht haelt.
+export async function accountBalanceAsOf(accountId, throughDate) {
+  const acc = await pb.collection("accounts").getOne(accountId, { fields: "start_cents" });
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter("date <= {:end} && (account = {:id} || to_account = {:id})", {
+      end: `${throughDate} 23:59:59`, id: accountId,
+    }),
+    fields: "type,account,to_account,amount_cents",
+  });
+  let b = acc.start_cents ?? 0;
+  for (const t of rows) {
+    if (t.type === "transfer") {
+      if (t.account === accountId) b -= t.amount_cents;
+      if (t.to_account === accountId) b += t.amount_cents;
+    } else if (t.account === accountId) {
+      b += t.amount_cents;
+    }
+  }
+  return b;
+}
+
 // PocketBase kann mehrere Schreibvorgaenge in einer Anfrage buendeln.
 export async function batchCreateTransactions(rows, onProgress) {
   let done = 0;
