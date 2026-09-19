@@ -317,6 +317,36 @@ PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
 
+**`accounts.parent_account` (ab `0.33.0`): virtuelle Unterkonten.** Macht ein
+Konto zu einem virtuellen Topf eines anderen (realen) Kontos — z. B. mehrere
+Sparziele auf einem einzigen echten Sparkonto, wenn die Bank keine weiteren
+Sparkonten erlaubt. Self-Relation, nur eine Ebene, kein Sonderfall in der
+Saldo-Berechnung (eine Umbuchung vom realen Konto in einen Topf nettet sich
+in der Gesamtsumme automatisch zu 0). Die Töpfe-Gruppe eines Kontos lässt
+sich im Konten-Tab einklappen, wenn mehrere Töpfe die Liste unübersichtlich
+machen.
+
+**`accounts.icon` (ebenfalls ab `0.33.0`): frei wählbares Symbol je Konto**
+statt nur dem festen Typ-Icon (Girokonto/Bargeld/Sparen/Kreditkarte) — z. B.
+ein Auto-Symbol für einen "Auto"-Topf oder ein Sonnenschirm für "Urlaub".
+Optionales Text-Feld, leer = weiterhin das bisherige Typ-Icon. Alle Symbole
+kommen aus der ohnehin schon eingebundenen Bibliothek `lucide-react`, keine
+neue Abhängigkeit und keine Bilddateien nötig.
+
+Anders als bei `recurring`/`rules.tags` oben braucht es für beide Felder
+**keine manuelle Admin-UI-Klickerei**: `setup/schema.mjs` patcht sie als
+eigenen idempotenten Schritt direkt nach dem Anlegen von `accounts` — bei
+`parent_account` (Self-Relation) zwingend so, weil die eigene Collection-ID
+erst nach dem Anlegen der Sammlung bekannt ist; `icon` läuft aus Bequemlichkeit
+gleich mit demselben Schritt mit. Lässt sich genau wie eine neue Sammlung per
+erneutem Skriptlauf nachziehen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/schema.mjs
+```
+
 ## Umgebungen: Entwicklung vs. Produktion
 
 Zwei getrennte Instanzen, nicht zu verwechseln:

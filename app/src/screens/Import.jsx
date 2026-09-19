@@ -9,6 +9,10 @@ import {
 const STEPS = ["Datei", "Zuordnung", "Vorschau"];
 
 export default function Import({ accounts, categories, tags, onBack, flash }) {
+  // Ein Bank-Export landet immer auf einem echten Konto, nie auf einem
+  // virtuellen Unterkonto (Sparziel) - das kennt die Bank gar nicht.
+  const realAccounts = accounts.filter((a) => !a.parent_account);
+
   const [step, setStep] = useState(0);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -26,7 +30,7 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
   const [mapping, setMapping] = useState({
     col_date: "", col_amount: "", col_payee: "", col_purpose: "", col_reference: "",
   });
-  const [account, setAccount] = useState(accounts[0]?.id ?? "");
+  const [account, setAccount] = useState(realAccounts[0]?.id ?? "");
   const [rows, setRows] = useState([]);
   const [headerIndex, setHeaderIndex] = useState(0);
   const [known, setKnown] = useState(new Set());
@@ -118,7 +122,17 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
         const stmt = csv.findStatementBalance(parsed, headerIndex, opts.decimal_comma);
         if (stmt !== null) {
           setStatementBalance(stmt);
-          setBalanceBefore(await api.accountBalanceAsOf(account, dates[dates.length - 1]));
+          // Hat das Zielkonto virtuelle Unterkonten (Sparziele, s.
+          // accounts.parent_account), zaehlt fuer den Abgleich mit dem
+          // Bank-Kontostand deren Saldo mit - der Bank ist die interne
+          // Aufteilung in Toepfe egal, sie sieht nur den einen Kontostand.
+          const asOf = dates[dates.length - 1];
+          const children = await api.listChildAccounts(account);
+          const ownAndChildren = [account, ...children.map((c) => c.id)];
+          const balances = await Promise.all(
+            ownAndChildren.map((id) => api.accountBalanceAsOf(id, asOf))
+          );
+          setBalanceBefore(balances.reduce((s, b) => s + b, 0));
         } else {
           setStatementBalance(null);
           setBalanceBefore(null);
@@ -366,7 +380,7 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
 
           <Field label="Auf welches Konto?">
             <select className={inputCls} value={account} onChange={(e) => setAccount(e.target.value)}>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {realAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </Field>
 

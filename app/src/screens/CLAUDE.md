@@ -28,6 +28,85 @@ Bewusst **kein** automatisches Auslesen aus den Buchungen als alleinige Quelle: 
 
 **Mehrere benannte Posten statt einem Gesamtbetrag** (ab `0.26.0`, auf Nutzerwunsch — Einnahmen setzen sich oft aus mehreren Quellen zusammen, z. B. "Gehalt" und "Nebenmieteinnahmen"). `income_targets` bekam dafür ein neues Feld `label` (freier Text, keine feste Werteliste — die vom Nutzer genannten Beispiele "Gehalt"/"Nebenmieteinnahmen" sind Beispiele, keine feste Kategorisierung, ein starres Auswahlfeld hätte hier nur unnötig eingeschränkt) und verlor seinen Unique-Index auf `month` allein (jetzt ein normaler, nicht-eindeutiger Index — mehrere Zeilen pro Monat/Dauer-Eintrag sind der Zweck der Änderung). `Budgets.jsx` zeigt die Posten als Liste mit je einem Beschriftungs- und einem Betragsfeld (`IncomeRow`), "Einnahme hinzufügen" legt eine neue, zunächst nur lokale Zeile an (`id: null`), die erst beim ersten `onBlur` mit Betrag > 0 tatsächlich angelegt wird (`api.createIncomeEntry()`) — eine leere hinzugefügte Zeile ohne Betrag hinterlässt also keine Karteileiche. Jede Zeilenänderung/-löschung ruft wie die Kategorie-Budgets `reload()`, der volle `App.jsx`-`load()`-Zyklus — dieselbe bekannte Abwägung wie überall sonst im Screen (kurzzeitiges Unmounten, siehe Abschnitt "Regeln" unten zur `reloadTags()`-Ausnahme): eine zweite, noch unbestätigte neue Leerzeile kann dadurch verschwinden, wenn zwischenzeitlich eine andere Zeile gespeichert wird. Bewusst nicht dagegen abgesichert — kein Datenverlust (nichts davon war gespeichert), nur eine seltene Unannehmlichkeit beim gleichzeitigen Anlegen mehrerer neuer Posten, eine Absicherung dagegen hätte den Screen unverhältnismäßig verkompliziert. Bereits bestehende Einnahmenziele aus der Zeit vor `0.26.0` behalten ihren Betrag und laufen als ein Posten mit leerem Label weiter.
 
+## Virtuelle Unterkonten (`accounts.parent_account`, ab `0.33.0`)
+
+Löst ein konkretes Limit auf: nur zwei Sparkonten bei der Bank, aber mehrere
+getrennt verfolgte Sparziele gewünscht (z. B. "Auto-Rücklage" und
+"Kurzfristige Investitionen" auf demselben Sparkonto). `accounts.parent_account`
+ist eine optionale Self-Relation — gesetzt, macht sie ein Konto zu einem
+virtuellen Topf eines anderen (realen) Kontos. Bewusst nur eine Ebene, im
+Konto-Editor (`Konten.jsx`, `AccountEditor`) ist als "Übergeordnetes Konto"
+deshalb nur wählbar, was selbst kein `parent_account` hat.
+
+**Kein Sonderfall in der Saldo-Logik**: ein virtuelles Konto ist eine ganz
+normale Zeile in `accounts`, `balances` in `App.jsx` behandelt es wie jedes
+andere Konto. Eine Umbuchung vom realen Konto in einen Topf (`type=transfer`)
+nettet sich in `balances.alle` automatisch zu 0 — Abfluss beim einen, Zufluss
+beim anderen. Der reale Ablauf: eine Bank-Überweisung landet als normale
+Umbuchung auf dem realen Konto (entspricht 1:1 dem Kontoauszug), das
+Aufteilen auf die Töpfe passiert danach über zusätzliche, rein App-interne
+Umbuchungen ohne Bank-Entsprechung.
+
+Bewusst **keine direkten Ausgaben/Einnahmen auf einem Topf** — Töpfe sind
+reine Umbuchungsziele, eine tatsächliche Ausgabe läuft immer über ein echtes
+Konto (Geld kommt bei Bedarf per Umbuchung zurück). Vermeidet dadurch jeden
+Sonderfall in `Auswertung.jsx`/`spentByCat`. Ein Sparziel je Topf braucht
+ebenfalls kein neues Feature — ein normales Budget auf dem virtuellen Konto
+(`budgets.account` ist schon seit `0.25.0` Pflichtfeld) reicht dafür aus.
+
+**Kontenliste** (`Konten.jsx`) gruppiert Töpfe eingerückt unter ihrem realen
+Konto und zeigt zusätzlich eine kombinierte Saldo-Zeile (eigener Saldo + Summe
+der Töpfe) für den Abgleich mit dem tatsächlichen Bank-Kontostand — der reale
+Kontostand in der App weicht sonst legitim vom Bank-Saldo ab, sobald Geld in
+Töpfe aufgeteilt wurde. Löschsperre (`countChildAccounts` in `pb.js`, gleiches
+Prinzip wie `countByAccount`) verhindert das Löschen eines Kontos, solange
+noch Töpfe daran hängen.
+
+**Töpfe-Gruppe einklappbar** (`collapsedParents`-Set in `Konten.jsx`, Default
+alle aufgeklappt): die kombinierte Saldo-Zeile ist selbst der Klapp-Auslöser
+(Klick togglet, `ChevronRight` rotiert 90°), gleiches Muster wie "Sparquote
+pro Monat" in `Auswertung.jsx`. Auf Nutzerwunsch, nachdem mehrere Töpfe pro
+Konto die Liste sonst schnell überladen wirken ließen. Bewusst nicht
+persistiert (kein `localStorage`, kein Server-Feld) — reine, unkritische
+UI-Bequemlichkeit wie `catsExpanded` im selben Screen, ein Reset beim
+Neuladen ist kein Problem.
+
+**Frei wählbares Konto-Icon** (`accounts.icon`, optional, ebenfalls
+`0.33.0`): bisher hing das Icon eines Kontos starr am `type`
+(Girokonto/Bargeld/Sparen/Kreditkarte, `typeIcon()` in `ui.jsx`) — bei
+mehreren Töpfen auf einem Sparkonto sehen die dadurch alle gleich aus
+(Sparschwein), obwohl "Auto" und "Urlaub" inhaltlich nichts miteinander zu
+tun haben. `ACCOUNT_ICONS` in `ui.jsx` ist eine zweite, von `CAT_ICONS`
+unabhängige Icon-Auswahl (darf sich mit ihr überschneiden, z. B. `car`),
+`accountIcon(a)` liefert das gewählte Icon oder fällt ohne gesetztes
+`a.icon` auf `typeIcon(a.type)` zurück — bestehende Konten sehen dadurch
+unverändert aus. Editor-seitig ein Auswahlraster wie bei Kategorien
+(`ACCOUNT_ICON_KEYS`, `accountIconByKey()`), zusätzlich eine erste Kachel
+"Standard (Typ-Symbol)" um das Icon wieder auf `""` zurückzusetzen. Alle
+Symbole kommen aus der schon vorhandenen `lucide-react`-Bibliothek (u. a.
+`Umbrella`, `Palmtree`, `TrendingUp`, `Target`, `GraduationCap`, `Coins` neu
+importiert) — kein Icon-Download, keine neue Abhängigkeit. `accountIcon()`
+ersetzt `typeIcon(a.type)` überall, wo ein Konto mit Icon auftaucht, nicht
+nur in der Kontenliste: `AccChipRow` (Konto-Chips in Buchungen/Budgets) und
+`AccountPicker` (Konto-Auswahl bei Buchung/Umbuchung/Dauerauftrag) in
+`ui.jsx`.
+
+**CSV-Import** (`Import.jsx`): die Konto-Auswahl zeigt Töpfe nicht an
+(`realAccounts = accounts.filter(a => !a.parent_account)`) — ein Bank-Export
+landet immer auf einem echten Konto. Der seit `0.32.0` bestehende
+Kontostand-Sanity-Check zählt die Töpfe des gewählten Zielkontos mit ein
+(`api.listChildAccounts()` + Summe der einzelnen `accountBalanceAsOf()`-Werte),
+sonst schlägt der Hinweis nach dem Aufteilen in Töpfe ständig fälschlich an.
+
+`setup/schema.mjs` patcht `accounts.parent_account` als eigenen, idempotenten
+Schritt direkt nach dem Anlegen der `accounts`-Sammlung, statt wie sonst bei
+nachträglichen Feldern (`accounts.person`, `transactions.recurring`, …)
+manuelle Admin-UI-Klickerei zu verlangen — eine Self-Relation kennt ihre
+eigene Collection-ID erst, nachdem die Sammlung existiert, ein Patch-Schritt
+nach `ensure()` funktioniert deshalb sowohl bei einer Neuinstallation als auch
+auf einer schon laufenden Instanz gleichermaßen (einfach `node
+setup/schema.mjs` erneut ausführen).
+
 ## Personen (`people`, `accounts.person`)
 
 **Personen** (`people`, ab `0.23.0`) sind ein reines Label an Konten — kein eigener App-Login: verwaltet eine Person den ganzen Haushalt, braucht sie dafür kein zweites Nutzerkonto, das über `users`/`login()` (`pb.js`) laufen würde. Eigener Verwaltungsbereich "Personen" im Konten-Tab (`Konten.jsx`, `PersonEditor`, gleiches Muster wie `CategoryEditor`: anlegen, umbenennen, löschen), Löschen gesperrt, solange ein Konto noch über `accounts.person` darauf zeigt (`api.countAccountsByPerson`, gleiches Prinzip wie `countByAccount`/`countByCategory`). Das neue Feld `accounts.person` ist eine optionale Relation auf `people` — `setup/schema.mjs` legt sie nur bei einer Neuinstallation mit an (`ensure()` patcht keine Felder auf bereits existierenden Sammlungen), auf einer laufenden Instanz muss sie einmalig manuell in der PocketBase-Admin-Oberfläche ergänzt werden, wie schon bei `transactions.recurring`/`transactions.tags`. Bewusst noch kein Filter und keine Summe pro Person in `Buchungen.jsx`/`Auswertung.jsx` — nur die Kennzeichnung selbst, das war eine ausdrückliche Entscheidung, den Umfang klein zu halten.

@@ -66,8 +66,38 @@ const accountsId = await ensure({
     num("sort", { onlyInt: true }),
     bool("archived"),
     rel("person", peopleId),
+    text("icon", { max: 40 }),
   ],
 });
+
+// accounts.parent_account (virtuelle Unterkonten) und accounts.icon (frei
+// waehlbares Symbol statt nur dem Typ-Icon) als eigener, idempotenter
+// Patch-Schritt statt wie sonst bei nachtraeglichen Feldern manuelle
+// Admin-UI-Klickerei zu verlangen. parent_account ist eine Self-Relation und
+// kann deshalb nicht im obigen ensure()-Feldsatz stehen - die eigene
+// Collection-ID existiert zu dem Zeitpunkt noch nicht; "icon" koennte zwar
+// dort stehen, wird hier aber gleich mitgepatcht, damit eine schon
+// bestehende Instanz beide neuen Felder mit demselben Befehl bekommt.
+// Laeuft auf jeder Instanz gefahrlos erneut mit (ueberspringt Felder, die
+// schon existieren).
+{
+  const accounts = await pb.collections.getOne(accountsId);
+  let changed = false;
+  if (!accounts.fields.some((f) => f.name === "parent_account")) {
+    accounts.fields.push({
+      type: "relation", name: "parent_account", collectionId: accountsId,
+      maxSelect: 1, cascadeDelete: false,
+    });
+    changed = true;
+    console.log("+ accounts.parent_account Feld ergaenzt");
+  }
+  if (!accounts.fields.some((f) => f.name === "icon")) {
+    accounts.fields.push({ type: "text", name: "icon", max: 40 });
+    changed = true;
+    console.log("+ accounts.icon Feld ergaenzt");
+  }
+  if (changed) await pb.collections.update(accountsId, accounts);
+}
 
 const categoriesId = await ensure({
   name: "categories", type: "base", ...rules,

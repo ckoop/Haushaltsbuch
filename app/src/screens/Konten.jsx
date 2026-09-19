@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check, Repeat, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, eurAbs, typeIcon, ACCOUNT_TYPES, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
+  eur, eurAbs, typeIcon, accountIcon, accountIconByKey, ACCOUNT_TYPES, ACCOUNT_ICON_KEYS, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
   inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT, UNKNOWN_TAG,
   RECURRING, recurringLabel, todayISO,
 } from "../ui.jsx";
@@ -22,6 +22,15 @@ export default function Konten({ accounts, categories, tags, people, balances, r
   const [catsExpanded, setCatsExpanded] = useState(false);
   const [view, setView] = useState("liste");
   const [error, setError] = useState(null);
+  // Welche Konten mit Toepfen gerade eingeklappt sind (Set von Konto-IDs) -
+  // per Default alle aufgeklappt, sonst waeren frisch angelegte Toepfe nach
+  // dem Speichern erstmal unsichtbar.
+  const [collapsedParents, setCollapsedParents] = useState(new Set());
+  const toggleParent = (id) => setCollapsedParents((s) => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const loadRules = () => api.listRecurringRules().then(setRules).catch(setError);
   const loadAutoRules = () => api.listRules().then(setAutoRules).catch(setError);
@@ -38,25 +47,69 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       <ErrorNote error={error} />
 
       <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
-        {accounts.map((a) => {
-          const Icon = typeIcon(a.type);
+        {accounts.filter((a) => !a.parent_account).map((a) => {
+          const Icon = accountIcon(a);
           const person = a.person ? byId(people, a.person, null) : null;
+          // Virtuelle Unterkonten (Sparziele auf demselben echten Konto, s.
+          // accounts.parent_account) werden eingerueckt direkt darunter
+          // gruppiert, mit einer zusaetzlichen kombinierten Saldo-Zeile fuer
+          // den Abgleich mit dem tatsaechlichen Bank-Kontostand. Bei vielen
+          // Toepfen liesse sich die Liste sonst schnell unuebersichtlich -
+          // die Gruppe laesst sich deshalb ueber die Summenzeile einklappen,
+          // gleiches Klapp-Muster wie "Sparquote pro Monat" in Auswertung.jsx.
+          const children = accounts.filter((c) => c.parent_account === a.id);
+          const combined = children.length > 0
+            ? (balances[a.id] ?? 0) + children.reduce((s, c) => s + (balances[c.id] ?? 0), 0)
+            : null;
+          const expanded = !collapsedParents.has(a.id);
           return (
-            <button key={a.id} onClick={() => setEditing(a)}
-              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
-              <span className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-700 text-stone-500 dark:text-stone-400 flex items-center justify-center shrink-0">
-                <Icon size={17} />
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-sm truncate">{a.name}</span>
-                <span className="block text-xs text-stone-500 dark:text-stone-400 tabular-nums">
-                  Anfangssaldo {eur(a.start_cents ?? 0)}{person && ` · ${person.name}`}
+            <Fragment key={a.id}>
+              <button onClick={() => setEditing(a)}
+                className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+                <span className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-700 text-stone-500 dark:text-stone-400 flex items-center justify-center shrink-0">
+                  <Icon size={17} />
                 </span>
-              </span>
-              <span className={`text-sm font-medium tabular-nums ${
-                (balances[a.id] ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(balances[a.id] ?? 0)}</span>
-              <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
-            </button>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm truncate">{a.name}</span>
+                  <span className="block text-xs text-stone-500 dark:text-stone-400 tabular-nums">
+                    Anfangssaldo {eur(a.start_cents ?? 0)}{person && ` · ${person.name}`}
+                  </span>
+                </span>
+                <span className={`text-sm font-medium tabular-nums ${
+                  (balances[a.id] ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(balances[a.id] ?? 0)}</span>
+                <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
+              </button>
+              {combined !== null && (
+                <button onClick={() => toggleParent(a.id)}
+                  className="w-full flex items-center gap-2 pl-11 pr-3.5 py-2 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+                  <ChevronRight size={13}
+                    className={`text-stone-400 dark:text-stone-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                  <span className="flex-1 min-w-0 text-xs text-stone-500 dark:text-stone-400">
+                    {children.length} {children.length === 1 ? "Topf" : "Töpfe"} · {a.name} + Töpfe (Bank-Kontostand)
+                  </span>
+                  <span className={`text-xs font-medium tabular-nums ${
+                    combined < 0 ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>{eur(combined)}</span>
+                </button>
+              )}
+              {expanded && children.map((c) => {
+                const ChildIcon = accountIcon(c);
+                return (
+                  <button key={c.id} onClick={() => setEditing(c)}
+                    className="w-full flex items-center gap-3 pl-11 pr-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+                    <span className="w-8 h-8 rounded-full bg-stone-100 dark:bg-stone-700 text-stone-500 dark:text-stone-400 flex items-center justify-center shrink-0">
+                      <ChildIcon size={15} />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm truncate">{c.name}</span>
+                      <span className="block text-xs text-stone-500 dark:text-stone-400">Topf von {a.name}</span>
+                    </span>
+                    <span className={`text-sm font-medium tabular-nums ${
+                      (balances[c.id] ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(balances[c.id] ?? 0)}</span>
+                    <ChevronRight size={16} className="text-stone-300 dark:text-stone-600 shrink-0" />
+                  </button>
+                );
+              })}
+            </Fragment>
           );
         })}
         {accounts.length > 0 && (
@@ -73,7 +126,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       </div>
 
       <Button variant="ghost"
-        onClick={() => setEditing({ id: "", name: "", short: "", type: "giro", start_cents: 0, person: "" })}
+        onClick={() => setEditing({ id: "", name: "", short: "", type: "giro", start_cents: 0, person: "", parent_account: "", icon: "" })}
         className="w-full mt-3 flex items-center justify-center gap-2">
         <Plus size={16} /> Konto hinzufügen
       </Button>
@@ -241,7 +294,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       </button>
 
       {editing && (
-        <AccountEditor draft={editing} people={people} onClose={() => setEditing(null)}
+        <AccountEditor draft={editing} accounts={accounts} people={people} onClose={() => setEditing(null)}
           onSaved={(m) => { setEditing(null); flash(m); reload(); }}
           onError={setError} />
       )}
@@ -275,19 +328,28 @@ export default function Konten({ accounts, categories, tags, people, balances, r
   );
 }
 
-function AccountEditor({ draft, people, onClose, onSaved, onError }) {
+function AccountEditor({ draft, accounts, people, onClose, onSaved, onError }) {
   const isNew = !draft.id;
   const [name, setName] = useState(draft.name);
   const [type, setType] = useState(draft.type);
   const [start, setStart] = useState((draft.start_cents ?? 0) / 100);
   const [person, setPerson] = useState(draft.person ?? "");
+  const [parentAccount, setParentAccount] = useState(draft.parent_account ?? "");
+  const [icon, setIcon] = useState(draft.icon ?? "");
   const [usage, setUsage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  // Nur eine Ebene virtueller Unterkonten: als "Übergeordnetes Konto" waehlbar
+  // ist nur, was selbst kein eigenes hat (kein Topf im Topf), und nicht das
+  // gerade bearbeitete Konto selbst.
+  const possibleParents = accounts.filter((a) => a.id !== draft.id && !a.parent_account);
+
   useEffect(() => {
-    if (!isNew) Promise.all([api.countByAccount(draft.id), api.countRecurringRulesByAccount(draft.id)])
-      .then(([tx, rules]) => setUsage({ tx, rules }))
+    if (!isNew) Promise.all([
+      api.countByAccount(draft.id), api.countRecurringRulesByAccount(draft.id), api.countChildAccounts(draft.id),
+    ])
+      .then(([tx, rules, children]) => setUsage({ tx, rules, children }))
       .catch(() => setUsage(null));
   }, [draft.id, isNew]);
 
@@ -300,6 +362,8 @@ function AccountEditor({ draft, people, onClose, onSaved, onError }) {
         name: name.trim(), short: shortName(name), type,
         start_cents: Math.round((Number(start) || 0) * 100),
         person: person || "",
+        parent_account: parentAccount || "",
+        icon: icon || "",
       });
       onSaved("Konto gesichert");
     } catch (e) { onError(e); onClose(); }
@@ -337,6 +401,28 @@ function AccountEditor({ draft, people, onClose, onSaved, onError }) {
         })}
       </div>
 
+      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Symbol (optional)</p>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setIcon("")} title="Standard (Typ-Symbol)"
+          className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+            !icon ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
+              : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400"}`}>
+          {(() => { const TypeIcon = ACCOUNT_TYPES.find((t) => t.id === type)?.icon ?? ACCOUNT_TYPES[0].icon; return <TypeIcon size={15} />; })()}
+        </button>
+        {ACCOUNT_ICON_KEYS.map((k) => {
+          const Icon = accountIconByKey(k);
+          const on = icon === k;
+          return (
+            <button key={k} onClick={() => setIcon(k)}
+              className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+                on ? "bg-stone-900 border-stone-900 dark:bg-emerald-600 dark:border-emerald-600 text-white"
+                  : "bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400"}`}>
+              <Icon size={15} />
+            </button>
+          );
+        })}
+      </div>
+
       <Field label="Anfangssaldo">
         <div className="flex items-center gap-2">
           <input type="number" step="10" value={start} onChange={(e) => setStart(e.target.value)}
@@ -352,15 +438,27 @@ function AccountEditor({ draft, people, onClose, onSaved, onError }) {
         </select>
       </Field>
 
+      <Field label="Übergeordnetes Konto (optional)">
+        <select value={parentAccount} onChange={(e) => setParentAccount(e.target.value)} className={inputCls}>
+          <option value="">Keins — eigenständiges Konto</option>
+          {possibleParents.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Field>
+      <p className="text-xs text-stone-400 dark:text-stone-500 -mt-3 mb-4">
+        Macht dieses Konto zu einem virtuellen Topf: sein Saldo zählt zusätzlich zum
+        gewählten Konto, für mehrere Sparziele auf einem einzigen echten Sparkonto.
+      </p>
+
       <ErrorNote error={error} />
       <Button onClick={submit} disabled={busy} className="w-full">Speichern</Button>
 
-      {!isNew && usage && (usage.tx + usage.rules > 0 ? (
+      {!isNew && usage && (usage.tx + usage.rules + usage.children > 0 ? (
         <p className="mt-3 text-xs text-stone-500 dark:text-stone-400 flex items-start gap-1.5 px-1">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
           Löschen geht erst, wenn {[
             usage.tx > 0 && `${usage.tx} Buchung${usage.tx === 1 ? "" : "en"}`,
             usage.rules > 0 && `${usage.rules} ${usage.rules === 1 ? "Dauerauftrag" : "Daueraufträge"}`,
+            usage.children > 0 && `${usage.children} virtuelle${usage.children === 1 ? "s" : ""} Unterkonto${usage.children === 1 ? "" : "en"}`,
           ].filter(Boolean).join(" und ")} auf diesem Konto weg, umgebucht oder gelöscht sind.
         </p>
       ) : (

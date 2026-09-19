@@ -4,6 +4,7 @@ import {
   Smartphone, MoreHorizontal, ArrowDownLeft, Landmark, Wallet, PiggyBank,
   CreditCard, ArrowLeftRight, Check, X, Loader2, Repeat, Shield,
   ShoppingBag, Gift, Plane, Car, PawPrint, BookOpen, Baby, Wrench,
+  Umbrella, Palmtree, TrendingUp, Target, GraduationCap, Coins,
 } from "lucide-react";
 
 // Waehrung als Parameter, nicht fest auf Euro - das Depot zeigt Positionen
@@ -44,6 +45,21 @@ export const ACCOUNT_TYPES = [
   { id: "kk", label: "Kreditkarte", icon: CreditCard },
 ];
 export const typeIcon = (t) => (ACCOUNT_TYPES.find((x) => x.id === t) ?? ACCOUNT_TYPES[0]).icon;
+
+// Frei waehlbares Icon je Konto (accounts.icon, optional) - gedacht vor allem
+// fuer virtuelle Unterkonten/Toepfe, wo der Zweck ("Auto", "Urlaub") deutlich
+// mehr uebers Symbol aussagt als der grobe Kontotyp. Ohne gesetztes Icon
+// faellt ein Konto auf sein bisheriges Typ-Symbol zurueck (typeIcon), damit
+// bestehende Konten unveraendert aussehen.
+const ACCOUNT_ICONS = {
+  car: Car, plane: Plane, umbrella: Umbrella, palmtree: Palmtree,
+  trending: TrendingUp, target: Target, graduation: GraduationCap,
+  home: Home, gift: Gift, wrench: Wrench, heart: HeartPulse,
+  coins: Coins, piggy: PiggyBank,
+};
+export const ACCOUNT_ICON_KEYS = Object.keys(ACCOUNT_ICONS);
+export const accountIconByKey = (key) => ACCOUNT_ICONS[key];
+export const accountIcon = (a) => (a.icon && ACCOUNT_ICONS[a.icon]) || typeIcon(a.type);
 
 const COLORS = {
   emerald: ["bg-emerald-50 dark:bg-emerald-500/15", "text-emerald-700 dark:text-emerald-400", "bg-emerald-600 dark:bg-emerald-500"],
@@ -207,7 +223,7 @@ export function AccChipRow({ accounts, balances, acc, setAcc }) {
       <div className="flex gap-1.5 sidebar:gap-2 w-max mx-auto sidebar:mx-0">
         <AccChip label="Alle Konten" value={balances.alle} on={acc === "alle"} onClick={() => setAcc("alle")} />
         {accounts.map((a) => {
-          const Icon = typeIcon(a.type);
+          const Icon = accountIcon(a);
           return (
             <AccChip key={a.id} label={a.name} Icon={Icon} value={balances[a.id]}
               on={acc === a.id} onClick={() => setAcc(a.id)} />
@@ -256,7 +272,7 @@ export function AccountPicker({ accounts, value, onChange, disabledId }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {accounts.map((a) => {
-        const Icon = typeIcon(a.type);
+        const Icon = accountIcon(a);
         const on = value === a.id;
         const off = disabledId === a.id;
         return (

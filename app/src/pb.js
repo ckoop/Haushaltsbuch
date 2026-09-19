@@ -65,6 +65,21 @@ export const countAccountsByPerson = async (personId) => {
   return r.totalItems;
 };
 
+// Virtuelle Unterkonten (mehrere Sparziele auf einem echten Sparkonto, s.
+// accounts.parent_account) - fuer die gruppierte Anzeige im Konten-Tab und
+// den kombinierten Kontostand-Check beim CSV-Import.
+export const listChildAccounts = (parentId) =>
+  pb.collection("accounts").getFullList({
+    filter: pb.filter("parent_account = {:id}", { id: parentId }),
+  });
+
+export const countChildAccounts = async (accountId) => {
+  const r = await pb.collection("accounts").getList(1, 1, {
+    filter: pb.filter("parent_account = {:id}", { id: accountId }),
+  });
+  return r.totalItems;
+};
+
 export const countByCategory = async (categoryId) => {
   const r = await pb.collection("transactions").getList(1, 1, {
     filter: pb.filter("category = {:id}", { id: categoryId }),
