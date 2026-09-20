@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import * as api from "../pb.js";
+import { reserveStatus } from "../ruecklagen.js";
 import {
   eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChipRow, byId, UNKNOWN_ACC,
 } from "../ui.jsx";
@@ -76,6 +77,32 @@ export default function BudgetScreen({
   const [suggesting, setSuggesting] = useState(false);
   const [rows, setRows] = useState(() => incomeEntries.map(toRow));
   useEffect(() => { setRows(incomeEntries.map(toRow)); }, [incomeEntries]);
+
+  // Ruecklagen fuer unregelmaessige (quartalsweise/jaehrliche) Dauerauftraege
+  // - screen-lokal geladen (nicht Teil von App.jsx's load()), weil nur dieser
+  // Screen sie braucht (gleiches Prinzip wie der "Vorschlag aus Vormonat"-
+  // Button oben). Haengt nur an "acc", nicht am Monat: die volle Buchungs-
+  // Historie je Regel wird einmal pro Kontowechsel geholt, reserveStatus()
+  // rechnet daraus fuer den jeweils sichtbaren Monat live den Saldo aus.
+  const [reserves, setReserves] = useState([]);
+  useEffect(() => {
+    if (!acc || acc === "alle") { setReserves([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rules = await api.listReserveRules(acc);
+        const withTxs = await Promise.all(
+          rules.map(async (rule) => ({ rule, txs: await api.listRuleTransactions(rule.id) }))
+        );
+        if (!cancelled) setReserves(withTxs);
+      } catch (e) { if (!cancelled) setError(e); }
+    })();
+    return () => { cancelled = true; };
+  }, [acc]);
+  const reservesFor = (cid) => reserves
+    .filter((r) => r.rule.category === cid)
+    .map((r) => ({ rule: r.rule, status: reserveStatus(r.rule, r.txs, monthKey) }));
+
   const limitOf = (cid) => budgets.find((b) => b.category === cid)?.amount_cents ?? 0;
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount_cents, 0);
   const incomeTotal = rows.reduce((s, r) => s + (r.amount_cents || 0), 0);
@@ -205,6 +232,9 @@ export default function BudgetScreen({
             {categories.filter((c) => c.kind === "expense" && !c.archived).map((c) => {
               const Icon = catIcon(c.icon);
               const [bg, fg] = colorOf(c.color);
+              const catReserves = reservesFor(c.id);
+              const withdrawnThisMonth = catReserves.reduce((s, r) => s + r.status.withdrawn, 0);
+              const deficit = catReserves.reduce((s, r) => s + r.status.deficit, 0);
               return (
                 <div key={c.id} className="flex items-center gap-3 px-3.5 py-2.5">
                   <span className={`w-8 h-8 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0`}>
@@ -213,8 +243,28 @@ export default function BudgetScreen({
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm">{c.name}</span>
                     <span className="block text-xs text-stone-400 dark:text-stone-500 tabular-nums">
-                      bisher {eur(spentByCat[c.id] ?? 0)}
+                      bisher {eur((spentByCat[c.id] ?? 0) - withdrawnThisMonth)}
                     </span>
+                    {catReserves.length > 0 && (
+                      <span className="block mt-1 space-y-0.5">
+                        {catReserves.map(({ rule, status }) => (
+                          <span key={rule.id} className="flex items-center justify-between gap-2 text-xs text-stone-400 dark:text-stone-500">
+                            <span className="truncate">
+                              Rücklage {rule.payee || "Dauerauftrag"} · {eur(status.saved)} / {eur(status.target)}
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              ab {new Date(api.dateOnly(rule.next_due) + "T12:00:00").toLocaleDateString("de-DE")}
+                            </span>
+                          </span>
+                        ))}
+                        {deficit > 0 && (
+                          <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                            <AlertTriangle size={12} className="shrink-0" />
+                            {eur(deficit)} noch nicht gedeckt
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </span>
                   <span className="flex items-center gap-1 shrink-0">
                     {/* Breite bewusst bei w-28 belassen - vierstellige

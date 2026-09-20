@@ -212,6 +212,28 @@ export const countRecurringRulesByCategory = async (categoryId) => {
   return r.totalItems;
 };
 
+// Aktive Dauerauftraege mit unregelmaessiger Faelligkeit - Grundlage fuer die
+// Ruecklagen-Anzeige in Budgets.jsx (siehe ruecklagen.js). Kein Filter auf
+// "category": eine Regel ohne Kategorie matcht dort ohnehin keine echte
+// Kategorie-ID und wird beim Rendern implizit ignoriert.
+export const listReserveRules = (accountId) =>
+  pb.collection("recurring_rules").getFullList({
+    filter: pb.filter(
+      "account = {:a} && active = true && type = 'tx' && (frequency = 'quarterly' || frequency = 'yearly')",
+      { a: accountId }
+    ),
+  });
+
+// Alle bisher aus einer Regel automatisch entstandenen Buchungen (Hash-Praefix
+// "rule:<id>:", s. runDueRecurringRules) - Grundlage, um den Ruecklagen-Saldo
+// ueber mehrere Monate hinweg rein aus vorhandenen Daten abzuleiten, ohne
+// einen eigenen fortgeschriebenen Saldo zu speichern.
+export const listRuleTransactions = (ruleId) =>
+  pb.collection("transactions").getFullList({
+    filter: pb.filter("import_hash ~ {:p}", { p: `rule:${ruleId}:` }),
+    sort: "date", fields: "date,amount_cents",
+  });
+
 const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
 
 // Naechstes Datum nach n Monaten, auf gueltigen Kalendertag begrenzt -
