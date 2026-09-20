@@ -118,7 +118,7 @@ den bisherigen exakten `t.account === acc`-Vergleich in `visible`,
 `avgExpense` und der Jahresansicht (`JahresAnsicht` in `Auswertung.jsx`,
 eigene Kopie derselben Logik, weil sie ihre Buchungen über eine eigene
 `listTransactionsForYear()`-Abfrage statt aus `shared` bezieht). Die dafür
-gezeigten Saldo-Werte (Chips, "Summe aller Konten"/"Christian"-Kachel in
+gezeigten Saldo-Werte (Chips, "Summe aller Konten"/Kontoname-Kachel in
 `Buchungen.jsx`) kommen aus dem neuen `combinedBalances` in `App.jsx` (eigene
 Summe aus Konto + Töpfen, getrennt von `balances`, damit `balances.alle`
 nicht durch doppeltes Aufaddieren verfälscht wird) — `Konten.jsx` bekommt
