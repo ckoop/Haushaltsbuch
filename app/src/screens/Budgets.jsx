@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import * as api from "../pb.js";
 import { reserveStatus } from "../ruecklagen.js";
 import {
-  eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChipRow, byId, UNKNOWN_ACC,
+  eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChipRow, byId, UNKNOWN_ACC, Metric,
 } from "../ui.jsx";
 
 const toRow = (e) => ({ key: e.id, id: e.id, label: e.label ?? "", amount_cents: e.amount_cents });
@@ -108,6 +108,20 @@ export default function BudgetScreen({
   const incomeTotal = rows.reduce((s, r) => s + (r.amount_cents || 0), 0);
   const remaining = incomeTotal - totalBudgeted;
 
+  // Ueberschuss = tatsaechliche Einnahmen minus tatsaechliche Ausgaben
+  // insgesamt (alle Kategorien, auch unbudgetierte/ohne Kategorie) - bewusst
+  // NICHT aus budgets abgeleitet ("Summe Budget minus Ist in budgetierten
+  // Kategorien"), das waere falsch, sobald nicht jede Kategorie ein Budget
+  // hat: unbudgetierte Ausgaben wuerden von keinem Budget "aufgefangen" und
+  // gar nicht abgezogen, der Ueberschuss saehe faelschlich hoeher aus.
+  // Gleiche Rechnung wie "Saldo" in Buchungen.jsx, hier nur dort platziert,
+  // wo tatsaechlich ueber das Geld entschieden wird.
+  const expenseTotal = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
+  const incomeActual = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
+  const surplus = incomeActual - expenseTotal;
+  const uncoveredCats = categories.filter((c) =>
+    c.kind === "expense" && !c.archived && limitOf(c.id) === 0 && (spentByCat[c.id] ?? 0) > 0);
+
   // Buchungen ohne Kategorie tauchen in keiner Budget-Zeile auf, weil Budgets
   // pro Kategorie laufen - ohne diesen Hinweis sieht die Ansicht faelschlich
   // nach "im Rahmen" aus, obwohl ein Teil der Ausgaben gar nicht mitgezaehlt
@@ -155,6 +169,17 @@ export default function BudgetScreen({
           ? "Budgets und Einnahmenziel gelten pro Konto. Wähle oben ein einzelnes Konto, um sie zu sehen oder zu setzen."
           : `Monatslimit pro Kategorie für ${byId(accounts, acc, UNKNOWN_ACC).name}. 0 entfernt das Budget.`}
       </p>
+
+      {acc !== "alle" && (
+        <div className="mb-4">
+          <Metric label="Überschuss" value={surplus} signed />
+          {uncoveredCats.length > 0 && (
+            <p className="text-xs text-stone-400 dark:text-stone-500 mt-1.5">
+              {uncoveredCats.length} {uncoveredCats.length === 1 ? "Kategorie" : "Kategorien"} ohne eigenes Budget — die Ausgaben darin zählen trotzdem mit.
+            </p>
+          )}
+        </div>
+      )}
 
       {uncategorized.length > 0 && (
         <button onClick={() => setShowUncat(true)}
