@@ -250,7 +250,7 @@ export default function BudgetScreen({
                         {catReserves.map(({ rule, status }) => (
                           <span key={rule.id} className="flex items-center justify-between gap-2 text-xs text-stone-400 dark:text-stone-500">
                             <span className="truncate">
-                              Rücklage {rule.payee || "Dauerauftrag"} · {eur(status.saved)} / {eur(status.target)}
+                              Rücklage {rule.payee || "Dauerauftrag"} · {eur(status.monthly)}/Monat · {eur(status.saved)} / {eur(status.target)}
                             </span>
                             <span className="shrink-0 tabular-nums">
                               ab {new Date(api.dateOnly(rule.next_due) + "T12:00:00").toLocaleDateString("de-DE")}
