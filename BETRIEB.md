@@ -459,3 +459,13 @@ eigenständig laufenden zweiten Instanz mit eigener Datenbank. Für eine
 echte zweite Kopie der Daten (Backup-Zweck) muss ein Sync ohne
 `SKIP_DATA=1` laufen — dann aber nicht mehr parallel als eigenständige
 Live-Instanz betreiben, sonst laufen beide Datenbanken auseinander.
+
+**`deploy/` ist seit `0.34.0` nicht mehr Teil des (öffentlichen) Git-Repos**
+— steht jetzt in `.gitignore`, auf Nutzerwunsch, weil das Skript die
+private Heimnetz-IP von `bumblebeee` nennt. Die beiden Dateien bleiben
+lokal auf diesem Rechner unverändert liegen und funktionieren genauso wie
+vorher, sie werden nur nicht mehr committet/gepusht. Auf einem frischen
+Klon des Repos existiert der Ordner deshalb nicht — dort vor dem ersten
+Deploy neu anlegen (`sync_to_server.sh` oben zeigt den generischen Aufruf,
+`deploy_bumblebeee.sh` ist nur ein Zweizeiler drumherum mit den fest
+hinterlegten `bumblebeee`-Zugangsdaten).
