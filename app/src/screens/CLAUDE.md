@@ -137,6 +137,28 @@ nach `ensure()` funktioniert deshalb sowohl bei einer Neuinstallation als auch
 auf einer schon laufenden Instanz gleichermaßen (einfach `node
 setup/schema.mjs` erneut ausführen).
 
+## Startkonto (`defaultAccountPref.js`, ab `0.35.0`)
+
+Reine Client-Präferenz nach exaktem Muster von `depotPref.js`/`theme.js`
+(`localStorage`, kein Server-Feld) — welches Konto (oder "Alle Konten", der
+bisherige feste Standard) beim Öffnen der App vorausgewählt ist. Auf
+Nutzerwunsch, nachdem "Alle Konten" beim Start nicht für jeden Haushalt der
+sinnvollste Einstieg ist. Umschalter im Tab **Einstellungen** (Dropdown
+"Startkonto"), Optionsliste wie bei den Konto-Chips (`AccChipRow`) ohne
+virtuelle Unterkonten — ein Topf hat keinen eigenen kombinierten Saldo und
+wäre als Startkonto irreführend.
+
+`App.jsx`s `acc`-Zustand wird nur beim Mount aus der Präferenz
+vorbelegt (`useState(defaultAccount)`) — ein späterer Chip-Klick während der
+Sitzung ändert die hinterlegte Präferenz nicht rückwirkend, das wäre
+überraschend. Nur eine neue Auswahl direkt im Einstellungen-Dropdown
+schreibt die Präferenz UND wendet sie sofort auf die laufende Sitzung an
+(`setDefaultAccountAndApply` in `App.jsx`), damit die Auswahl nicht erst
+nach einem Neuladen sichtbar wird. Ein separater Effekt fängt ein
+zwischenzeitlich gelöschtes Standardkonto ab (fällt zurück auf "alle"),
+sobald die Konten geladen sind — sonst bliebe `acc` auf einer toten ID
+stehen und keine Kachel/kein Chip wäre mehr markiert.
+
 ## Personen (`people`, `accounts.person`)
 
 **Personen** (`people`, ab `0.23.0`) sind ein reines Label an Konten — kein eigener App-Login: verwaltet eine Person den ganzen Haushalt, braucht sie dafür kein zweites Nutzerkonto, das über `users`/`login()` (`pb.js`) laufen würde. Eigener Verwaltungsbereich "Personen" im Konten-Tab (`Konten.jsx`, `PersonEditor`, gleiches Muster wie `CategoryEditor`: anlegen, umbenennen, löschen), Löschen gesperrt, solange ein Konto noch über `accounts.person` darauf zeigt (`api.countAccountsByPerson`, gleiches Prinzip wie `countByAccount`/`countByCategory`). Das neue Feld `accounts.person` ist eine optionale Relation auf `people` — `setup/schema.mjs` legt sie nur bei einer Neuinstallation mit an (`ensure()` patcht keine Felder auf bereits existierenden Sammlungen), auf einer laufenden Instanz muss sie einmalig manuell in der PocketBase-Admin-Oberfläche ergänzt werden, wie schon bei `transactions.recurring`/`transactions.tags`. Bewusst noch kein Filter und keine Summe pro Person in `Buchungen.jsx`/`Auswertung.jsx` — nur die Kennzeichnung selbst, das war eine ausdrückliche Entscheidung, den Umfang klein zu halten.

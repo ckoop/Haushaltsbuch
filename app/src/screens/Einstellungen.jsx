@@ -1,7 +1,12 @@
 import { useTheme } from "../theme.js";
+import { inputCls } from "../ui.jsx";
 
-export default function Einstellungen({ depotEnabled, setDepotEnabled }) {
+export default function Einstellungen({ depotEnabled, setDepotEnabled, accounts, defaultAccount, setDefaultAccount }) {
   const { theme, setTheme } = useTheme();
+  // Virtuelle Unterkonten (Toepfe) sind auch als Startkonto nicht waehlbar -
+  // gleiche Einschraenkung wie bei den Konto-Chips in Buchungen/Budgets,
+  // ein Topf hat keinen eigenen kombinierten Saldo.
+  const realAccounts = accounts.filter((a) => !a.parent_account);
 
   return (
     <div className="px-5 py-4">
@@ -31,6 +36,16 @@ export default function Einstellungen({ depotEnabled, setDepotEnabled }) {
           </button>
         ))}
       </div>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Startkonto</p>
+      <select value={defaultAccount} onChange={(e) => setDefaultAccount(e.target.value)}
+        className={`${inputCls} max-w-xs`}>
+        <option value="alle">Alle Konten</option>
+        {realAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      <p className="text-xs text-stone-400 dark:text-stone-500 mt-1.5">
+        Beim Öffnen der App vorausgewählt, statt immer bei "Alle Konten" zu starten.
+      </p>
     </div>
   );
 }

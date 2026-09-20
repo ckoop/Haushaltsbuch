@@ -12,6 +12,7 @@ import Einstellungen from "./screens/Einstellungen.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
 import { useDepotEnabled } from "./depotPref.js";
+import { useDefaultAccountPref } from "./defaultAccountPref.js";
 
 // Wie viele volle Vormonate die Einkommens-Hochrechnung in Buchungen.jsx
 // fuer den Ausgaben-Durchschnitt heranzieht (s. avgExpense in Shell()).
@@ -63,10 +64,15 @@ function Login() {
 
 function Shell() {
   const { depotEnabled, setDepotEnabled } = useDepotEnabled();
+  const { defaultAccount, setDefaultAccount } = useDefaultAccountPref();
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [tab, setTab] = useState("buchungen");
-  const [acc, setAcc] = useState("alle");
+  // Start-Konto kommt aus der Praeferenz (Einstellungen, Default "alle") -
+  // nur der Anfangswert, ein spaeterer Chip-Klick aendert nicht rueckwirkend
+  // die hinterlegte Praeferenz. setDefaultAccountAndApply (siehe unten) wendet
+  // eine neu gewaehlte Praeferenz zusaetzlich sofort auf die laufende Sitzung an.
+  const [acc, setAcc] = useState(defaultAccount);
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = keine aktive Suche
   const [searching, setSearching] = useState(false);
@@ -118,6 +124,19 @@ function Shell() {
   }, [ym.y, ym.m, key, acc]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Faengt ein als Standard hinterlegtes, zwischenzeitlich geloeschtes Konto
+  // ab (z. B. nach dem Loeschen in Konten.jsx) - ohne diesen Check bliebe
+  // "acc" auf einer toten ID stehen und keine Kachel/kein Chip waere mehr
+  // markiert. Greift erst, sobald Konten tatsaechlich geladen sind.
+  useEffect(() => {
+    if (accounts.length > 0 && acc !== "alle" && !accounts.some((a) => a.id === acc)) setAcc("alle");
+  }, [accounts, acc]);
+
+  // Eine neu in den Einstellungen gewaehlte Standardkonto-Praeferenz greift
+  // sofort auch fuer die laufende Sitzung, nicht erst beim naechsten
+  // App-Start - sonst waere der Effekt der Auswahl nicht sichtbar.
+  const setDefaultAccountAndApply = (id) => { setDefaultAccount(id); setAcc(id); };
 
   // Suche (Buchungen.jsx) lebt bewusst hier statt als lokaler State im
   // Screen: load() setzt bei jedem Monatswechsel kurz loading=true, was
@@ -323,6 +342,7 @@ function Shell() {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
+    defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,
   };
 
