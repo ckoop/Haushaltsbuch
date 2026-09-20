@@ -213,20 +213,24 @@ await ensure({
   ],
 });
 
-// Einnahmenziel pro Monat, damit sich die Summe der Kategorie-Budgets gegen
-// etwas Sinnvolles vergleichen laesst statt frei zu schweben. Gleiches
-// "*"/"YYYY-MM"-Muster wie budgets.month, nur ohne Kategorie-Bezug. Mehrere
-// Posten pro Monat/Dauer-Eintrag moeglich (z. B. "Gehalt" + "Nebenmiet-
-// einnahmen"), deshalb kein Unique-Index auf month allein.
+// Einnahmenziel pro Konto und Monat, damit sich die Summe der Kategorie-
+// Budgets gegen etwas Sinnvolles vergleichen laesst statt frei zu schweben.
+// Gleiches "*"/"YYYY-MM"-Muster wie budgets.month, nur ohne Kategorie-Bezug.
+// Mehrere Posten pro Konto/Monat/Dauer-Eintrag moeglich (z. B. "Gehalt" +
+// "Nebenmieteinnahmen"), deshalb kein Unique-Index. Bis 0.34.0 lief das
+// Einnahmenziel kontouebergreifend - auf Nutzerwunsch umgestellt, gleicher
+// Grund wie bei budgets.account: ein Haushalt mit mehreren Konten will das
+// Einnahmenziel nicht ueber alle Konten gemeinsam pflegen.
 await ensure({
   name: "income_targets", type: "base", ...rules,
   fields: [
+    rel("account", accountsId, { required: true }),
     text("month", { required: true, max: 7 }),
     text("label", { max: 60 }),
     num("amount_cents", { required: true, onlyInt: true }),
   ],
   indexes: [
-    "CREATE INDEX idx_income_targets_month ON income_targets (month)",
+    "CREATE INDEX idx_income_targets_acc_month ON income_targets (account, month)",
   ],
 });
 

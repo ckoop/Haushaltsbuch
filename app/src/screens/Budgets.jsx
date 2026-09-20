@@ -13,7 +13,7 @@ let newRowSeq = 0;
 // damit sich Einnahmen aus mehreren Quellen einzeln nachvollziehen lassen.
 // Beide Eingaben speichern wie ueberall sonst im Screen erst beim Verlassen
 // des Feldes (onBlur), nicht bei jedem Tastendruck.
-function IncomeRow({ row, dauer, monthKey, onCreated, onRemoved, flash, setError, reload }) {
+function IncomeRow({ row, dauer, monthKey, acc, onCreated, onRemoved, flash, setError, reload }) {
   const labelRef = useRef(null);
   const amountRef = useRef(null);
 
@@ -25,7 +25,7 @@ function IncomeRow({ row, dauer, monthKey, onCreated, onRemoved, flash, setError
       if (row.id) {
         await api.updateIncomeEntry(row.id, label, cents);
       } else {
-        const created = await api.createIncomeEntry(dauer ? "*" : monthKey, label, cents);
+        const created = await api.createIncomeEntry(acc, dauer ? "*" : monthKey, label, cents);
         onCreated(row.key, created);
       }
       flash("Einnahmen gesichert");
@@ -67,7 +67,7 @@ function IncomeRow({ row, dauer, monthKey, onCreated, onRemoved, flash, setError
 }
 
 export default function BudgetScreen({
-  categories, accounts, budgets, incomeEntries, real, spentByCat, monthKey, acc, setAcc, balances,
+  categories, accounts, budgets, incomeEntries, real, spentByCat, monthKey, acc, setAcc, combinedBalances,
   reload, flash, openDetail,
 }) {
   const [error, setError] = useState(null);
@@ -112,7 +112,7 @@ export default function BudgetScreen({
     try {
       const prevDate = api.addMonths(`${monthKey}-01`, -1);
       const [py, pm] = prevDate.split("-").map(Number);
-      const cents = await api.actualIncomeForMonth(py, pm - 1);
+      const cents = await api.actualIncomeForMonth(py, pm - 1, acc);
       setRows((rs) => [...rs, { key: `new-${++newRowSeq}`, id: null, label: "Gesamt", amount_cents: cents }]);
     } catch (e) { setError(e); }
     finally { setSuggesting(false); }
@@ -120,12 +120,12 @@ export default function BudgetScreen({
 
   return (
     <>
-      <AccChipRow accounts={accounts} balances={balances} acc={acc} setAcc={setAcc} />
+      <AccChipRow accounts={accounts} balances={combinedBalances} acc={acc} setAcc={setAcc} />
 
       <div className="px-5 py-4">
       <p className="text-sm text-stone-600 dark:text-stone-300 mb-3">
         {acc === "alle"
-          ? "Budgets gelten pro Konto. Wähle oben ein einzelnes Konto, um dessen Budgets zu sehen oder zu setzen."
+          ? "Budgets und Einnahmenziel gelten pro Konto. Wähle oben ein einzelnes Konto, um sie zu sehen oder zu setzen."
           : `Monatslimit pro Kategorie für ${byId(accounts, acc, UNKNOWN_ACC).name}. 0 entfernt das Budget.`}
       </p>
 
@@ -155,35 +155,37 @@ export default function BudgetScreen({
 
       <ErrorNote error={error} />
 
-      <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 mb-4">
-        <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between gap-3">
-          <span className="text-sm">Einnahmen {dauer ? "jeden Monat" : `nur ${monthKey}`}</span>
-          <span className="text-sm tabular-nums text-stone-500 dark:text-stone-400 shrink-0">{eur(incomeTotal)}</span>
-        </div>
-        {rows.length > 0 && (
-          <div className="divide-y divide-stone-100 dark:divide-stone-700 border-t border-stone-100 dark:border-stone-700">
-            {rows.map((row) => (
-              <IncomeRow key={row.key} row={row} dauer={dauer} monthKey={monthKey}
-                onCreated={(key, created) => setRows((rs) => rs.map((r) =>
-                  r.key === key ? { key: created.id, id: created.id, label: created.label, amount_cents: created.amount_cents } : r))}
-                onRemoved={(key) => setRows((rs) => rs.filter((r) => r.key !== key))}
-                flash={flash} setError={setError} reload={reload} />
-            ))}
+      {acc !== "alle" && (
+        <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 mb-4">
+          <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between gap-3">
+            <span className="text-sm">Einnahmen {dauer ? "jeden Monat" : `nur ${monthKey}`}</span>
+            <span className="text-sm tabular-nums text-stone-500 dark:text-stone-400 shrink-0">{eur(incomeTotal)}</span>
           </div>
-        )}
-        <div className="px-3.5 py-2 flex items-center gap-3 border-t border-stone-100 dark:border-stone-700">
-          {rows.length === 0 && (
-            <button type="button" onClick={applySuggestion} disabled={suggesting}
-              className="text-xs text-emerald-700 dark:text-emerald-400">
-              {suggesting ? "Lädt …" : "Vorschlag aus Vormonat übernehmen"}
-            </button>
+          {rows.length > 0 && (
+            <div className="divide-y divide-stone-100 dark:divide-stone-700 border-t border-stone-100 dark:border-stone-700">
+              {rows.map((row) => (
+                <IncomeRow key={row.key} row={row} dauer={dauer} monthKey={monthKey} acc={acc}
+                  onCreated={(key, created) => setRows((rs) => rs.map((r) =>
+                    r.key === key ? { key: created.id, id: created.id, label: created.label, amount_cents: created.amount_cents } : r))}
+                  onRemoved={(key) => setRows((rs) => rs.filter((r) => r.key !== key))}
+                  flash={flash} setError={setError} reload={reload} />
+              ))}
+            </div>
           )}
-          <button type="button" onClick={addIncomeRow}
-            className="ml-auto flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
-            <Plus size={14} /> Einnahme hinzufügen
-          </button>
+          <div className="px-3.5 py-2 flex items-center gap-3 border-t border-stone-100 dark:border-stone-700">
+            {rows.length === 0 && (
+              <button type="button" onClick={applySuggestion} disabled={suggesting}
+                className="text-xs text-emerald-700 dark:text-emerald-400">
+                {suggesting ? "Lädt …" : "Vorschlag aus Vormonat übernehmen"}
+              </button>
+            )}
+            <button type="button" onClick={addIncomeRow}
+              className="ml-auto flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
+              <Plus size={14} /> Einnahme hinzufügen
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {acc !== "alle" && incomeTotal > 0 && (
         <div className="mb-5">

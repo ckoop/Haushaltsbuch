@@ -285,9 +285,16 @@ function JahresAnsicht({ categories, accounts, acc, monthKey, openDetail }) {
     } catch (e) { setError(e); }
   };
 
+  // Virtuelle Unterkonten (Toepfe) haben in der Kontoauswahl keinen eigenen
+  // Chip mehr (s. AccChipRow in ui.jsx) - waehlt man ihr Konto, zaehlen ihre
+  // Buchungen automatisch mit, gleiches Prinzip wie "accGroup" in App.jsx.
+  const accGroup = useMemo(() => {
+    if (acc === "alle") return null;
+    return new Set([acc, ...accounts.filter((a) => a.parent_account === acc).map((a) => a.id)]);
+  }, [acc, accounts]);
   const scoped = useMemo(
-    () => rows.filter((t) => acc === "alle" || t.account === acc || t.to_account === acc),
-    [rows, acc]
+    () => rows.filter((t) => !accGroup || accGroup.has(t.account) || accGroup.has(t.to_account)),
+    [rows, accGroup]
   );
   const real = useMemo(() => scoped.filter((t) => t.type !== "transfer"), [scoped]);
   const transfers = scoped.length - real.length;

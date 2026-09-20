@@ -14,7 +14,7 @@ const searchDayLabel = (iso) =>
 
 export default function Buchungen({
   accounts, categories, transactions, real, spentByCat, budgets, incomeEntries, avgExpense,
-  balances, acc, setAcc, openDetail, monthKey,
+  combinedBalances, acc, setAcc, openDetail, monthKey,
   query, setQuery, searchResults, searching,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
@@ -88,12 +88,12 @@ export default function Buchungen({
         </div>
       </div>
 
-      {!isSearching && <AccChipRow accounts={accounts} balances={balances} acc={acc} setAcc={setAcc} />}
+      {!isSearching && <AccChipRow accounts={accounts} balances={combinedBalances} acc={acc} setAcc={setAcc} />}
 
       {!isSearching && (
         <section className="px-5 py-4 grid grid-cols-2 gap-3">
           <Metric label={acc === "alle" ? "Summe aller Konten" : byId(accounts, acc, UNKNOWN_ACC).name}
-            value={balances[acc] ?? 0} signed />
+            value={combinedBalances[acc] ?? 0} signed />
           <Metric label="Saldo" value={net} signed />
         </section>
       )}

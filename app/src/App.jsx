@@ -103,7 +103,7 @@ function Shell() {
       const [a, c, g, p, t, r, b, ie, at] = await Promise.all([
         api.listAccounts(), api.listCategories(), api.listTags(), api.listPeople(),
         api.listTransactions(ym.y, ym.m), api.listTransactionsUntil(ym.y, ym.m),
-        api.listBudgets(key, acc), api.listIncomeEntries(key),
+        api.listBudgets(key, acc), api.listIncomeEntries(key, acc),
         api.listTransactionsForAverage(ym.y, ym.m, AVG_MONTHS_BACK),
       ]);
       if (seq !== loadSeq.current) return;
@@ -190,9 +190,33 @@ function Shell() {
     return b;
   }, [accounts, running]);
 
+  // Virtuelle Unterkonten (Toepfe, s. accounts.parent_account) sind seit
+  // 0.34.0 in Buchungen/Auswertung/Budgets nicht mehr eigenstaendig
+  // waehlbar (AccChipRow zeigt sie nicht mehr) - waehlt man ihr Konto
+  // (den "Master"), zaehlt deren Saldo/Buchungen aber automatisch mit, statt
+  // dass man extra auf den Topf klicken muesste. "alle" bleibt unveraendert
+  // (zaehlt ohnehin schon jedes Konto einzeln mit).
+  const combinedBalances = useMemo(() => {
+    const map = {};
+    for (const a of accounts.filter((a) => !a.parent_account)) {
+      const kids = accounts.filter((c) => c.parent_account === a.id);
+      map[a.id] = (balances[a.id] ?? 0) + kids.reduce((s, c) => s + (balances[c.id] ?? 0), 0);
+    }
+    map.alle = balances.alle;
+    return map;
+  }, [accounts, balances]);
+
+  // Set aus dem gewaehlten Konto plus seinen Toepfen (oder null bei "alle") -
+  // gemeinsame Grundlage fuer jede Buchungsfilterung nach "acc" unten, damit
+  // ein ausgewaehltes Master-Konto seine Toepfe automatisch mit einschliesst.
+  const accGroup = useMemo(() => {
+    if (acc === "alle") return null;
+    return new Set([acc, ...accounts.filter((a) => a.parent_account === acc).map((a) => a.id)]);
+  }, [acc, accounts]);
+
   const visible = useMemo(
-    () => transactions.filter((t) => acc === "alle" || t.account === acc || t.to_account === acc),
-    [transactions, acc]
+    () => transactions.filter((t) => !accGroup || accGroup.has(t.account) || accGroup.has(t.to_account)),
+    [transactions, accGroup]
   );
   const real = visible.filter((t) => t.type !== "transfer");
 
@@ -202,12 +226,12 @@ function Shell() {
   // (nicht Tage) macht das unempfindlich dagegen, an welchem Tag einzelne
   // grosse Buchungen (Miete, Versicherungen) landen.
   const avgExpense = useMemo(() => {
-    const visibleAvg = avgTx.filter((t) => acc === "alle" || t.account === acc || t.to_account === acc);
+    const visibleAvg = avgTx.filter((t) => !accGroup || accGroup.has(t.account) || accGroup.has(t.to_account));
     const total = visibleAvg
       .filter((t) => t.type !== "transfer" && t.amount_cents < 0)
       .reduce((s, t) => s - t.amount_cents, 0);
     return Math.round(total / AVG_MONTHS_BACK);
-  }, [avgTx, acc]);
+  }, [avgTx, accGroup]);
 
   const spentByCat = useMemo(() => {
     const o = {};
@@ -297,7 +321,7 @@ function Shell() {
 
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
-    incomeEntries, avgExpense, balances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
+    incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     depotEnabled, setDepotEnabled, reloadTags,
     query, setQuery, searchResults, searching,
   };

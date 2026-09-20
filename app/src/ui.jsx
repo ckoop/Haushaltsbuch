@@ -224,7 +224,11 @@ export function AccChipRow({ accounts, balances, acc, setAcc }) {
       [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
       <div className="flex gap-1.5 sidebar:gap-2 w-max mx-auto sidebar:mx-0">
         <AccChip label="Alle Konten" value={balances.alle} on={acc === "alle"} onClick={() => setAcc("alle")} />
-        {accounts.map((a) => {
+        {/* Virtuelle Unterkonten (Toepfe, s. accounts.parent_account)
+            bekommen bewusst keinen eigenen Chip - waehlt man das Konto, dem
+            sie zugeordnet sind, zaehlen sie automatisch mit (s. accGroup in
+            App.jsx), statt die Chip-Reihe mit Toepfen zu ueberladen. */}
+        {accounts.filter((a) => !a.parent_account).map((a) => {
           const Icon = accountIcon(a);
           return (
             <AccChip key={a.id} label={a.name} Icon={Icon} value={balances[a.id]}

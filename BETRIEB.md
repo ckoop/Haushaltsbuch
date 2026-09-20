@@ -347,6 +347,27 @@ PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
 
+**`income_targets.account` (ab `0.34.0`): Einnahmenziel jetzt pro Konto.**
+Lief bis dahin bewusst kontoübergreifend, auf Nutzerwunsch umgestellt —
+gleicher Grund wie bei `budgets.account` (`0.25.0`): ein Haushalt will das
+Einnahmenziel meist genau einem Konto zuordnen (typischerweise dem
+Gehaltskonto), nicht global pflegen. Pflichtfeld, neuer Index
+`(account, month)`.
+
+⚠️ Gleiches Problem wie bei `budgets.account`: der neue Index lässt sich
+nicht sauber über die Admin-Oberfläche allein nachziehen — per Skript
+patchen:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/migrate_income_account.mjs
+```
+
+Bereits bestehende Einnahmenziele ohne `account` werden dadurch **verwaist**
+(nicht gelöscht, aber in keiner Konto-Ansicht mehr sichtbar) — nach der
+Migration einmalig fürs gewünschte Konto neu setzen.
+
 ## Umgebungen: Entwicklung vs. Produktion
 
 Zwei getrennte Instanzen, nicht zu verwechseln:

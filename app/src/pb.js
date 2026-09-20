@@ -311,19 +311,23 @@ export async function setBudget(accountId, categoryId, month, cents) {
 // schlaegt die Dauerposten als Ganzes, gleiches Prinzip wie bei Budgets, nur
 // ohne Kategorie zum Abgleichen pro Posten - entweder alle Dauerposten oder
 // alle Monatsposten zaehlen, nicht gemischt.
-export async function listIncomeEntries(monthKey) {
+// Gilt seit 0.34.0 pro Konto, nicht kontouebergreifend - gleicher Grund wie
+// bei budgets.account: ohne ein konkretes Konto gibt es kein sinnvolles
+// Einnahmenziel ("Alle Konten"-Ansicht).
+export async function listIncomeEntries(monthKey, accountId) {
+  if (!accountId || accountId === "alle") return [];
   // Kein sort: income_targets hat anders als z. B. transactions kein
   // created-Feld, "id" ist die einzige stabile, immer vorhandene Sortierung.
   const rows = await pb.collection("income_targets").getFullList({
-    filter: pb.filter("month = {:m} || month = '*'", { m: monthKey }),
+    filter: pb.filter("account = {:a} && (month = {:m} || month = '*')", { a: accountId, m: monthKey }),
     sort: "id",
   });
   const specific = rows.filter((r) => r.month === monthKey);
   return specific.length ? specific : rows.filter((r) => r.month === "*");
 }
 
-export async function createIncomeEntry(month, label, cents) {
-  return pb.collection("income_targets").create({ month, label, amount_cents: cents });
+export async function createIncomeEntry(accountId, month, label, cents) {
+  return pb.collection("income_targets").create({ account: accountId, month, label, amount_cents: cents });
 }
 
 export async function updateIncomeEntry(id, label, cents) {
@@ -335,15 +339,15 @@ export async function deleteIncomeEntry(id) {
 }
 
 // Fuer den "Vorschlag"-Button im Budgets-Tab: tatsaechlich gebuchte Einnahmen
-// eines Monats, nur auf Anfrage geladen (nicht bei jedem Tab-Aufruf), damit
-// das Eintragen des Einnahmenziels nicht jedes Mal komplett neu geschaetzt
-// werden muss.
-export async function actualIncomeForMonth(y, m) {
+// eines Monats auf einem konkreten Konto, nur auf Anfrage geladen (nicht bei
+// jedem Tab-Aufruf), damit das Eintragen des Einnahmenziels nicht jedes Mal
+// komplett neu geschaetzt werden muss.
+export async function actualIncomeForMonth(y, m, accountId) {
   const { start, end } = monthRange(y, m);
   const rows = await pb.collection("transactions").getFullList({
     filter: pb.filter(
-      "date >= {:start} && date < {:end} && type != 'transfer' && amount_cents > 0",
-      { start, end }
+      "date >= {:start} && date < {:end} && account = {:a} && type != 'transfer' && amount_cents > 0",
+      { start, end, a: accountId }
     ),
     fields: "amount_cents",
   });

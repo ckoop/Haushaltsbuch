@@ -28,6 +28,8 @@ Bewusst **kein** automatisches Auslesen aus den Buchungen als alleinige Quelle: 
 
 **Mehrere benannte Posten statt einem Gesamtbetrag** (ab `0.26.0`, auf Nutzerwunsch — Einnahmen setzen sich oft aus mehreren Quellen zusammen, z. B. "Gehalt" und "Nebenmieteinnahmen"). `income_targets` bekam dafür ein neues Feld `label` (freier Text, keine feste Werteliste — die vom Nutzer genannten Beispiele "Gehalt"/"Nebenmieteinnahmen" sind Beispiele, keine feste Kategorisierung, ein starres Auswahlfeld hätte hier nur unnötig eingeschränkt) und verlor seinen Unique-Index auf `month` allein (jetzt ein normaler, nicht-eindeutiger Index — mehrere Zeilen pro Monat/Dauer-Eintrag sind der Zweck der Änderung). `Budgets.jsx` zeigt die Posten als Liste mit je einem Beschriftungs- und einem Betragsfeld (`IncomeRow`), "Einnahme hinzufügen" legt eine neue, zunächst nur lokale Zeile an (`id: null`), die erst beim ersten `onBlur` mit Betrag > 0 tatsächlich angelegt wird (`api.createIncomeEntry()`) — eine leere hinzugefügte Zeile ohne Betrag hinterlässt also keine Karteileiche. Jede Zeilenänderung/-löschung ruft wie die Kategorie-Budgets `reload()`, der volle `App.jsx`-`load()`-Zyklus — dieselbe bekannte Abwägung wie überall sonst im Screen (kurzzeitiges Unmounten, siehe Abschnitt "Regeln" unten zur `reloadTags()`-Ausnahme): eine zweite, noch unbestätigte neue Leerzeile kann dadurch verschwinden, wenn zwischenzeitlich eine andere Zeile gespeichert wird. Bewusst nicht dagegen abgesichert — kein Datenverlust (nichts davon war gespeichert), nur eine seltene Unannehmlichkeit beim gleichzeitigen Anlegen mehrerer neuer Posten, eine Absicherung dagegen hätte den Screen unverhältnismäßig verkompliziert. Bereits bestehende Einnahmenziele aus der Zeit vor `0.26.0` behalten ihren Betrag und laufen als ein Posten mit leerem Label weiter.
 
+**Pro Konto statt kontoübergreifend** (`income_targets.account`, ab `0.34.0`, auf Nutzerwunsch): bis dahin bewusst kontoübergreifend gehalten ("ein Gehalt lässt sich nicht sinnvoll einem einzelnen Konto zuordnen, wenn ein Haushalt mehrere Konten hat"), das erwies sich in der Praxis aber als unpassend — genau wie bei `budgets.account` (`0.25.0`) wollte der Haushalt das Einnahmenziel exakt einem Konto zuordnen (z. B. dem Gehaltskonto), nicht global pflegen. Gleiches Muster wie dort: `account` ist jetzt Pflichtfeld, `api.listIncomeEntries()`/`api.createIncomeEntry()`/`api.actualIncomeForMonth()` nehmen alle eine `accountId` entgegen, `Budgets.jsx` zeigt den ganzen Einnahmen-Block deshalb nur noch bei einem konkret gewählten Konto (bei "Alle Konten" identischer Hinweistext wie bei den Kategorie-Budgets). Bereits bestehende Einnahmenziele ohne `account` werden dadurch verwaist (nicht gelöscht, aber in keiner Konto-Ansicht mehr sichtbar) — nach der Migration (`setup/migrate_income_account.mjs`) einmalig fürs gewünschte Konto neu setzen.
+
 ## Virtuelle Unterkonten (`accounts.parent_account`, ab `0.33.0`)
 
 Löst ein konkretes Limit auf: nur zwei Sparkonten bei der Bank, aber mehrere
@@ -103,6 +105,28 @@ landet immer auf einem echten Konto. Der seit `0.32.0` bestehende
 Kontostand-Sanity-Check zählt die Töpfe des gewählten Zielkontos mit ein
 (`api.listChildAccounts()` + Summe der einzelnen `accountBalanceAsOf()`-Werte),
 sonst schlägt der Hinweis nach dem Aufteilen in Töpfe ständig fälschlich an.
+
+**Kein eigener Chip in Buchungen/Auswertung/Budgets** (ab `0.34.0`, auf
+Nutzerwunsch): `AccChipRow` (`ui.jsx`) zeigt Töpfe nicht mehr als eigene,
+waehlbare Konto-Chips — bei mehreren Töpfen wurde die Chip-Reihe sonst
+schnell unübersichtlich, und ein Topf ergibt ohne sein Konto ohnehin kaum
+einen eigenständigen Blickwinkel. Wählt man stattdessen das Konto, dem ein
+Topf zugeordnet ist (den "Master"), zählen dessen Buchungen/Saldo
+automatisch mit — `accGroup` in `App.jsx` (ein `Set` aus der gewählten
+Konto-ID plus allen ihren Topf-IDs, `null` bei "Alle Konten") ersetzt dafür
+den bisherigen exakten `t.account === acc`-Vergleich in `visible`,
+`avgExpense` und der Jahresansicht (`JahresAnsicht` in `Auswertung.jsx`,
+eigene Kopie derselben Logik, weil sie ihre Buchungen über eine eigene
+`listTransactionsForYear()`-Abfrage statt aus `shared` bezieht). Die dafür
+gezeigten Saldo-Werte (Chips, "Summe aller Konten"/"Christian"-Kachel in
+`Buchungen.jsx`) kommen aus dem neuen `combinedBalances` in `App.jsx` (eigene
+Summe aus Konto + Töpfen, getrennt von `balances`, damit `balances.alle`
+nicht durch doppeltes Aufaddieren verfälscht wird) — `Konten.jsx` bekommt
+weiterhin das rohe `balances`, weil es dort sowohl den Topf-eigenen als auch
+den kombinierten Wert nebeneinander braucht. Einzelne Buchungszeilen zeigen
+den Topf-Namen (z. B. "Auto") weiterhin in ihrer Unterzeile — das ist kein
+Chip, sondern die einzige Stelle, an der noch erkennbar ist, welchem Topf
+eine konkrete Buchung zugeordnet ist, und bleibt deshalb unverändert.
 
 `setup/schema.mjs` patcht `accounts.parent_account` als eigenen, idempotenten
 Schritt direkt nach dem Anlegen der `accounts`-Sammlung, statt wie sonst bei
