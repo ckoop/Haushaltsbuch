@@ -169,6 +169,21 @@ export function ErrorNote({ error }) {
   );
 }
 
+// Kachel fuer einen einzelnen signierten Geldbetrag (z. B. "Saldo",
+// "Überschuss") - rot nur bei negativem Wert, bewusst kein Gruen fuer
+// positiv (in 0.31.1 an der Saldo-Kachel schon einmal zurueckgenommen).
+export function Metric({ label, value, signed }) {
+  return (
+    <div className="bg-white dark:bg-stone-800 rounded-xl px-4 py-3 border border-stone-200 dark:border-stone-700">
+      <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{label}</p>
+      <p className={`text-xl font-medium tabular-nums mt-0.5 ${
+        signed && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+        {eur(value)}
+      </p>
+    </div>
+  );
+}
+
 export function BudgetBar({ name, limit, spent }) {
   const pct = Math.min(100, Math.round((spent / limit) * 100));
   const over = spent > limit;

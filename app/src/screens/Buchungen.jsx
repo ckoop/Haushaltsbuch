@@ -3,7 +3,7 @@ import { ChevronRight, Search, TrendingDown, TrendingUp, X } from "lucide-react"
 import * as api from "../pb.js";
 import {
   eur, eurAbs, relDay, todayISO, byId,
-  UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChipRow,
+  UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChipRow, Metric,
 } from "../ui.jsx";
 
 // Eigenes Datumslabel fuer Suchtreffer statt relDay: Treffer koennen ueber
@@ -158,17 +158,5 @@ export default function Buchungen({
         ))}
       </section>
     </>
-  );
-}
-
-function Metric({ label, value, signed }) {
-  return (
-    <div className="bg-white dark:bg-stone-800 rounded-xl px-4 py-3 border border-stone-200 dark:border-stone-700">
-      <p className="text-xs text-stone-500 dark:text-stone-400 truncate">{label}</p>
-      <p className={`text-xl font-medium tabular-nums mt-0.5 ${
-        signed && value < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-        {eur(value)}
-      </p>
-    </div>
   );
 }
