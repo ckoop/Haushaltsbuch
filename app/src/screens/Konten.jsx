@@ -4,7 +4,7 @@ import * as api from "../pb.js";
 import {
   eur, eurAbs, typeIcon, accountIcon, accountIconByKey, ACCOUNT_TYPES, ACCOUNT_ICON_KEYS, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
   inputCls, Field, Sheet, Button, ErrorNote, AccountPicker, byId, UNKNOWN_CAT, UNKNOWN_TAG,
-  RECURRING, recurringLabel, todayISO,
+  RECURRING, todayISO,
 } from "../ui.jsx";
 import Import from "./Import.jsx";
 
@@ -29,6 +29,16 @@ export default function Konten({ accounts, categories, tags, people, balances, r
   const toggleParent = (id) => setCollapsedParents((s) => {
     const next = new Set(s);
     next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  // Daueraufträge nach Frequenz gruppiert (gleiches Klapp-Muster wie die
+  // Töpfe-Gruppe oben) - bei mehreren Konten mit je eigenen Regeln wurde die
+  // bisher flache Liste sonst schnell unübersichtlich. Default alle
+  // aufgeklappt, aus demselben Grund wie bei collapsedParents.
+  const [collapsedFrequencies, setCollapsedFrequencies] = useState(new Set());
+  const toggleFrequency = (v) => setCollapsedFrequencies((s) => {
+    const next = new Set(s);
+    next.has(v) ? next.delete(v) : next.add(v);
     return next;
   });
 
@@ -204,33 +214,49 @@ export default function Konten({ accounts, categories, tags, people, balances, r
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daueraufträge</p>
       <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
-        {rules.map((r) => {
-          const isTransfer = r.type === "transfer";
-          const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
-          const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
-          const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
-          const from = byId(accounts, r.account, { name: "?" });
-          const sub = (isTransfer ? `${from.name} → ${byId(accounts, r.to_account, { name: "?" }).name}` : `${cat.name} · ${from.name}`)
-            + ` · ${recurringLabel(r.frequency)}`
-            + (r.active ? ` · ab ${new Date(api.dateOnly(r.next_due) + "T12:00:00").toLocaleDateString("de-DE")}` : " · pausiert");
+        {RULE_FREQUENCIES.map(([freq, freqLabel]) => {
+          const group = rules.filter((r) => r.frequency === freq);
+          if (group.length === 0) return null;
+          const expanded = !collapsedFrequencies.has(freq);
           return (
-            <button key={r.id} onClick={() => setEditingRule(r)}
-              className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
-              <span className={`w-9 h-9 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0 ${!r.active ? "opacity-40" : ""}`}>
-                <Icon size={17} />
-              </span>
-              <span className={`flex-1 min-w-0 ${!r.active ? "opacity-40" : ""}`}>
-                <span className="flex items-center gap-1 text-sm truncate">
-                  <Repeat size={11} className="text-stone-400 dark:text-stone-500 shrink-0" />
-                  <span className="truncate">{r.payee || (isTransfer ? "Umbuchung" : cat.name)}</span>
+            <Fragment key={freq}>
+              <button onClick={() => toggleFrequency(freq)}
+                className="w-full flex items-center gap-2 px-3.5 py-2 text-left bg-stone-50 dark:bg-stone-700/30 active:bg-stone-100 dark:active:bg-stone-700/50">
+                <ChevronRight size={13}
+                  className={`text-stone-400 dark:text-stone-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                <span className="flex-1 min-w-0 text-xs font-medium text-stone-500 dark:text-stone-400">
+                  {freqLabel} ({group.length})
                 </span>
-                <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{sub}</span>
-              </span>
-              <span className={`text-sm font-medium tabular-nums ${!r.active ? "opacity-40" : ""} ${
-                isTransfer ? "text-stone-400 dark:text-stone-500" : r.amount_cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
-                {isTransfer ? "" : r.amount_cents > 0 ? "+" : "−"}{eurAbs(r.amount_cents)}
-              </span>
-            </button>
+              </button>
+              {expanded && group.map((r) => {
+                const isTransfer = r.type === "transfer";
+                const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
+                const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
+                const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
+                const from = byId(accounts, r.account, { name: "?" });
+                const sub = (isTransfer ? `${from.name} → ${byId(accounts, r.to_account, { name: "?" }).name}` : `${cat.name} · ${from.name}`)
+                  + (r.active ? ` · ab ${new Date(api.dateOnly(r.next_due) + "T12:00:00").toLocaleDateString("de-DE")}` : " · pausiert");
+                return (
+                  <button key={r.id} onClick={() => setEditingRule(r)}
+                    className="w-full flex items-center gap-3 pl-8 pr-3.5 py-3 text-left active:bg-stone-50 dark:active:bg-stone-700/50">
+                    <span className={`w-9 h-9 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0 ${!r.active ? "opacity-40" : ""}`}>
+                      <Icon size={17} />
+                    </span>
+                    <span className={`flex-1 min-w-0 ${!r.active ? "opacity-40" : ""}`}>
+                      <span className="flex items-center gap-1 text-sm truncate">
+                        <Repeat size={11} className="text-stone-400 dark:text-stone-500 shrink-0" />
+                        <span className="truncate">{r.payee || (isTransfer ? "Umbuchung" : cat.name)}</span>
+                      </span>
+                      <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{sub}</span>
+                    </span>
+                    <span className={`text-sm font-medium tabular-nums ${!r.active ? "opacity-40" : ""} ${
+                      isTransfer ? "text-stone-400 dark:text-stone-500" : r.amount_cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
+                      {isTransfer ? "" : r.amount_cents > 0 ? "+" : "−"}{eurAbs(r.amount_cents)}
+                    </span>
+                  </button>
+                );
+              })}
+            </Fragment>
           );
         })}
         {rules.length === 0 && (
