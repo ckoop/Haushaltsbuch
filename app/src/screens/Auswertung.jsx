@@ -3,10 +3,11 @@ import { ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, MONTHS, byId, colorOf, inputCls,
-  UNKNOWN_CAT, UNKNOWN_TAG, UNKNOWN_ACC, TxRow, Sheet, ErrorNote, Spinner, Button,
+  UNKNOWN_CAT, UNKNOWN_TAG, UNKNOWN_ACC, TxRow, Sheet, ErrorNote, Spinner, Button, RECURRING,
 } from "../ui.jsx";
 
 const monthIdx = (dateStr) => Number(dateStr.slice(5, 7)) - 1;
+const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
 export default function Auswertung({
   categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc, monthKey, openDetail,
@@ -14,6 +15,14 @@ export default function Auswertung({
   const [mode, setMode] = useState("monat");
   const [openCat, setOpenCat] = useState(null);
   const [openTag, setOpenTag] = useState(null);
+  // Gleiches Klapp-Muster wie die Daueraufträge-Gruppen in Konten.jsx - Default
+  // alle aufgeklappt, nicht persistiert.
+  const [collapsedFrequencies, setCollapsedFrequencies] = useState(new Set());
+  const toggleFrequency = (v) => setCollapsedFrequencies((s) => {
+    const next = new Set(s);
+    next.has(v) ? next.delete(v) : next.add(v);
+    return next;
+  });
   const income = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   const transfers = transactions.length - real.length;
@@ -58,9 +67,30 @@ export default function Auswertung({
             <>
               <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">Wiederkehrende Buchungen</p>
               <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700 mb-5">
-                {recurring.map((t) => (
-                  <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount onClick={() => openDetail(t)} />
-                ))}
+                {RULE_FREQUENCIES.map(([freq, freqLabel]) => {
+                  const group = recurring.filter((t) => t.recurring === freq);
+                  if (group.length === 0) return null;
+                  const expanded = !collapsedFrequencies.has(freq);
+                  return (
+                    <div key={freq}>
+                      <button onClick={() => toggleFrequency(freq)}
+                        className="w-full flex items-center gap-2 px-3.5 py-2 text-left bg-stone-50 dark:bg-stone-700/30 active:bg-stone-100 dark:active:bg-stone-700/50">
+                        <ChevronRight size={13}
+                          className={`text-stone-400 dark:text-stone-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                        <span className="flex-1 min-w-0 text-xs font-medium text-stone-500 dark:text-stone-400">
+                          {freqLabel} ({group.length})
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div className="divide-y divide-stone-100 dark:divide-stone-700">
+                          {group.map((t) => (
+                            <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount onClick={() => openDetail(t)} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
