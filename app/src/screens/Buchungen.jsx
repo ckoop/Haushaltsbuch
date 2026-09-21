@@ -15,6 +15,7 @@ const searchDayLabel = (iso) =>
 export default function Buchungen({
   accounts, categories, transactions, real, spentByCat, budgets, incomeEntries, avgExpense,
   combinedBalances, acc, setAcc, openDetail, monthKey,
+  reserveMonthlyOf, withdrawnThisMonthOf,
   query, setQuery, searchResults, searching,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
@@ -125,7 +126,8 @@ export default function Buchungen({
             <div className="space-y-3">
               {budgets.map((b) => (
                 <BudgetBar key={b.id} name={byId(categories, b.category, UNKNOWN_CAT).name}
-                  limit={b.amount_cents} spent={spentByCat[b.category] ?? 0} />
+                  limit={b.amount_cents + reserveMonthlyOf(b.category)}
+                  spent={(spentByCat[b.category] ?? 0) - withdrawnThisMonthOf(b.category)} />
               ))}
             </div>
           )}

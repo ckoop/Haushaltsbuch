@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
+import { reserveStatus } from "./ruecklagen.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
 import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
@@ -92,6 +93,7 @@ function Shell() {
   const [budgets, setBudgets] = useState([]);
   const [incomeEntries, setIncomeEntries] = useState([]);
   const [avgTx, setAvgTx] = useState([]);   // vorherige Monate, fuer die Einkommens-Hochrechnung
+  const [reserves, setReserves] = useState([]);
 
   const { key } = api.monthRange(ym.y, ym.m);
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 1800); };
@@ -124,6 +126,44 @@ function Shell() {
   }, [ym.y, ym.m, key, acc]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Ruecklagen fuer unregelmaessige (quartals-/jahresweise) Dauerauftraege -
+  // bis 0.41.x screen-lokal nur in Budgets.jsx geladen, jetzt zentral hier
+  // (ab 0.42.0), weil auch die Budget-Leiste in Buchungen.jsx sonst im
+  // Faelligkeitsmonat faelschlich weit ueber Budget zeigt (der volle
+  // Abbuchungsbetrag gegen das nicht um die Ruecklage erhoehte Grundbudget).
+  // Haengt bewusst nur an "acc", nicht am Monat - reserveStatus() rechnet den
+  // Saldo je sichtbarem Monat live aus der vollen Buchungshistorie je Regel.
+  useEffect(() => {
+    if (!acc || acc === "alle") { setReserves([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rules = await api.listReserveRules(acc);
+        const withTxs = await Promise.all(
+          rules.map(async (rule) => ({ rule, txs: await api.listRuleTransactions(rule.id) }))
+        );
+        if (!cancelled) setReserves(withTxs);
+      } catch (e) { if (!cancelled) setError(e); }
+    })();
+    return () => { cancelled = true; };
+  }, [acc]);
+
+  // Effektives Limit = manuell gesetztes Budget + monatliche Ruecklagen-Rate
+  // (status.monthly) aus allen quartals-/jahresweisen Regeln einer Kategorie.
+  // Bewusst nicht in budgets.amount_cents geschrieben, sondern hier bei jeder
+  // Verwendung live dazugerechnet (kein neuer gespeicherter Zustand) - sonst
+  // wuerde ein manueller Edit die automatische Komponente ueberschreiben und
+  // umgekehrt. spentByCat wird fuer den Soll/Ist-Vergleich um die in diesem
+  // Monat tatsaechlich entnommenen Ruecklagen-Betraege bereinigt, sonst
+  // sprengt die volle Abbuchung im Faelligkeitsmonat jede Vergleichsleiste.
+  const reservesFor = (cid) => reserves
+    .filter((r) => r.rule.category === cid)
+    .map((r) => ({ rule: r.rule, status: reserveStatus(r.rule, r.txs, key) }));
+  const reserveMonthlyOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.monthly, 0);
+  const withdrawnThisMonthOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.withdrawn, 0);
+  const effectiveLimitOf = (cid) =>
+    (budgets.find((b) => b.category === cid)?.amount_cents ?? 0) + reserveMonthlyOf(cid);
 
   // Faengt ein als Standard hinterlegtes, zwischenzeitlich geloeschtes Konto
   // ab (z. B. nach dem Loeschen in Konten.jsx) - ohne diesen Check bliebe
@@ -359,6 +399,7 @@ function Shell() {
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
+    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf,
     depotEnabled, setDepotEnabled, reloadTags,
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import * as api from "../pb.js";
-import { reserveStatus } from "../ruecklagen.js";
 import {
   eur, catIcon, colorOf, inputCls, ErrorNote, TxRow, Sheet, BudgetBar, AccChipRow, byId, UNKNOWN_ACC, Metric,
 } from "../ui.jsx";
@@ -69,7 +68,7 @@ function IncomeRow({ row, dauer, monthKey, acc, onCreated, onRemoved, flash, set
 
 export default function BudgetScreen({
   categories, accounts, budgets, incomeEntries, real, spentByCat, monthKey, acc, setAcc, combinedBalances,
-  reload, flash, openDetail,
+  reservesFor, reserveMonthlyOf, effectiveLimitOf, reload, flash, openDetail,
 }) {
   const [error, setError] = useState(null);
   const [dauer, setDauer] = useState(true);
@@ -78,33 +77,9 @@ export default function BudgetScreen({
   const [rows, setRows] = useState(() => incomeEntries.map(toRow));
   useEffect(() => { setRows(incomeEntries.map(toRow)); }, [incomeEntries]);
 
-  // Ruecklagen fuer unregelmaessige (quartalsweise/jaehrliche) Dauerauftraege
-  // - screen-lokal geladen (nicht Teil von App.jsx's load()), weil nur dieser
-  // Screen sie braucht (gleiches Prinzip wie der "Vorschlag aus Vormonat"-
-  // Button oben). Haengt nur an "acc", nicht am Monat: die volle Buchungs-
-  // Historie je Regel wird einmal pro Kontowechsel geholt, reserveStatus()
-  // rechnet daraus fuer den jeweils sichtbaren Monat live den Saldo aus.
-  const [reserves, setReserves] = useState([]);
-  useEffect(() => {
-    if (!acc || acc === "alle") { setReserves([]); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const rules = await api.listReserveRules(acc);
-        const withTxs = await Promise.all(
-          rules.map(async (rule) => ({ rule, txs: await api.listRuleTransactions(rule.id) }))
-        );
-        if (!cancelled) setReserves(withTxs);
-      } catch (e) { if (!cancelled) setError(e); }
-    })();
-    return () => { cancelled = true; };
-  }, [acc]);
-  const reservesFor = (cid) => reserves
-    .filter((r) => r.rule.category === cid)
-    .map((r) => ({ rule: r.rule, status: reserveStatus(r.rule, r.txs, monthKey) }));
-
   const limitOf = (cid) => budgets.find((b) => b.category === cid)?.amount_cents ?? 0;
-  const totalBudgeted = budgets.reduce((s, b) => s + b.amount_cents, 0);
+  const totalReserveMonthly = categories.reduce((s, c) => s + reserveMonthlyOf(c.id), 0);
+  const totalBudgeted = budgets.reduce((s, b) => s + b.amount_cents, 0) + totalReserveMonthly;
   const incomeTotal = rows.reduce((s, r) => s + (r.amount_cents || 0), 0);
   const remaining = incomeTotal - totalBudgeted;
 
@@ -120,7 +95,7 @@ export default function BudgetScreen({
   const incomeActual = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const surplus = incomeActual - expenseTotal;
   const uncoveredCats = categories.filter((c) =>
-    c.kind === "expense" && !c.archived && limitOf(c.id) === 0 && (spentByCat[c.id] ?? 0) > 0);
+    c.kind === "expense" && !c.archived && effectiveLimitOf(c.id) === 0 && (spentByCat[c.id] ?? 0) > 0);
 
   // Buchungen ohne Kategorie tauchen in keiner Budget-Zeile auf, weil Budgets
   // pro Kategorie laufen - ohne diesen Hinweis sieht die Ansicht faelschlich
@@ -260,6 +235,7 @@ export default function BudgetScreen({
               const catReserves = reservesFor(c.id);
               const withdrawnThisMonth = catReserves.reduce((s, r) => s + r.status.withdrawn, 0);
               const deficit = catReserves.reduce((s, r) => s + r.status.deficit, 0);
+              const reserveMonthly = catReserves.reduce((s, r) => s + r.status.monthly, 0);
               return (
                 <div key={c.id} className="flex items-center gap-3 px-3.5 py-2.5">
                   <span className={`w-8 h-8 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0`}>
@@ -286,6 +262,11 @@ export default function BudgetScreen({
                           <span className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
                             <AlertTriangle size={12} className="shrink-0" />
                             {eur(deficit)} noch nicht gedeckt
+                          </span>
+                        )}
+                        {reserveMonthly > 0 && (
+                          <span className="block text-xs italic text-stone-500 dark:text-stone-400">
+                            Effektiv {eur(effectiveLimitOf(c.id))} ({eur(limitOf(c.id))} Grundbudget + {eur(reserveMonthly)} Rücklage) — wird automatisch berücksichtigt
                           </span>
                         )}
                       </span>

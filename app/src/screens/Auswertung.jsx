@@ -11,6 +11,7 @@ const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
 export default function Auswertung({
   categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc, monthKey, openDetail,
+  effectiveLimitOf, withdrawnThisMonthOf,
 }) {
   const [mode, setMode] = useState("monat");
   const [openCat, setOpenCat] = useState(null);
@@ -100,6 +101,19 @@ export default function Auswertung({
           <div className="space-y-3.5">
             {rows.map(([cid, val]) => {
               const cat = byId(categories, cid, UNKNOWN_CAT);
+              // Ueberschreitung gegen das effektive Budget (Grundbudget +
+              // Ruecklagen-Rate, s. App.jsx) - um die tatsaechliche
+              // Ruecklagen-Entnahme bereinigt, gleiche Rechnung wie das
+              // "bisher"-Feld in Budgets.jsx, sonst wuerde die Faelligkeit
+              // einer Quartals-/Jahresregel hier faelschlich als
+              // Ueberschreitung aufleuchten. Ohne jedes Budget (Limit 0) gibt
+              // es nichts zum Vergleichen. Bewusst nur als Text markiert,
+              // nicht als Balkenfarbe - die Balkenfarbe ist die einzige
+              // Unterscheidung zwischen den Kategorien in dieser Liste, auf
+              // Nutzerwunsch bleibt sie deshalb unangetastet.
+              const limit = effectiveLimitOf(cid);
+              const adjusted = val - withdrawnThisMonthOf(cid);
+              const overBudget = limit > 0 && adjusted > limit;
               const bar = colorOf(cat.color)[2];
               return (
                 <button key={cid} onClick={() => setOpenCat(cid)} className="block w-full text-left">
@@ -108,8 +122,10 @@ export default function Auswertung({
                       {cat.name}
                       <ChevronRight size={13} className="text-stone-300 dark:text-stone-600" />
                     </span>
-                    <span className="tabular-nums text-stone-500 dark:text-stone-400">
-                      {eur(val)} <span className="text-stone-400 dark:text-stone-500">· {Math.round((val / expense) * 100)}%</span>
+                    <span className={`tabular-nums ${overBudget ? "text-red-600 dark:text-red-400" : "text-stone-500 dark:text-stone-400"}`}>
+                      {eur(val)} <span className={overBudget ? "text-red-500 dark:text-red-400/80" : "text-stone-400 dark:text-stone-500"}>
+                        · {overBudget ? `über ${eur(limit)} Budget` : `${Math.round((val / expense) * 100)}%`}
+                      </span>
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">

@@ -58,16 +58,23 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
         : { type: "tx", account: from, category: kind === "ein" ? incomeCat?.id : cat,
             amount_cents: kind === "ein" ? cents : -cents };
       await api.createTransaction({ ...base, date, payee: payee.trim(), note: "", import_hash: "", recurring });
+      let msg = kind === "um" ? "Umbuchung gesichert" : "Buchung gesichert";
       if (recurring && autoRepeat) {
         // Die gerade gesicherte Buchung deckt die aktuelle Periode ab, der
-        // Dauerauftrag greift erst ab der naechsten.
-        await api.saveRecurringRule({
-          ...base, payee: payee.trim(), note: "", frequency: recurring,
-          next_due: api.addMonths(date, { monthly: 1, quarterly: 3, yearly: 12 }[recurring]),
-          active: true,
-        });
+        // Dauerauftrag greift erst ab der naechsten. Eigener try/catch: die
+        // Buchung selbst ist zu diesem Zeitpunkt schon gesichert, ein
+        // bereits bestehender Dauerauftrag (saveRecurringRule() lehnt
+        // Duplikate ab) soll das nicht als Fehlschlag der ganzen Buchung
+        // erscheinen lassen.
+        try {
+          await api.saveRecurringRule({
+            ...base, payee: payee.trim(), note: "", frequency: recurring,
+            next_due: api.addMonths(date, { monthly: 1, quarterly: 3, yearly: 12 }[recurring]),
+            active: true,
+          });
+        } catch (e) { msg += ` (${e.message})`; }
       }
-      onSaved(kind === "um" ? "Umbuchung gesichert" : "Buchung gesichert");
+      onSaved(msg);
       if (keepOpen) { setDigits(""); setPayee(""); }
       else onClose();
     } catch (e) { setError(e); }

@@ -191,10 +191,28 @@ export const countByAccount = async (accountId) => {
 export const listRecurringRules = () =>
   pb.collection("recurring_rules").getFullList({ sort: "next_due" });
 
-export const saveRecurringRule = (r) =>
-  r.id
-    ? pb.collection("recurring_rules").update(r.id, r)
-    : pb.collection("recurring_rules").create(r);
+// Verhindert doppelt angelegte Daueraufträge (kein Unique-Index auf
+// recurring_rules moeglich - "gleich" ist hier eine Kombination aus
+// mehreren Feldern, kein einzelner Schluessel). Zwei aktive Regeln gelten
+// als derselbe Dauerauftrag bei gleichem Konto/Betrag/Rhythmus/Empfaenger
+// und (je nach Typ) gleicher Kategorie bzw. gleichem Zielkonto - genau die
+// Kombination, die bisher an allen drei Erfassungswegen (NewEntry.jsx,
+// TxDetail.jsx, Konten.jsx) unbemerkt zweimal entstehen konnte. Nur gegen
+// aktive Regeln geprueft, eine deaktivierte darf durch eine neue ersetzt
+// werden. Betrifft nur das Anlegen, nicht das Bearbeiten (r.id gesetzt).
+export const saveRecurringRule = async (r) => {
+  if (r.id) return pb.collection("recurring_rules").update(r.id, r);
+  const candidates = await pb.collection("recurring_rules").getFullList({
+    filter: pb.filter("account = {:a} && type = {:t} && amount_cents = {:amt} && frequency = {:f} && active = true",
+      { a: r.account, t: r.type, amt: r.amount_cents, f: r.frequency }),
+  });
+  const payee = (r.payee || "").trim().toLowerCase();
+  const dup = candidates.find((c) =>
+    (c.payee || "").trim().toLowerCase() === payee &&
+    (r.type === "transfer" ? c.to_account === r.to_account : c.category === r.category));
+  if (dup) throw new Error("Dieser Dauerauftrag existiert schon (gleiches Konto, Betrag, Rhythmus und Empfänger).");
+  return pb.collection("recurring_rules").create(r);
+};
 
 export const deleteRecurringRule = (id) => pb.collection("recurring_rules").delete(id);
 
