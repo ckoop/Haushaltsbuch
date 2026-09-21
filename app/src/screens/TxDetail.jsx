@@ -12,8 +12,13 @@ import {
 // die Darstellung.
 export default function TxDetail({
   tx, accounts, categories, tags, onClose, onDelete,
-  onUpdateRecurring, onUpdateCategory, onAddTag, onRemoveTag,
+  onUpdateRecurring, onCreateRecurringRule, onUpdateCategory, onAddTag, onRemoveTag,
 }) {
+  // Lokal statt auf tx gespeichert - recurring_rules haelt keine Rueckreferenz
+  // zur Buchung (siehe app/src/screens/CLAUDE.md), das Haekchen kann eine schon
+  // bestehende Regel deshalb nicht erkennen, nur eine neu angelegte in dieser
+  // Sitzung.
+  const [ruleCreated, setRuleCreated] = useState(false);
   const isTransfer = tx.type === "transfer";
   const cat = isTransfer ? null : byId(categories, tx.category, UNKNOWN_CAT);
   const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
@@ -66,7 +71,7 @@ export default function TxDetail({
       <TagEditor tx={tx} tags={tags} onAdd={onAddTag} onRemove={onRemoveTag} />
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Wiederkehrend</p>
-      <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px] mb-4">
+      <div className={`inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px] ${tx.recurring ? "mb-2" : "mb-4"}`}>
         {RECURRING.map(([v, label], i) => (
           <button key={v || "none"} onClick={() => onUpdateRecurring(tx.id, v)}
             className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
@@ -75,6 +80,13 @@ export default function TxDetail({
           </button>
         ))}
       </div>
+      {tx.recurring && (
+        <label className="flex items-center gap-2 mb-4 text-[13px] text-stone-600 dark:text-stone-300">
+          <input type="checkbox" checked={ruleCreated} disabled={ruleCreated}
+            onChange={() => { onCreateRecurringRule(tx); setRuleCreated(true); }} />
+          {ruleCreated ? "Dauerauftrag angelegt" : "Automatisch weiterbuchen (Dauerauftrag)"}
+        </label>
+      )}
 
       <Button variant="danger" onClick={() => onDelete(tx.id)}
         className="w-full flex items-center justify-center gap-2">

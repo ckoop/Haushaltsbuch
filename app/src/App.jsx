@@ -287,6 +287,24 @@ function Shell() {
     } catch (e) { setError(e); }
   };
 
+  // Dauerauftrag nachtraeglich aus einer bereits als wiederkehrend markierten
+  // Buchung anlegen - gleiche Berechnung wie beim "Automatisch weiterbuchen"-
+  // Haekchen in NewEntry.jsx (die gebuchte Periode deckt sich selbst ab, die
+  // Regel greift erst ab der naechsten).
+  const createRecurringRule = async (tx) => {
+    try {
+      const base = tx.type === "transfer"
+        ? { type: "transfer", account: tx.account, to_account: tx.to_account, amount_cents: tx.amount_cents }
+        : { type: "tx", account: tx.account, category: tx.category, amount_cents: tx.amount_cents };
+      await api.saveRecurringRule({
+        ...base, payee: tx.payee, note: tx.note, frequency: tx.recurring,
+        next_due: api.addMonths(api.dateOnly(tx.date), { monthly: 1, quarterly: 3, yearly: 12 }[tx.recurring]),
+        active: true,
+      });
+      flash("Dauerauftrag angelegt");
+    } catch (e) { setError(e); }
+  };
+
   // Freies Tag-Feld: Name gegen die geladene Liste abgleichen (case-insensitiv),
   // sonst neu anlegen. load() danach zieht auch einen frisch angelegten Tag in
   // die App-weite Liste nach, ohne das hier gesondert behandeln zu muessen.
@@ -513,8 +531,8 @@ function Shell() {
           {detail && (
             <TxDetail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
               onClose={() => history.back()} onDelete={removeTx}
-              onUpdateRecurring={updateRecurring} onUpdateCategory={updateCategory}
-              onAddTag={addTag} onRemoveTag={removeTag} />
+              onUpdateRecurring={updateRecurring} onCreateRecurringRule={createRecurringRule}
+              onUpdateCategory={updateCategory} onAddTag={addTag} onRemoveTag={removeTag} />
           )}
 
           {autoBooked && (
