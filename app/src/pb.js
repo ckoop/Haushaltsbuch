@@ -179,6 +179,25 @@ export const createTransaction = (t) => pb.collection("transactions").create(t);
 export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
 export const deleteTransaction = (id) => pb.collection("transactions").delete(id);
 
+// Sucht auf dem gewaehlten Gegenkonto eine Buchung, die zu einer nachtraeglich
+// in eine Umbuchung umzuwandelnden Buchung passen wuerde - gleicher Tag,
+// spiegelverkehrter Betrag (die Ausgabe auf dem einen Konto = die Einnahme auf
+// dem anderen). Kommt vor, wenn beide Konten importiert wurden und der Import
+// die Verbindung zwischen ihnen naturgemaess nicht erkennt (er sieht pro Datei
+// immer nur ein Konto). Nur ein Hinweis fuers UI (TxDetail.jsx) - wird dort
+// zum Loeschen vorgeschlagen, nicht automatisch entfernt.
+export async function findTransferCounterpart(accountId, date, amountCents, excludeId) {
+  const d = dateOnly(date);
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "account = {:acc} && date >= {:d0} && date <= {:d1} && amount_cents = {:amt} && type != 'transfer' && id != {:ex}",
+      { acc: accountId, d0: `${d} 00:00:00`, d1: `${d} 23:59:59`, amt: amountCents, ex: excludeId }
+    ),
+    fields: "id,date,amount_cents,payee",
+  });
+  return rows[0] ?? null;
+}
+
 export const countByAccount = async (accountId) => {
   const r = await pb.collection("transactions").getList(1, 1, {
     filter: pb.filter("account = {:id} || to_account = {:id}", { id: accountId }),

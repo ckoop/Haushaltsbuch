@@ -367,6 +367,28 @@ function Shell() {
     } catch (e) { setError(e); }
   };
 
+  // Nachtraegliches Umwandeln einer importierten Einzelbuchung in eine
+  // Umbuchung (TxDetail.jsx) - der CSV-Import sieht immer nur ein Konto pro
+  // Datei und kann eine Umbuchung zwischen zwei eigenen Konten deshalb nicht
+  // selbst erkennen. Die Richtung ergibt sich aus dem Vorzeichen der
+  // bestehenden Buchung: eine Ausgabe wird zur Quelle (account bleibt, neues
+  // to_account), eine Einnahme zum Ziel (neues account, to_account bleibt).
+  // counterpartId ist optional gesetzt, wenn TxDetail.jsx auf dem Gegenkonto
+  // schon eine passende Spiegelbuchung gefunden hat (beide Konten importiert)
+  // - die wird mitgeloescht, sonst waere die Umbuchung doppelt gezaehlt.
+  const convertToTransfer = async (tx, otherAccountId, counterpartId) => {
+    try {
+      if (counterpartId) await api.deleteTransaction(counterpartId);
+      const patch = tx.amount_cents < 0
+        ? { type: "transfer", account: tx.account, to_account: otherAccountId, amount_cents: -tx.amount_cents, category: "" }
+        : { type: "transfer", account: otherAccountId, to_account: tx.account, amount_cents: tx.amount_cents, category: "" };
+      const updated = await api.updateTransaction(tx.id, patch);
+      setDetail(updated);
+      flash(counterpartId ? "In Umbuchung umgewandelt, Duplikat gelöscht" : "In Umbuchung umgewandelt");
+      load();
+    } catch (e) { setError(e); }
+  };
+
   // Nur die Tag-Liste nachladen statt eines vollen reload(): load() setzt
   // kurzzeitig loading=true, was jeden Tab-Screen unmountet (siehe unten,
   // {!loading && ... <Konten/>}) - ein gerade offenes Sheet mit rein lokalem
@@ -573,7 +595,8 @@ function Shell() {
             <TxDetail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
               onClose={() => history.back()} onDelete={removeTx}
               onUpdateRecurring={updateRecurring} onCreateRecurringRule={createRecurringRule}
-              onUpdateCategory={updateCategory} onAddTag={addTag} onRemoveTag={removeTag} />
+              onUpdateCategory={updateCategory} onAddTag={addTag} onRemoveTag={removeTag}
+              onConvertToTransfer={convertToTransfer} />
           )}
 
           {autoBooked && (

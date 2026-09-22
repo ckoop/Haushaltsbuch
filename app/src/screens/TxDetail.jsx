@@ -3,7 +3,7 @@ import { Trash2, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eurAbs, byId, catIcon, colorOf, inputCls,
-  UNKNOWN_ACC, UNKNOWN_CAT, UNKNOWN_TAG, Sheet, Button, RECURRING,
+  UNKNOWN_ACC, UNKNOWN_CAT, UNKNOWN_TAG, Sheet, Button, Field, RECURRING,
 } from "../ui.jsx";
 
 // Eigenes Modul statt Teil von Buchungen.jsx, weil auch Auswertung.jsx (und
@@ -13,6 +13,7 @@ import {
 export default function TxDetail({
   tx, accounts, categories, tags, onClose, onDelete,
   onUpdateRecurring, onCreateRecurringRule, onUpdateCategory, onAddTag, onRemoveTag,
+  onConvertToTransfer,
 }) {
   // Lokal statt auf tx gespeichert - recurring_rules haelt keine Rueckreferenz
   // zur Buchung (siehe app/src/screens/CLAUDE.md), das Haekchen kann eine schon
@@ -88,6 +89,8 @@ export default function TxDetail({
         </label>
       )}
 
+      {!isTransfer && <TransferConverter tx={tx} accounts={accounts} onConvert={onConvertToTransfer} />}
+
       <Button variant="danger" onClick={() => onDelete(tx.id)}
         className="w-full flex items-center justify-center gap-2">
         <Trash2 size={16} /> Buchung löschen
@@ -143,6 +146,81 @@ function TagEditor({ tx, tags, onAdd, onRemove }) {
           {suggestions.map((t) => <option key={t.id} value={t.name} />)}
         </datalist>
         <Button variant="ghost" onClick={submit} className="px-4 shrink-0">+</Button>
+      </div>
+    </div>
+  );
+}
+
+// Wandelt eine importierte Einzelbuchung nachtraeglich in eine Umbuchung um -
+// der CSV-Import sieht immer nur ein Konto pro Datei und kann eine Umbuchung
+// zwischen zwei eigenen Konten deshalb nicht selbst erkennen. Zugeklappt per
+// Default, oeffnet sich zur Gegenkonto-Auswahl; sucht dort automatisch nach
+// einer passenden Spiegelbuchung (gleicher Tag, gegenteiliger Betrag) und
+// bietet sie zum Mitloeschen an, falls beide Konten importiert wurden - sonst
+// wuerde die Umbuchung doppelt gezaehlt.
+function TransferConverter({ tx, accounts, onConvert }) {
+  const [open, setOpen] = useState(false);
+  const [otherAccount, setOtherAccount] = useState("");
+  // undefined = noch nicht gesucht, null = gesucht, keine gefunden
+  const [counterpart, setCounterpart] = useState(undefined);
+  const [checking, setChecking] = useState(false);
+
+  const options = accounts.filter((a) => a.id !== tx.account);
+
+  const pick = async (accountId) => {
+    setOtherAccount(accountId);
+    setCounterpart(undefined);
+    if (!accountId) return;
+    setChecking(true);
+    try {
+      setCounterpart(await api.findTransferCounterpart(accountId, tx.date, -tx.amount_cents, tx.id));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Button variant="ghost" onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-center gap-2 mb-3">
+        <ArrowLeftRight size={16} /> In Umbuchung umwandeln
+      </Button>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 p-4 mb-3">
+      <Field label="Gegenkonto">
+        <select className={inputCls} value={otherAccount} onChange={(e) => pick(e.target.value)}>
+          <option value="">Konto wählen …</option>
+          {options.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </Field>
+
+      {checking && (
+        <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">Suche nach passender Gegenbuchung …</p>
+      )}
+      {otherAccount && !checking && counterpart !== undefined && (
+        counterpart ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+            Auf diesem Konto existiert schon eine passende Buchung ({counterpart.payee || "ohne Empfänger"},{" "}
+            {eurAbs(counterpart.amount_cents)}) vom selben Tag — wird beim Umwandeln mitgelöscht, sonst zählt
+            die Umbuchung doppelt.
+          </p>
+        ) : (
+          <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">Keine passende Gegenbuchung gefunden.</p>
+        )
+      )}
+
+      <div className="flex gap-2">
+        <Button variant="ghost" onClick={() => { setOpen(false); setOtherAccount(""); setCounterpart(undefined); }}
+          className="flex-1">
+          Abbrechen
+        </Button>
+        <Button onClick={() => onConvert(tx, otherAccount, counterpart?.id ?? null)}
+          disabled={!otherAccount || checking} className="flex-1">
+          Umwandeln
+        </Button>
       </div>
     </div>
   );
