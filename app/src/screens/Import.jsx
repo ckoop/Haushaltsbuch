@@ -410,7 +410,9 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                 Kontostand laut Bank-Export: {eur(statementBalance)} · nach diesem Import voraussichtlich:{" "}
                 {eur(balanceAfter)} · Differenz: {eur(balanceDiff)}. Kann an fehlenden, doppelten oder noch
-                nicht exportierten Buchungen liegen — kein automatischer Abbruch, aber einen Blick wert.
+                nicht exportierten Buchungen liegen — oder daran, dass die Bank hier schon vorgemerkte, noch
+                nicht gebuchte Umsätze mit einrechnet, die im Export selbst nie auftauchen. Kein
+                automatischer Abbruch, aber einen Blick wert.
               </p>
             )
           )}
