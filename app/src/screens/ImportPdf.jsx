@@ -58,6 +58,10 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
   const [lastDate, setLastDate] = useState(null);
   const [balanceBefore, setBalanceBefore] = useState(null);
   const [knownBalanceInput, setKnownBalanceInput] = useState("");
+  // Freie Notiz zu diesem Import (z. B. "3 vorgemerkte Umsaetze, 34,07 EUR")
+  // - hilft beim spaeteren Nachvollziehen einer Kontostand-Abweichung, gleiches
+  // Feld wie in Import.jsx.
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     Promise.all([api.listRules(), api.listImportRuns()])
@@ -120,6 +124,7 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
       }));
       setManualCats({});
       setExcluded(new Set());
+      setNote("");
       setStep(1);
     } catch (e) {
       setError(e?.name === "PasswordException" ? "PDF ist passwortgeschützt oder beschädigt." : e);
@@ -159,6 +164,7 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
       const run = await api.createImportRun({
         account, filename: file?.name ?? "", row_count: toImport.length,
         skipped_count: dupes.length + bad.length + excluded.size,
+        note: note.trim(),
       });
       await api.batchCreateTransactions(
         toImport.map((r) => ({
@@ -252,6 +258,9 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
                       <span className="block text-xs text-stone-500 dark:text-stone-400">
                         {new Date(r.created).toLocaleDateString("de-DE")} · {r.row_count} Buchungen
                       </span>
+                      {r.note && (
+                        <span className="block text-xs text-amber-700 dark:text-amber-400 truncate">{r.note}</span>
+                      )}
                     </span>
                     {confirmUndo === r.id ? (
                       <span className="flex items-center gap-2 shrink-0">
@@ -294,6 +303,11 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
               Evtl. hat das Layout eine Zeile falsch zugeordnet — einen Blick in die Datei wert.
             </p>
           )}
+
+          <Field label="Notiz zu diesem Import (optional)">
+            <input type="text" className={inputCls} value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="z. B. 3 vorgemerkte Umsätze, 34,07 €" maxLength={500} />
+          </Field>
 
           <Field label={`Gebuchter Kontostand laut Bank${lastDate ? " am " + new Date(lastDate + "T12:00:00").toLocaleDateString("de-DE") : ""} (optional, ohne vorgemerkte Umsätze)`}>
             <input type="text" inputMode="decimal" className={inputCls} placeholder="z. B. 943,97"

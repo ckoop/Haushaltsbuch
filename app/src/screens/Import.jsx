@@ -43,6 +43,9 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
   // { category, saveRule }. saveRule legt beim Import zusaetzlich eine
   // Regel an, damit derselbe Empfaenger kuenftig automatisch zugeordnet wird.
   const [manualCats, setManualCats] = useState({});
+  // Freie Notiz zu diesem Import (z. B. "3 vorgemerkte Umsaetze, 34,07 EUR")
+  // - hilft beim spaeteren Nachvollziehen einer Kontostand-Abweichung.
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     Promise.all([api.listProfiles(), api.listRules(), api.listImportRuns()])
@@ -149,6 +152,7 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       }));
       setManualCats({});
       setExcluded(new Set());
+      setNote("");
       setStep(2);
     } catch (e) { setError(e); }
     finally { setBusy(false); }
@@ -179,6 +183,7 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       const run = await api.createImportRun({
         account, filename: file?.name ?? "", row_count: toImport.length,
         skipped_count: dupes.length + bad.length + excluded.size,
+        note: note.trim(),
       });
       await api.batchCreateTransactions(
         toImport.map((r) => ({
@@ -285,6 +290,9 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
                       <span className="block text-xs text-stone-500 dark:text-stone-400">
                         {new Date(r.created).toLocaleDateString("de-DE")} · {r.row_count} Buchungen
                       </span>
+                      {r.note && (
+                        <span className="block text-xs text-amber-700 dark:text-amber-400 truncate">{r.note}</span>
+                      )}
                     </span>
                     {confirmUndo === r.id ? (
                       <span className="flex items-center gap-2 shrink-0">
@@ -416,6 +424,11 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
             <Stat n={dupes.length} label="schon da" tone="text-stone-500 dark:text-stone-400" />
             <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600 dark:text-red-400" : "text-stone-400 dark:text-stone-500"} />
           </div>
+
+          <Field label="Notiz zu diesem Import (optional)">
+            <input type="text" className={inputCls} value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="z. B. 3 vorgemerkte Umsätze, 34,07 €" maxLength={500} />
+          </Field>
 
           {statementBalance !== null && (
             balanceDiff === 0 ? (

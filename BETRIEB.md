@@ -368,6 +368,17 @@ Bereits bestehende Einnahmenziele ohne `account` werden dadurch **verwaist**
 (nicht gelöscht, aber in keiner Konto-Ansicht mehr sichtbar) — nach der
 Migration einmalig fürs gewünschte Konto neu setzen.
 
+**`imports.note` (ab `0.47.0`): freie Notiz zu einem Import** (z. B. „3
+vorgemerkte Umsätze, 34,07 €") — hilft beim späteren Nachvollziehen einer
+Kontostand-Abweichung, ohne den Kontext des Imports erst wieder rekonstruieren
+zu müssen. Reines Zusatzfeld, kein Index, per Skript nachziehbar:
+
+```bash
+npm i pocketbase
+PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
+  node setup/migrate_imports_note.mjs
+```
+
 ## Umgebungen: Entwicklung vs. Produktion
 
 Zwei getrennte Instanzen, nicht zu verwechseln:

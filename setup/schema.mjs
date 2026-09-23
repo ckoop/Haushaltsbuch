@@ -150,6 +150,11 @@ const importsId = await ensure({
     text("filename", { max: 200 }),
     num("row_count", { onlyInt: true }),
     num("skipped_count", { onlyInt: true }),
+    // Freie Notiz zum Import, z. B. "3 vorgemerkte Umsaetze, 34,07 EUR" -
+    // hilft beim spaeteren Nachvollziehen einer Kontostand-Abweichung, ohne
+    // dass man sich an den Kontext dieses konkreten Imports erst wieder
+    // erinnern muss.
+    text("note", { max: 500 }),
     { type: "autodate", name: "created", onCreate: true },
   ],
 });
