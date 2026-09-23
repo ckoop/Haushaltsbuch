@@ -89,6 +89,23 @@ export function extractTransactions(pagesOfLines) {
   return pagesOfLines.flatMap(parsePageLines);
 }
 
+// Der DKB-Auszug nennt im Kopf der ersten Seite, wie viele Buchungen der
+// Zeitraum eigentlich enthaelt ("Anzahl der Transaktionen: 46") - kein
+// Kontostand (der fehlt im PDF komplett), aber ein einfacher, verlaesslicher
+// Gegencheck: weicht die Anzahl der erkannten Bloecke davon ab, hat das
+// Layout (Seitenumbruch, Fusszeilen-Erkennung, ...) vermutlich irgendwo eine
+// Zeile falsch zugeordnet.
+const COUNT_LINE = /Anzahl der Transaktionen:\s*(\d+)/;
+export function parseDeclaredCount(pagesOfLines) {
+  for (const lines of pagesOfLines) {
+    for (const line of lines) {
+      const m = COUNT_LINE.exec(line);
+      if (m) return Number(m[1]);
+    }
+  }
+  return null;
+}
+
 // Rohe Bloecke -> exakt dieselbe Vertragsform wie csv.buildRows():
 // Array<{ok:true,date,cents,payee,purpose,hash,batchDupeCount?}|{ok:false,raw,reason}>.
 // Der Kontoauszug nennt Betraege durchgehend mit Punkt als Dezimaltrennzeichen

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, FileUp, AlertTriangle, Undo2 } from "lucide-react";
+import { ChevronLeft, FileUp, AlertTriangle, Check, Undo2 } from "lucide-react";
 import * as api from "../pb.js";
 import * as csv from "../csv.js";
 import * as pdf from "../pdf.js";
@@ -48,6 +48,16 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
   const [excluded, setExcluded] = useState(new Set());
   const [progress, setProgress] = useState(null);
   const [manualCats, setManualCats] = useState({});
+  // Zwei Sanity-Checks als Ersatz fuer den CSV-Kontostand-Check, der hier
+  // nicht moeglich ist (der DKB-Auszug nennt selbst keinen Kontostand):
+  // declaredCount vergleicht die vom PDF-Kopf genannte Buchungsanzahl gegen
+  // die tatsaechlich erkannten Bloecke (automatisch); knownBalanceInput laesst
+  // den Nutzer den ihm bekannten, tatsaechlich GEBUCHTEN Kontostand eintragen
+  // (freiwillig, da wir ihn nirgends automatisch herbekommen).
+  const [declaredCount, setDeclaredCount] = useState(null);
+  const [lastDate, setLastDate] = useState(null);
+  const [balanceBefore, setBalanceBefore] = useState(null);
+  const [knownBalanceInput, setKnownBalanceInput] = useState("");
 
   useEffect(() => {
     Promise.all([api.listRules(), api.listImportRuns()])
@@ -79,6 +89,7 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
         setError("0 Buchungen erkannt — ist das ein DKB-Kontoauszug im bekannten Format?");
         return;
       }
+      setDeclaredCount(pdf.parseDeclaredCount(pages));
 
       setKnown(await api.existingHashes(good.map((r) => r.hash)));
       // Gleicher weicher Zusatz-Check wie beim CSV-Import (pb.js) - hier
@@ -87,10 +98,20 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
       // exakte Hash zwischen einem CSV- und einem PDF-Import desselben
       // Umsatzes nicht matcht - Datum+Betrag allein fangen das trotzdem ab.
       const dates = good.map((r) => r.date).sort();
-      setPossibleDupes(await api.existingByDateAmount(account, dates[0], dates[dates.length - 1]));
-      // Kein Kontostand-Sanity-Check wie bei CSV: der DKB-Kontoauszug nennt
-      // an keiner Stelle einen Kontostand (s. CLAUDE.md), nichts zum
-      // Vergleichen vorhanden.
+      const asOf = dates[dates.length - 1];
+      setLastDate(asOf);
+      setPossibleDupes(await api.existingByDateAmount(account, dates[0], asOf));
+      // Kein automatischer Kontostand-Sanity-Check wie bei CSV moeglich - der
+      // DKB-Auszug nennt selbst keinen Kontostand. Stattdessen den Saldo VOR
+      // diesem Import schon mal laden (gleiche Rechnung wie bei CSV, inkl.
+      // virtueller Toepfe), damit die Vorschau den Abgleich anbieten kann,
+      // sobald der Nutzer optional den ihm bekannten, tatsaechlich gebuchten
+      // Kontostand eintraegt.
+      const children = await api.listChildAccounts(account);
+      const ownAndChildren = [account, ...children.map((c) => c.id)];
+      const balances = await Promise.all(ownAndChildren.map((id) => api.accountBalanceAsOf(id, asOf)));
+      setBalanceBefore(balances.reduce((s, b) => s + b, 0));
+      setKnownBalanceInput("");
 
       setRows(built.map((r) => {
         if (!r.ok) return r;
@@ -116,6 +137,19 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
     ...r, possibleDupe: possibleDupes.has(`${r.date}|${r.cents}`),
   }));
   const toImport = fresh.filter((r) => !excluded.has(r.hash));
+
+  const balanceAfter = balanceBefore !== null
+    ? balanceBefore + toImport.reduce((s, r) => s + r.cents, 0)
+    : null;
+  // Frei eingetragener, tatsaechlich GEBUCHTER Kontostand (ohne vorgemerkte
+  // Umsaetze) - dasselbe Feld, ueber das schon der falsche Anfangssaldo im
+  // Konto "Christian" gefunden wurde. csv.parseAmountCents mit
+  // decimalComma=true, weil das Eintippen hier wie ueberall sonst in der App
+  // im deutschen Format erwartet wird, anders als die Betraege im PDF selbst.
+  const knownBalanceCents = knownBalanceInput.trim()
+    ? csv.parseAmountCents(knownBalanceInput, true) : null;
+  const balanceDiff = knownBalanceCents !== null && balanceAfter !== null
+    ? knownBalanceCents - balanceAfter : null;
 
   const catOf = (r) => r.category || manualCats[r.hash]?.category || "";
 
@@ -252,6 +286,35 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
             <Stat n={dupes.length} label="schon da" tone="text-stone-500 dark:text-stone-400" />
             <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600 dark:text-red-400" : "text-stone-400 dark:text-stone-500"} />
           </div>
+
+          {declaredCount !== null && declaredCount !== rows.length && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-3 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              Laut PDF-Kopf sollten {declaredCount} Buchungen im Zeitraum stehen, erkannt wurden {rows.length}.
+              Evtl. hat das Layout eine Zeile falsch zugeordnet — einen Blick in die Datei wert.
+            </p>
+          )}
+
+          <Field label={`Gebuchter Kontostand laut Bank${lastDate ? " am " + new Date(lastDate + "T12:00:00").toLocaleDateString("de-DE") : ""} (optional, ohne vorgemerkte Umsätze)`}>
+            <input type="text" inputMode="decimal" className={inputCls} placeholder="z. B. 943,97"
+              value={knownBalanceInput} onChange={(e) => setKnownBalanceInput(e.target.value)} />
+          </Field>
+          {knownBalanceCents !== null && balanceDiff !== null && (
+            balanceDiff === 0 ? (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-3 flex items-start gap-1.5">
+                <Check size={13} className="mt-0.5 shrink-0" />
+                Kontostand stimmt mit dem Kontostand nach diesem Import überein.
+              </p>
+            ) : (
+              <p className="text-xs text-red-600 dark:text-red-400 mb-3 flex items-start gap-1.5">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                Nach diesem Import voraussichtlich: {eur(balanceAfter)} · Differenz: {eur(balanceDiff)}.
+                Zeigt deine Banking-App den Stand inklusive vorgemerkter, noch nicht gebuchter Umsätze
+                an, addiere deren Summe zu der Zahl oben dazu — sonst kann's an fehlenden, doppelten
+                oder noch nicht exportierten Buchungen liegen.
+              </p>
+            )
+          )}
 
           {dupes.length > 0 && (
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">

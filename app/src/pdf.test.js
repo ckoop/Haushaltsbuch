@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reconstructLines, parsePageLines, extractTransactions, buildRows } from "./pdf.js";
+import { reconstructLines, parsePageLines, extractTransactions, buildRows, parseDeclaredCount } from "./pdf.js";
 
 // Baut Text-Items einer Zeile wie sie pdfjs' getTextContent() liefern wuerde:
 // x waechst mit jedem Wort, y bleibt fuer alle Items der Zeile gleich. gap
@@ -161,5 +161,17 @@ describe("buildRows", () => {
     const rows = buildRows([block(), block()]);
     expect(rows[0].batchDupeCount).toBe(2);
     expect(rows[1].hash).toMatch(/#2$/);
+  });
+});
+
+describe("parseDeclaredCount", () => {
+  it("liest die vom PDF-Kopf genannte Buchungsanzahl (nur auf Seite 1 vorhanden)", () => {
+    const page1 = ["Auszug", "DE00 0000 0000 0000 0000 00             Anzahl der Transaktionen: 3", "Zeitraum: ..."];
+    const page2 = ["Seite 2 von 2"];
+    expect(parseDeclaredCount([page1, page2])).toBe(3);
+  });
+
+  it("liefert null, wenn keine Zeile passt", () => {
+    expect(parseDeclaredCount([["Auszug"], ["Seite 2 von 2"]])).toBeNull();
   });
 });
