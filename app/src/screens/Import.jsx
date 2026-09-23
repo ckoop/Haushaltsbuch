@@ -215,8 +215,13 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
     finally { setBusy(false); }
   };
 
-  const undo = async (runId, filename) => {
-    if (!window.confirm(`Import "${filename || "Import"}" wirklich zurücknehmen? Alle daraus entstandenen Buchungen werden gelöscht.`)) return;
+  // Statt window.confirm() (bricht auf manchen Browsern nach ein paar
+  // Aufrufen wortlos ab, "Diese Seite daran hindern, weitere Dialoge zu
+  // erstellen") eine eigene, im Layout verankerte Ja/Abbrechen-Bestaetigung.
+  const [confirmUndo, setConfirmUndo] = useState(null);
+
+  const undo = async (runId) => {
+    setConfirmUndo(null);
     setBusy(true);
     try {
       const n = await api.deleteImportRun(runId);
@@ -281,10 +286,24 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
                         {new Date(r.created).toLocaleDateString("de-DE")} · {r.row_count} Buchungen
                       </span>
                     </span>
-                    <button onClick={() => undo(r.id, r.filename)} disabled={busy}
-                      className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1 disabled:opacity-50">
-                      <Undo2 size={13} /> zurücknehmen
-                    </button>
+                    {confirmUndo === r.id ? (
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-stone-500 dark:text-stone-400">Wirklich?</span>
+                        <button onClick={() => undo(r.id)} disabled={busy}
+                          className="text-xs text-red-600 dark:text-red-400 font-medium disabled:opacity-50">
+                          Ja, löschen
+                        </button>
+                        <button onClick={() => setConfirmUndo(null)} disabled={busy}
+                          className="text-xs text-stone-500 dark:text-stone-400 disabled:opacity-50">
+                          Abbrechen
+                        </button>
+                      </span>
+                    ) : (
+                      <button onClick={() => setConfirmUndo(r.id)} disabled={busy}
+                        className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1 disabled:opacity-50 shrink-0">
+                        <Undo2 size={13} /> zurücknehmen
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
