@@ -1,4 +1,4 @@
-Gilt für Buchungen, Auswertung, Budgets, Depot, Konten, Einstellungen, NewEntry, Import, TxDetail. Feature-Rationale und Bugfix-Historie, die nicht in jeder Session gebraucht wird — ergänzt die Root-`CLAUDE.md`.
+Gilt für Buchungen, Auswertung, Budgets, Depot, Konten, Einstellungen, NewEntry, Import, ImportPdf, TxDetail. Feature-Rationale und Bugfix-Historie, die nicht in jeder Session gebraucht wird — ergänzt die Root-`CLAUDE.md`.
 
 ## Suche (`Buchungen.jsx`, ab `0.27.0`)
 

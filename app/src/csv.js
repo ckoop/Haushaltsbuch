@@ -223,14 +223,23 @@ export function buildRows(rows, headerIndex, mapping, opts) {
     out.push({ ok: true, date, cents, payee, purpose, hash });
   }
 
-  // Zwei Zeilen derselben Datei mit demselben Hash sind entweder echte
-  // Mehrfachbuchungen (zweimal derselbe Betrag beim selben Haendler am selben
-  // Tag, z. B. zweimal Parken) oder ein Duplikat im Bank-Export selbst. Beides
-  // wird angelegt, nicht stillschweigend verworfen: der import_hash-Index ist
-  // eindeutig, ein zweiter identischer Hash wuerde sonst beim Schreiben den
-  // gesamten Batch-Block abbrechen. batchDupeCount markiert die betroffenen
-  // Zeilen fuer einen Hinweis in der Vorschau.
-  const okRows = out.filter((r) => r.ok);
+  markBatchDupes(out);
+  return out;
+}
+
+// Zwei Zeilen derselben Datei mit demselben Hash sind entweder echte
+// Mehrfachbuchungen (zweimal derselbe Betrag beim selben Haendler am selben
+// Tag, z. B. zweimal Parken) oder ein Duplikat im Bank-Export selbst. Beides
+// wird angelegt, nicht stillschweigend verworfen: der import_hash-Index ist
+// eindeutig, ein zweiter identischer Hash wuerde sonst beim Schreiben den
+// gesamten Batch-Block abbrechen. batchDupeCount markiert die betroffenen
+// Zeilen fuer einen Hinweis in der Vorschau. Mutiert die uebergebenen Zeilen
+// direkt (wie buildRows() es schon tat) - eigenstaendig statt nur intern in
+// buildRows(), weil pdf.js dieselbe Kollisionsbehandlung fuer seine eigenen
+// Zeilen braucht, ohne den ganzen CSV-Aufbau (Spaltenzuordnung, rows/mapping)
+// mitzuschleppen.
+export function markBatchDupes(rows) {
+  const okRows = rows.filter((r) => r.ok);
   const totalByHash = new Map();
   for (const r of okRows) totalByHash.set(r.hash, (totalByHash.get(r.hash) ?? 0) + 1);
   const seenSoFar = new Map();
@@ -243,7 +252,6 @@ export function buildRows(rows, headerIndex, mapping, opts) {
       if (n > 1) r.hash = `${r.hash}#${n}`;
     }
   }
-  return out;
 }
 
 // Textmuster aus der Sammlung "rules" auf Zahlungsempfaenger und Zweck

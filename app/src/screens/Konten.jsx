@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
-import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, LogOut, Check, Repeat, ArrowLeftRight, X } from "lucide-react";
+import { Plus, ChevronRight, Trash2, AlertTriangle, Upload, FileText, LogOut, Check, Repeat, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
   eur, eurAbs, typeIcon, accountIcon, accountIconByKey, ACCOUNT_TYPES, ACCOUNT_ICON_KEYS, shortName, catIcon, colorOf, CAT_ICON_KEYS, COLOR_KEYS,
@@ -7,6 +7,7 @@ import {
   RECURRING, todayISO,
 } from "../ui.jsx";
 import Import from "./Import.jsx";
+import ImportPdf from "./ImportPdf.jsx";
 
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
@@ -48,6 +49,10 @@ export default function Konten({ accounts, categories, tags, people, balances, r
 
   if (view === "import") {
     return <Import accounts={accounts} categories={categories} tags={tags}
+      onBack={() => { setView("liste"); reload(); }} flash={flash} />;
+  }
+  if (view === "import-pdf") {
+    return <ImportPdf accounts={accounts} categories={categories} tags={tags}
       onBack={() => { setView("liste"); reload(); }} flash={flash} />;
   }
 
@@ -314,6 +319,10 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       <Button variant="ghost" onClick={() => setView("import")}
         className="w-full flex items-center justify-center gap-2">
         <Upload size={16} /> CSV-Datei importieren
+      </Button>
+      <Button variant="ghost" onClick={() => setView("import-pdf")}
+        className="w-full flex items-center justify-center gap-2 mt-2">
+        <FileText size={16} /> PDF-Kontoauszug importieren
       </Button>
 
       <button onClick={api.logout}
