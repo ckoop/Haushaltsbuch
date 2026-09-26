@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { ChevronRight, Search, TrendingDown, TrendingUp, X } from "lucide-react";
+import { ChevronRight, Search, SlidersHorizontal, TrendingDown, TrendingUp, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
-  eur, eurAbs, relDay, todayISO, byId,
+  eur, eurAbs, relDay, todayISO, byId, inputCls,
   UNKNOWN_ACC, UNKNOWN_CAT, BudgetBar, TxRow, AccChipRow, Metric,
 } from "../ui.jsx";
 
@@ -17,9 +17,16 @@ export default function Buchungen({
   combinedBalances, acc, setAcc, openDetail, monthKey,
   reserveMonthlyOf, withdrawnThisMonthOf,
   query, setQuery, searchResults, searching,
+  minAmount, setMinAmount, maxAmount, setMaxAmount, dateFrom, setDateFrom, dateTo, setDateTo,
+  onlyUnbudgeted, setOnlyUnbudgeted,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const isSearching = searchResults !== null;
+  const hasActiveFilters = minAmount !== "" || maxAmount !== "" || dateFrom !== "" || dateTo !== "" || onlyUnbudgeted;
+  const resetFilters = () => {
+    setMinAmount(""); setMaxAmount(""); setDateFrom(""); setDateTo(""); setOnlyUnbudgeted(false);
+  };
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   // Einnahmen minus Ausgaben fuer den sichtbaren Zeitraum - anders als die
   // "Ausgaben"-Kachel vorher (nur negative Betraege) rechnet das Einnahmen
@@ -87,6 +94,45 @@ export default function Buchungen({
             </button>
           )}
         </div>
+
+        <button onClick={() => setShowFilters((v) => !v)}
+          className={`flex items-center gap-1 text-xs mt-2 ${
+            hasActiveFilters ? "text-emerald-700 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"}`}>
+          <SlidersHorizontal size={12} /> Filter{hasActiveFilters ? " aktiv" : ""}
+        </button>
+
+        {showFilters && (
+          <div className="mt-2 p-3 bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 space-y-2.5">
+            <div>
+              <div className="flex items-center gap-2">
+                <input type="number" step="0.01" placeholder="Betrag von" value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+                <input type="number" step="0.01" placeholder="bis" value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+              </div>
+              <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-1">
+                Ausgaben negativ, z. B. −60 bis −40 für 40–60 € Ausgaben.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+            </div>
+            <label className="flex items-center gap-2 text-[13px] text-stone-600 dark:text-stone-300">
+              <input type="checkbox" checked={onlyUnbudgeted} onChange={(e) => setOnlyUnbudgeted(e.target.checked)} />
+              Nur Ausgaben ohne Budget (keine Kategorie oder Kategorie ohne Budget)
+            </label>
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="text-xs text-stone-500 dark:text-stone-400 underline">
+                Filter zurücksetzen
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {!isSearching && <AccChipRow accounts={accounts} balances={combinedBalances} acc={acc} setAcc={setAcc} />}

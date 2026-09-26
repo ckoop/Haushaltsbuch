@@ -11,6 +11,12 @@ import ImportPdf from "./ImportPdf.jsx";
 
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
+// Zeitfenster fuer die Faelligkeits-Vorschau (ab 0.50.0) - Daueraufträge
+// laufen bewusst client-getriggert ohne Cron (s. CLAUDE.md), man erfaehrt
+// eine Faelligkeit deshalb bisher erst, wenn die Buchung schon entstanden
+// ist. 30 Tage deckt auch quartals-/jahresweise Regeln rechtzeitig ab, ohne
+// die Liste mit weit in der Zukunft liegenden Terminen zu ueberladen.
+const DUE_SOON_DAYS = 30;
 
 export default function Konten({ accounts, categories, tags, people, balances, reload, flash, reloadTags, reloadReserves }) {
   const [editing, setEditing] = useState(null);
@@ -45,6 +51,16 @@ export default function Konten({ accounts, categories, tags, people, balances, r
 
   const loadRules = () => api.listRecurringRules().then(setRules).catch(setError);
   const loadAutoRules = () => api.listRules().then(setAutoRules).catch(setError);
+
+  // Faelligkeits-Vorschau: aktive Regeln, deren naechster Termin innerhalb
+  // von DUE_SOON_DAYS liegt, chronologisch sortiert (rules ist bereits nach
+  // next_due sortiert, s. listRecurringRules()).
+  const today = todayISO();
+  const dueSoon = rules.filter((r) => {
+    if (!r.active) return false;
+    const days = (new Date(api.dateOnly(r.next_due) + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000;
+    return days >= 0 && days <= DUE_SOON_DAYS;
+  });
   useEffect(() => { loadRules(); loadAutoRules(); }, []);
 
   if (view === "import") {
@@ -218,6 +234,32 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       </Button>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Daueraufträge</p>
+
+      {dueSoon.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-xl px-3.5 py-3 mb-3">
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1.5">
+            {dueSoon.length} {dueSoon.length === 1 ? "Dauerauftrag" : "Daueraufträge"} in den nächsten {DUE_SOON_DAYS} Tagen fällig
+          </p>
+          <div className="space-y-1">
+            {dueSoon.map((r) => {
+              const isTransfer = r.type === "transfer";
+              const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
+              return (
+                <div key={r.id} className="flex items-center justify-between gap-2 text-xs text-amber-700 dark:text-amber-400">
+                  <span className="truncate">
+                    {r.payee || (isTransfer ? "Umbuchung" : cat.name)} ·{" "}
+                    {new Date(api.dateOnly(r.next_due) + "T12:00:00").toLocaleDateString("de-DE")}
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {isTransfer ? "" : r.amount_cents > 0 ? "+" : "−"}{eurAbs(r.amount_cents)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
         {RULE_FREQUENCIES.map(([freq, freqLabel]) => {
           const group = rules.filter((r) => r.frequency === freq);

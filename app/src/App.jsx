@@ -77,6 +77,14 @@ function Shell() {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null); // null = keine aktive Suche
   const [searching, setSearching] = useState(false);
+  // Erweiterte Suchfilter (ab 0.50.0) - leben aus demselben Grund wie query
+  // hier statt screen-lokal in Buchungen.jsx (ueberleben das kurze
+  // loading=true beim Monatswechsel).
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [onlyUnbudgeted, setOnlyUnbudgeted] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
@@ -190,19 +198,50 @@ function Shell() {
   // im Screen-lokalen State ginge dabei verloren, obwohl die Suche selbst
   // absichtlich monatsunabhaengig ist (siehe searchTransactions() in
   // pb.js). Gleiches Prinzip wie beim bereits hier lebenden acc-Zustand.
+  // Betrags-/Datumsbereich und "nur ohne Budget" (ab 0.50.0) koennen die
+  // Suche zusaetzlich zum Text oder ganz ohne ihn ausloesen (z. B. "alle
+  // Ausgaben zwischen 40 und 60 Euro" ohne ein einziges Zeichen im Suchfeld).
+  // Kategorie-/Tag-Namensabgleich bleibt an die bisherige Zwei-Zeichen-
+  // Schwelle gekoppelt - bei leerem/kurzem q wuerde "".includes() sonst jede
+  // Kategorie treffen.
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) { setSearchResults(null); setSearching(false); return; }
+    const minCents = minAmount !== "" ? Math.round(Number(minAmount) * 100) : undefined;
+    const maxCents = maxAmount !== "" ? Math.round(Number(maxAmount) * 100) : undefined;
+    const hasFilters = minCents !== undefined || maxCents !== undefined || !!dateFrom || !!dateTo || onlyUnbudgeted;
+    if (q.length < 2 && !hasFilters) { setSearchResults(null); setSearching(false); return; }
     setSearching(true);
     const lower = q.toLowerCase();
-    const categoryIds = categories.filter((c) => c.name.toLowerCase().includes(lower)).map((c) => c.id);
-    const tagIds = tags.filter((t) => t.name.toLowerCase().includes(lower)).map((t) => t.id);
-    const t = setTimeout(() => {
-      api.searchTransactions(q, { categoryIds, tagIds }).then(setSearchResults).catch(() => setSearchResults([]))
-        .finally(() => setSearching(false));
+    const categoryIds = q.length >= 2 ? categories.filter((c) => c.name.toLowerCase().includes(lower)).map((c) => c.id) : [];
+    const tagIds = q.length >= 2 ? tags.filter((t) => t.name.toLowerCase().includes(lower)).map((t) => t.id) : [];
+    const t = setTimeout(async () => {
+      try {
+        const [results, budgetRows, ruleRows] = await Promise.all([
+          api.searchTransactions(q, { categoryIds, tagIds, minCents, maxCents, dateFrom, dateTo }),
+          onlyUnbudgeted ? api.listAllBudgets() : null,
+          onlyUnbudgeted ? api.listRecurringRules() : null,
+        ]);
+        if (!onlyUnbudgeted) { setSearchResults(results); return; }
+        // "Ohne Budget" = Ausgabe (keine Umbuchung, kein Einnahme-Vorgang,
+        // die haben ohnehin kein Kategorie-Budget) ohne Kategorie ODER mit
+        // Kategorie, aber weder manuellem Budget fuer das jeweilige Konto/
+        // den jeweiligen Monat noch aktiver Quartals-/Jahres-Ruecklagenregel
+        // - dieselbe Definition wie "ohne Kategorie"/"uncoveredCats" in
+        // Budgets.jsx, hier nur pro Treffer statt pro sichtbarem Monat.
+        const monthOf = (iso) => api.dateOnly(iso).slice(0, 7);
+        const hasBudget = (tx) => !!tx.category && (
+          budgetRows.some((b) => b.account === tx.account && b.category === tx.category
+            && (b.month === "*" || b.month === monthOf(tx.date)))
+          || ruleRows.some((r) => r.active && r.type === "tx"
+            && (r.frequency === "quarterly" || r.frequency === "yearly")
+            && r.account === tx.account && r.category === tx.category)
+        );
+        setSearchResults(results.filter((tx) => tx.type !== "transfer" && tx.amount_cents < 0 && !hasBudget(tx)));
+      } catch { setSearchResults([]); }
+      finally { setSearching(false); }
     }, 300);
     return () => clearTimeout(t);
-  }, [query, categories, tags]);
+  }, [query, categories, tags, minAmount, maxAmount, dateFrom, dateTo, onlyUnbudgeted]);
 
   // Ohne eigenes Routing hat die App sonst keinerlei Browser-History-Eintraege
   // - der mobile Zurueck-Button wuerde die Seite verlassen statt innerhalb der
@@ -443,6 +482,8 @@ function Shell() {
     depotEnabled, setDepotEnabled, reloadTags,
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,
+    minAmount, setMinAmount, maxAmount, setMaxAmount, dateFrom, setDateFrom, dateTo, setDateTo,
+    onlyUnbudgeted, setOnlyUnbudgeted,
   };
 
   // Nur diese drei Screens werten den Monat/Jahr-Zustand (ym) ueberhaupt aus -

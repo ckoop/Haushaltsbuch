@@ -160,20 +160,44 @@ export function listTransactionsForAverage(y, m, monthsBack = 3) {
 // ueber einen eigenen Server-Textvergleich. "?=" ist der PocketBase-Operator
 // fuer "mindestens einer der Werte trifft" auf der Mehrfachauswahl-Relation
 // tags; category ist eine einfache Relation, dafuer reicht "=" pro ID.
-export function searchTransactions(query, { categoryIds = [], tagIds = [] } = {}) {
+// minCents/maxCents/dateFrom/dateTo (ab 0.50.0) erweitern die reine
+// Textsuche um Betrags- und Datumsbereich, UND-verknuepft mit der bisherigen
+// Text/Kategorie/Tag-ODER-Gruppe - eine leere Suchanfrage mit gesetztem
+// Bereich ist damit erlaubt (z. B. "alle Buchungen zwischen 40 und 60 Euro"
+// ganz ohne Text). amount_cents behaelt sein Vorzeichen wie ueberall sonst
+// (Ausgaben negativ) - min/max werden deshalb nicht auf den Betrag ohne
+// Vorzeichen angewendet, um die Filterlogik einfach zu halten.
+export function searchTransactions(query, { categoryIds = [], tagIds = [], minCents, maxCents, dateFrom, dateTo } = {}) {
   const q = query.trim();
-  if (!q) return Promise.resolve([]);
-  const parts = [
-    pb.filter("payee ~ {:q}", { q }),
-    pb.filter("note ~ {:q}", { q }),
+  const orParts = [
+    ...(q ? [pb.filter("payee ~ {:q}", { q }), pb.filter("note ~ {:q}", { q })] : []),
     ...categoryIds.map((id, i) => pb.filter(`category = {:c${i}}`, { [`c${i}`]: id })),
     ...tagIds.map((id, i) => pb.filter(`tags ?= {:t${i}}`, { [`t${i}`]: id })),
   ];
+  const andParts = [];
+  if (orParts.length > 0) andParts.push(`(${orParts.join(" || ")})`);
+  if (minCents !== undefined) andParts.push(pb.filter("amount_cents >= {:minC}", { minC: minCents }));
+  if (maxCents !== undefined) andParts.push(pb.filter("amount_cents <= {:maxC}", { maxC: maxCents }));
+  if (dateFrom) andParts.push(pb.filter("date >= {:dFrom}", { dFrom: `${dateFrom} 00:00:00` }));
+  if (dateTo) andParts.push(pb.filter("date <= {:dTo}", { dTo: `${dateTo} 23:59:59` }));
+  // Kein frueher Abbruch mehr bei leeren andParts (anders als vor 0.50.0):
+  // der "Nur ohne Budget"-Filter (App.jsx) kann als einziges Kriterium
+  // aktiv sein, ganz ohne Text/Betrag/Datum - dann muss die komplette
+  // Historie geholt werden, damit der Client-seitige Budget-Abgleich darauf
+  // laufen kann. Der Aufrufer entscheidet bereits vorher (hasFilters-Gate),
+  // ob ueberhaupt gesucht wird - hier also kein zusaetzliches "leer = nichts
+  // tun" mehr noetig.
   return pb.collection("transactions").getFullList({
-    filter: parts.join(" || "),
+    filter: andParts.length > 0 ? andParts.join(" && ") : "",
     sort: "-date,-created",
   });
 }
+
+// Ungefiltert alle Budgets - fuer den "Nur ohne Budget"-Suchfilter
+// (App.jsx), der Treffer ueber mehrere Konten/Monate hinweg gegen die
+// jeweils passenden Budgets abgleichen muss, anders als listBudgets() oben,
+// das immer nur ein Konto/einen Monat kennt.
+export const listAllBudgets = () => pb.collection("budgets").getFullList();
 
 export const createTransaction = (t) => pb.collection("transactions").create(t);
 export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
