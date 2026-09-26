@@ -12,7 +12,7 @@ import ImportPdf from "./ImportPdf.jsx";
 const CAT_LIST_COLLAPSED = 5;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
-export default function Konten({ accounts, categories, tags, people, balances, reload, flash, reloadTags }) {
+export default function Konten({ accounts, categories, tags, people, balances, reload, flash, reloadTags, reloadReserves }) {
   const [editing, setEditing] = useState(null);
   const [editingCat, setEditingCat] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
@@ -351,7 +351,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
       {editingRule && (
         <RuleEditor draft={editingRule} accounts={accounts} categories={categories} tags={tags}
           onClose={() => setEditingRule(null)}
-          onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); }}
+          onSaved={(m) => { setEditingRule(null); flash(m); loadRules(); reloadReserves(); }}
           onError={setError} onTagsChanged={reloadTags} />
       )}
 

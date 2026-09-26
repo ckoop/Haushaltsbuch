@@ -210,6 +210,25 @@ export const countByAccount = async (accountId) => {
 export const listRecurringRules = () =>
   pb.collection("recurring_rules").getFullList({ sort: "next_due" });
 
+// Sucht eine bereits bestehende aktive Regel, die zu den angegebenen Eckdaten
+// passen wuerde - gleiches Matching wie der Duplikat-Schutz in
+// saveRecurringRule() (Konto/Betrag/Rhythmus/Empfaenger und je nach Typ
+// gleiche Kategorie bzw. gleiches Zielkonto). Von dort fuer den Duplikat-
+// Check verwendet, zusaetzlich von TxDetail.jsx genutzt, um das "Automatisch
+// weiterbuchen"-Haekchen aus den echten Daten abzuleiten statt nur aus
+// sitzungslokalem State (das Haekchen erkannte vorher eine schon bestehende
+// Regel beim erneuten Oeffnen des Sheets nicht).
+export const findRecurringRuleFor = async (r) => {
+  const candidates = await pb.collection("recurring_rules").getFullList({
+    filter: pb.filter("account = {:a} && type = {:t} && amount_cents = {:amt} && frequency = {:f} && active = true",
+      { a: r.account, t: r.type, amt: r.amount_cents, f: r.frequency }),
+  });
+  const payee = (r.payee || "").trim().toLowerCase();
+  return candidates.find((c) =>
+    (c.payee || "").trim().toLowerCase() === payee &&
+    (r.type === "transfer" ? c.to_account === r.to_account : c.category === r.category)) ?? null;
+};
+
 // Verhindert doppelt angelegte Daueraufträge (kein Unique-Index auf
 // recurring_rules moeglich - "gleich" ist hier eine Kombination aus
 // mehreren Feldern, kein einzelner Schluessel). Zwei aktive Regeln gelten
@@ -221,14 +240,7 @@ export const listRecurringRules = () =>
 // werden. Betrifft nur das Anlegen, nicht das Bearbeiten (r.id gesetzt).
 export const saveRecurringRule = async (r) => {
   if (r.id) return pb.collection("recurring_rules").update(r.id, r);
-  const candidates = await pb.collection("recurring_rules").getFullList({
-    filter: pb.filter("account = {:a} && type = {:t} && amount_cents = {:amt} && frequency = {:f} && active = true",
-      { a: r.account, t: r.type, amt: r.amount_cents, f: r.frequency }),
-  });
-  const payee = (r.payee || "").trim().toLowerCase();
-  const dup = candidates.find((c) =>
-    (c.payee || "").trim().toLowerCase() === payee &&
-    (r.type === "transfer" ? c.to_account === r.to_account : c.category === r.category));
+  const dup = await findRecurringRuleFor(r);
   if (dup) throw new Error("Dieser Dauerauftrag existiert schon (gleiches Konto, Betrag, Rhythmus und Empfänger).");
   return pb.collection("recurring_rules").create(r);
 };

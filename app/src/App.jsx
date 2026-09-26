@@ -134,20 +134,26 @@ function Shell() {
   // Abbuchungsbetrag gegen das nicht um die Ruecklage erhoehte Grundbudget).
   // Haengt bewusst nur an "acc", nicht am Monat - reserveStatus() rechnet den
   // Saldo je sichtbarem Monat live aus der vollen Buchungshistorie je Regel.
-  useEffect(() => {
+  // loadReserves() ist als eigene Funktion (statt reinem Effekt-Body)
+  // exportiert, damit ein frisch angelegter Dauerauftrag (TxDetail.jsx-
+  // Haekchen, NewEntry.jsx, RuleEditor in Konten.jsx) die Ruecklage sofort
+  // nachlaedt, statt erst nach einem Kontowechsel oder Neuladen der Seite
+  // sichtbar zu werden - bis 0.47.x fehlte das, ein frisch angelegter
+  // Quartals-/Jahres-Dauerauftrag tauchte im Budgets-Tab deshalb erst nach
+  // einem Umweg ueber einen Kontowechsel auf.
+  const reservesSeq = useRef(0);
+  const loadReserves = useCallback(async () => {
+    const seq = ++reservesSeq.current;
     if (!acc || acc === "alle") { setReserves([]); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const rules = await api.listReserveRules(acc);
-        const withTxs = await Promise.all(
-          rules.map(async (rule) => ({ rule, txs: await api.listRuleTransactions(rule.id) }))
-        );
-        if (!cancelled) setReserves(withTxs);
-      } catch (e) { if (!cancelled) setError(e); }
-    })();
-    return () => { cancelled = true; };
+    try {
+      const rules = await api.listReserveRules(acc);
+      const withTxs = await Promise.all(
+        rules.map(async (rule) => ({ rule, txs: await api.listRuleTransactions(rule.id) }))
+      );
+      if (seq === reservesSeq.current) setReserves(withTxs);
+    } catch (e) { if (seq === reservesSeq.current) setError(e); }
   }, [acc]);
+  useEffect(() => { loadReserves(); }, [loadReserves]);
 
   // Effektives Limit = manuell gesetztes Budget + monatliche Ruecklagen-Rate
   // (status.monthly) aus allen quartals-/jahresweisen Regeln einer Kategorie.
@@ -327,22 +333,34 @@ function Shell() {
     } catch (e) { setError(e); }
   };
 
+  const ruleBaseFor = (tx) => tx.type === "transfer"
+    ? { type: "transfer", account: tx.account, to_account: tx.to_account, amount_cents: tx.amount_cents }
+    : { type: "tx", account: tx.account, category: tx.category, amount_cents: tx.amount_cents };
+
   // Dauerauftrag nachtraeglich aus einer bereits als wiederkehrend markierten
   // Buchung anlegen - gleiche Berechnung wie beim "Automatisch weiterbuchen"-
   // Haekchen in NewEntry.jsx (die gebuchte Periode deckt sich selbst ab, die
   // Regel greift erst ab der naechsten).
   const createRecurringRule = async (tx) => {
     try {
-      const base = tx.type === "transfer"
-        ? { type: "transfer", account: tx.account, to_account: tx.to_account, amount_cents: tx.amount_cents }
-        : { type: "tx", account: tx.account, category: tx.category, amount_cents: tx.amount_cents };
       await api.saveRecurringRule({
-        ...base, payee: tx.payee, note: tx.note, frequency: tx.recurring,
+        ...ruleBaseFor(tx), payee: tx.payee, note: tx.note, frequency: tx.recurring,
         next_due: api.addMonths(api.dateOnly(tx.date), { monthly: 1, quarterly: 3, yearly: 12 }[tx.recurring]),
         active: true,
       });
       flash("Dauerauftrag angelegt");
+      loadReserves();
     } catch (e) { setError(e); }
+  };
+
+  // Ob fuer eine Buchung schon ein passender Dauerauftrag existiert - fuer das
+  // "Automatisch weiterbuchen"-Haekchen in TxDetail.jsx, damit es den echten
+  // Datenstand zeigt statt nur eine in der aktuellen Sitzung selbst angelegte
+  // Regel zu erkennen (s. screens/CLAUDE.md, Abschnitt "Daueraufträge").
+  const checkRuleExists = async (tx) => {
+    if (!tx.recurring) return false;
+    const rule = await api.findRecurringRuleFor({ ...ruleBaseFor(tx), payee: tx.payee, frequency: tx.recurring });
+    return rule !== null;
   };
 
   // Freies Tag-Feld: Name gegen die geladene Liste abgleichen (case-insensitiv),
@@ -421,7 +439,7 @@ function Shell() {
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
-    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf,
+    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, reloadReserves: loadReserves,
     depotEnabled, setDepotEnabled, reloadTags,
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,
@@ -588,13 +606,13 @@ function Shell() {
             <NewEntry accounts={accounts} categories={categories}
               defaultAcc={acc === "alle" ? accounts[0]?.id : acc}
               onClose={() => history.back()}
-              onSaved={(msg) => { flash(msg); load(); }} />
+              onSaved={(msg) => { flash(msg); load(); loadReserves(); }} />
           )}
 
           {detail && (
             <TxDetail key={detail.id} tx={detail} accounts={accounts} categories={categories} tags={tags}
               onClose={() => history.back()} onDelete={removeTx}
-              onUpdateRecurring={updateRecurring} onCreateRecurringRule={createRecurringRule}
+              onUpdateRecurring={updateRecurring} onCreateRecurringRule={createRecurringRule} onCheckRuleExists={checkRuleExists}
               onUpdateCategory={updateCategory} onAddTag={addTag} onRemoveTag={removeTag}
               onConvertToTransfer={convertToTransfer} />
           )}

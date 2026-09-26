@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trash2, ArrowLeftRight, X } from "lucide-react";
 import * as api from "../pb.js";
 import {
@@ -12,14 +12,30 @@ import {
 // die Darstellung.
 export default function TxDetail({
   tx, accounts, categories, tags, onClose, onDelete,
-  onUpdateRecurring, onCreateRecurringRule, onUpdateCategory, onAddTag, onRemoveTag,
+  onUpdateRecurring, onCreateRecurringRule, onCheckRuleExists, onUpdateCategory, onAddTag, onRemoveTag,
   onConvertToTransfer,
 }) {
-  // Lokal statt auf tx gespeichert - recurring_rules haelt keine Rueckreferenz
-  // zur Buchung (siehe app/src/screens/CLAUDE.md), das Haekchen kann eine schon
-  // bestehende Regel deshalb nicht erkennen, nur eine neu angelegte in dieser
-  // Sitzung.
+  // Ob fuer diese Buchung schon ein passender Dauerauftrag existiert, wird
+  // aus den echten Daten abgeleitet (onCheckRuleExists, gleiches Matching wie
+  // der Duplikat-Schutz in saveRecurringRule) statt nur sitzungslokal
+  // geraten - vorher erkannte das Haekchen eine schon bestehende Regel beim
+  // erneuten Oeffnen des Sheets nicht und sprang faelschlich auf "nicht
+  // angelegt" zurueck.
   const [ruleCreated, setRuleCreated] = useState(false);
+  const [ruleBusy, setRuleBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!tx.recurring) { setRuleCreated(false); return; }
+    onCheckRuleExists(tx).then((exists) => { if (!cancelled) setRuleCreated(exists); });
+    return () => { cancelled = true; };
+  }, [tx.id, tx.recurring]);
+
+  const handleCreateRule = async () => {
+    setRuleBusy(true);
+    await onCreateRecurringRule(tx);
+    setRuleCreated(await onCheckRuleExists(tx));
+    setRuleBusy(false);
+  };
   const isTransfer = tx.type === "transfer";
   const cat = isTransfer ? null : byId(categories, tx.category, UNKNOWN_CAT);
   const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
@@ -83,8 +99,8 @@ export default function TxDetail({
       </div>
       {tx.recurring && (
         <label className="flex items-center gap-2 mb-4 text-[13px] text-stone-600 dark:text-stone-300">
-          <input type="checkbox" checked={ruleCreated} disabled={ruleCreated}
-            onChange={() => { onCreateRecurringRule(tx); setRuleCreated(true); }} />
+          <input type="checkbox" checked={ruleCreated} disabled={ruleCreated || ruleBusy}
+            onChange={handleCreateRule} />
           {ruleCreated ? "Dauerauftrag angelegt" : "Automatisch weiterbuchen (Dauerauftrag)"}
         </label>
       )}
