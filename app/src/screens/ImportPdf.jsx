@@ -143,6 +143,22 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
   }));
   const toImport = fresh.filter((r) => !excluded.has(r.hash));
 
+  // Sammel-Abwahl fuer "evtl. schon vorhanden"-Zeilen - vorher liess sich nur
+  // jede Zeile einzeln abwaehlen, bei vielen Treffern (z. B. nach einem
+  // Formatwechsel des Bank-Exports) unpraktisch muehsam. Ein Klick betrifft
+  // alle aktuell markierten Zeilen auf einmal, der Toggle-Text spiegelt den
+  // Sammelzustand wider (alle abgewaehlt -> "wieder auswaehlen").
+  const possibleDupeHashes = fresh.filter((r) => r.possibleDupe).map((r) => r.hash);
+  const allPossibleDupesExcluded = possibleDupeHashes.length > 0
+    && possibleDupeHashes.every((h) => excluded.has(h));
+  const toggleAllPossibleDupes = () => setExcluded((s) => {
+    const next = new Set(s);
+    for (const h of possibleDupeHashes) {
+      if (allPossibleDupesExcluded) next.delete(h); else next.add(h);
+    }
+    return next;
+  });
+
   // Summe der tatsaechlich zu importierenden Zeilen (nach Abwahl evtl.
   // doppelter Zeilen) - eigenes Widget in der Vorschau, damit sich der
   // Gesamtbetrag schon vor dem Import mit dem erwarteten Kontoauszug
@@ -367,10 +383,15 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
           {fresh.some((r) => r.possibleDupe) && (
             <p className="text-xs text-amber-700 dark:text-amber-400 mb-3 flex items-start gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              {fresh.filter((r) => r.possibleDupe).length} Buchungen haben Datum und Betrag wie eine
-              bereits vorhandene Buchung auf diesem Konto, aber anderen Empfänger-/Zwecktext — z. B.
-              derselbe Umsatz, schon per CSV importiert. Unten mit „evtl. schon vorhanden" markiert,
-              abwählbar.
+              <span>
+                {possibleDupeHashes.length} Buchungen haben Datum und Betrag wie eine
+                bereits vorhandene Buchung auf diesem Konto, aber anderen Empfänger-/Zwecktext — z. B.
+                derselbe Umsatz, schon per CSV importiert. Unten mit „evtl. schon vorhanden" markiert,
+                einzeln oder{" "}
+                <button onClick={toggleAllPossibleDupes} className="underline font-medium">
+                  {allPossibleDupesExcluded ? "alle wieder auswählen" : "alle auf einmal abwählen"}
+                </button>.
+              </span>
             </p>
           )}
 
