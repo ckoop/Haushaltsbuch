@@ -85,6 +85,11 @@ function Shell() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [onlyUnbudgeted, setOnlyUnbudgeted] = useState(false);
+  // Vorauswahl fuer den Datumsbereich (ab 0.51.0): "month"/"30d" befuellen
+  // dateFrom/dateTo automatisch (s. Effekt unten), "custom" laesst sie wie
+  // bisher frei editierbar. Default "custom" aendert am bestehenden Verhalten
+  // nichts, solange niemand eine Vorauswahl anklickt.
+  const [datePreset, setDatePreset] = useState("custom");
   const [sheet, setSheet] = useState(false);
   const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
@@ -191,6 +196,30 @@ function Shell() {
   // sofort auch fuer die laufende Sitzung, nicht erst beim naechsten
   // App-Start - sonst waere der Effekt der Auswahl nicht sichtbar.
   const setDefaultAccountAndApply = (id) => { setDefaultAccount(id); setAcc(id); };
+
+  // Vorauswahl fuer den Datumsbereich (ab 0.51.0): "month" bindet an den
+  // gerade sichtbaren Monat (ym), nicht an den echten Kalendermonat - folgt
+  // dadurch der Monatsnavigation, wenn man waehrenddessen weiterblaettert.
+  // "30d" ist ein rollierendes Fenster bis heute, wird bei jeder Auswahl neu
+  // berechnet (kein Hintergrund-Update waehrend die App offen bleibt - passt
+  // zum Rest der App, das laeuft auch sonst nirgends "live" mit). "custom"
+  // fasst dateFrom/dateTo bewusst nicht an, das bleibt die freie Eingabe von
+  // vorher.
+  useEffect(() => {
+    if (datePreset === "month") {
+      const { start, end } = api.monthRange(ym.y, ym.m);
+      const last = new Date(`${end}T00:00:00Z`);
+      last.setUTCDate(last.getUTCDate() - 1);
+      setDateFrom(start);
+      setDateTo(last.toISOString().slice(0, 10));
+    } else if (datePreset === "30d") {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 30);
+      setDateTo(to.toISOString().slice(0, 10));
+      setDateFrom(from.toISOString().slice(0, 10));
+    }
+  }, [datePreset, ym.y, ym.m]);
 
   // Suche (Buchungen.jsx) lebt bewusst hier statt als lokaler State im
   // Screen: load() setzt bei jedem Monatswechsel kurz loading=true, was
@@ -483,7 +512,7 @@ function Shell() {
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,
     minAmount, setMinAmount, maxAmount, setMaxAmount, dateFrom, setDateFrom, dateTo, setDateTo,
-    onlyUnbudgeted, setOnlyUnbudgeted,
+    onlyUnbudgeted, setOnlyUnbudgeted, datePreset, setDatePreset,
   };
 
   // Nur diese drei Screens werten den Monat/Jahr-Zustand (ym) ueberhaupt aus -

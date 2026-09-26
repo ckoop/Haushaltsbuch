@@ -18,15 +18,19 @@ export default function Buchungen({
   reserveMonthlyOf, withdrawnThisMonthOf,
   query, setQuery, searchResults, searching,
   minAmount, setMinAmount, maxAmount, setMaxAmount, dateFrom, setDateFrom, dateTo, setDateTo,
-  onlyUnbudgeted, setOnlyUnbudgeted,
+  onlyUnbudgeted, setOnlyUnbudgeted, datePreset, setDatePreset,
 }) {
   const [showBudgets, setShowBudgets] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const isSearching = searchResults !== null;
   const hasActiveFilters = minAmount !== "" || maxAmount !== "" || dateFrom !== "" || dateTo !== "" || onlyUnbudgeted;
   const resetFilters = () => {
-    setMinAmount(""); setMaxAmount(""); setDateFrom(""); setDateTo(""); setOnlyUnbudgeted(false);
+    setMinAmount(""); setMaxAmount(""); setDatePreset("custom"); setDateFrom(""); setDateTo(""); setOnlyUnbudgeted(false);
   };
+  // Kleine, diskrete Gesamtsumme neben der Trefferzahl - hilfreich vor allem
+  // bei zahlenlastigen Filtern wie "ohne Budget", aber generell fuer jedes
+  // Suchergebnis sinnvoll (Vorzeichen bleibt wie ueberall in der App erhalten).
+  const searchTotal = isSearching ? searchResults.reduce((s, t) => s + t.amount_cents, 0) : 0;
   const expense = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   // Einnahmen minus Ausgaben fuer den sichtbaren Zeitraum - anders als die
   // "Ausgaben"-Kachel vorher (nur negative Betraege) rechnet das Einnahmen
@@ -116,11 +120,30 @@ export default function Buchungen({
                 Ausgaben negativ, z. B. −60 bis −40 für 40–60 € Ausgaben.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+            <div>
+              <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+                {[["month", "Dieser Monat"], ["30d", "30 Tage"], ["custom", "Frei"]].map(([v, label], i) => (
+                  <button key={v} onClick={() => setDatePreset(v)}
+                    className={`px-3 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+                      datePreset === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {datePreset === "custom" ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                    className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                    className={`${inputCls} text-[13px]! px-2.5! py-1.5!`} />
+                </div>
+              ) : (
+                dateFrom && dateTo && (
+                  <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-1.5">
+                    {new Date(dateFrom + "T12:00:00").toLocaleDateString("de-DE")} – {new Date(dateTo + "T12:00:00").toLocaleDateString("de-DE")}
+                  </p>
+                )
+              )}
             </div>
             <label className="flex items-center gap-2 text-[13px] text-stone-600 dark:text-stone-300">
               <input type="checkbox" checked={onlyUnbudgeted} onChange={(e) => setOnlyUnbudgeted(e.target.checked)} />
@@ -184,6 +207,7 @@ export default function Buchungen({
         {isSearching && (
           <p className="text-xs text-stone-400 dark:text-stone-500 pb-1">
             {searching ? "Suche …" : `${searchResults.length} Treffer`}
+            {!searching && searchResults.length > 0 && ` · Gesamtbetrag ${eur(searchTotal)}`}
           </p>
         )}
         {groups.length === 0 && !searching && (
