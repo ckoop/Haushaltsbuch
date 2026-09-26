@@ -168,8 +168,13 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
   }));
   const toImport = fresh.filter((r) => !excluded.has(r.hash));
 
+  // Summe der tatsaechlich zu importierenden Zeilen (nach Abwahl evtl.
+  // doppelter Zeilen) - eigenes Widget in der Vorschau, damit sich der
+  // Gesamtbetrag schon vor dem Import mit dem erwarteten Kontoauszug
+  // abgleichen laesst, nicht erst anhand einzelner Zeilen.
+  const totalImportCents = toImport.reduce((s, r) => s + r.cents, 0);
   const balanceAfter = balanceBefore !== null
-    ? balanceBefore + toImport.reduce((s, r) => s + r.cents, 0)
+    ? balanceBefore + totalImportCents
     : null;
   const balanceDiff = statementBalance !== null && balanceAfter !== null
     ? statementBalance - balanceAfter
@@ -419,10 +424,19 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
 
       {step === 2 && (
         <>
-          <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+          <div className="grid grid-cols-3 gap-2 mb-2 text-center">
             <Stat n={toImport.length} label="neu" tone="text-emerald-700 dark:text-emerald-400" />
             <Stat n={dupes.length} label="schon da" tone="text-stone-500 dark:text-stone-400" />
             <Stat n={bad.length} label="unlesbar" tone={bad.length ? "text-red-600 dark:text-red-400" : "text-stone-400 dark:text-stone-500"} />
+          </div>
+
+          <div className="flex items-center justify-between bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 px-4 py-3 mb-4">
+            <span className="text-sm text-stone-600 dark:text-stone-300">
+              {toImport.length} {toImport.length === 1 ? "Buchung" : "Buchungen"} zum Importieren
+            </span>
+            <span className={`text-sm font-medium tabular-nums ${totalImportCents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
+              {eur(totalImportCents)}
+            </span>
           </div>
 
           <Field label="Notiz zu diesem Import (optional)">
