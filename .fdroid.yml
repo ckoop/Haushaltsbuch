@@ -1,0 +1,43 @@
+Categories:
+  - Money
+License: MIT
+AuthorName: Christian Koop
+SourceCode: https://github.com/ckoop/haushaltsbuch-android
+IssueTracker: https://github.com/ckoop/haushaltsbuch-android/issues
+
+AutoName: Haushaltsbuch
+Summary: Persönliches Haushaltsbuch, komplett offline
+Description: |-
+    Haushaltsbuch verwaltet Konten, Kategorien, Buchungen und Budgets -
+    komplett offline. Alle Daten bleiben ausschließlich in einer lokalen
+    SQLite-Datenbank auf dem Gerät. Es gibt keinen Server, kein Nutzerkonto
+    und keine Cloud-Anbindung.
+
+    Funktionen:
+
+    * Mehrere Konten mit Kategorien und Tags
+    * Budgets pro Kategorie und Konto, mit Dauerbudgets
+    * Daueraufträge (monatlich/quartalsweise/jährlich)
+    * CSV- und PDF-Kontoauszug-Import (auf das DKB-Layout zugeschnitten)
+    * Backup/Wiederherstellen als JSON-Datei über den Android-Teilen-Dialog
+
+RepoType: git
+Repo: https://github.com/ckoop/haushaltsbuch-android.git
+
+Builds:
+  - versionName: 0.1.0
+    versionCode: 100
+    commit: aa031ec7dc977b4f01c3cf7b966ec76ca9131150
+    subdir: android
+    sudo:
+      - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      - apt-get install -y nodejs
+    init:
+      - cd .. && npm install && npm run build && npx cap sync android
+    gradle:
+      - "yes"
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.1.0
+CurrentVersionCode: 100
