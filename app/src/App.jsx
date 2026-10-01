@@ -181,6 +181,13 @@ function Shell() {
     .map((r) => ({ rule: r.rule, status: reserveStatus(r.rule, r.txs, key) }));
   const reserveMonthlyOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.monthly, 0);
   const withdrawnThisMonthOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.withdrawn, 0);
+  // Summe aller aktuell in Ruecklagen-Toepfen angesparten Betraege,
+  // kategorieuebergreifend (anders als reservesFor/reserveMonthlyOf, die nach
+  // einer einzelnen Kategorie filtern) - Grundlage fuer den Mindestbestand in
+  // Budgets.jsx: so viel vom Kontostand ist fuer bereits laufende Quartals-/
+  // Jahresruecklagen gebunden, der Rest waere ohne die naechste Faelligkeit
+  // zu gefaehrden z.B. aufs Sparkonto verschiebbar.
+  const totalReserved = reserves.reduce((s, r) => s + reserveStatus(r.rule, r.txs, key).saved, 0);
   const effectiveLimitOf = (cid) =>
     (budgets.find((b) => b.category === cid)?.amount_cents ?? 0) + reserveMonthlyOf(cid);
 
@@ -507,7 +514,7 @@ function Shell() {
   const shared = {
     accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
-    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, reloadReserves: loadReserves,
+    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, totalReserved, reloadReserves: loadReserves,
     depotEnabled, setDepotEnabled, reloadTags,
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,

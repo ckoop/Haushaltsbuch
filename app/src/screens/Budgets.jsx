@@ -68,11 +68,12 @@ function IncomeRow({ row, dauer, monthKey, acc, onCreated, onRemoved, flash, set
 
 export default function BudgetScreen({
   categories, accounts, budgets, incomeEntries, real, spentByCat, monthKey, acc, setAcc, combinedBalances,
-  reservesFor, reserveMonthlyOf, effectiveLimitOf, reload, flash, openDetail,
+  reservesFor, reserveMonthlyOf, effectiveLimitOf, totalReserved, reload, flash, openDetail,
 }) {
   const [error, setError] = useState(null);
   const [dauer, setDauer] = useState(true);
   const [showUncat, setShowUncat] = useState(false);
+  const [showReserveSummary, setShowReserveSummary] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [rows, setRows] = useState(() => incomeEntries.map(toRow));
   useEffect(() => { setRows(incomeEntries.map(toRow)); }, [incomeEntries]);
@@ -94,6 +95,14 @@ export default function BudgetScreen({
   const expenseTotal = real.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
   const incomeActual = real.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
   const surplus = incomeActual - expenseTotal;
+  // Frei verschiebbar = Kontostand minus dem, was fuer laufende Quartals-/
+  // Jahresruecklagen schon angespart ist (totalReserved, s. App.jsx) - der
+  // Teil des Kontostands, der ohne die naechste Ruecklagen-Faelligkeit zu
+  // gefaehrden z.B. aufs Sparkonto verschoben werden koennte. combinedBalances
+  // (nicht das reine Konto-Saldo) wie bei der Kontostand-Kachel in
+  // Buchungen.jsx, damit Toepfe des Kontos mitzaehlen.
+  const accountBalance = combinedBalances[acc] ?? 0;
+  const freeToMove = accountBalance - totalReserved;
   const uncoveredCats = categories.filter((c) =>
     c.kind === "expense" && !c.archived && effectiveLimitOf(c.id) === 0 && (spentByCat[c.id] ?? 0) > 0);
 
@@ -152,6 +161,42 @@ export default function BudgetScreen({
             <p className="text-xs text-stone-400 dark:text-stone-500 mt-1.5">
               {uncoveredCats.length} {uncoveredCats.length === 1 ? "Kategorie" : "Kategorien"} ohne eigenes Budget — die Ausgaben darin zählen trotzdem mit.
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Nur wenn ueberhaupt eine Quartals-/Jahresruecklage laeuft - ohne das
+          gibt es nichts, wogegen sich der Kontostand abgrenzen liesse.
+          Gleiches Klapp-Muster wie "Budgets anzeigen" in Buchungen.jsx, Default
+          eingeklappt (neue Box, nicht die bisher schon sichtbaren Kennzahlen
+          verdraengen). */}
+      {acc !== "alle" && totalReserved > 0 && (
+        <div className="mb-4">
+          <button onClick={() => setShowReserveSummary((v) => !v)}
+            className="flex items-center gap-1 text-sm! text-stone-600 dark:text-stone-300 mb-2">
+            <ChevronRight size={12} className={`transition-transform ${showReserveSummary ? "rotate-90" : ""}`} />
+            Mindestbestand (Rücklagen) {showReserveSummary ? "ausblenden" : `anzeigen (${eur(totalReserved)})`}
+          </button>
+          {showReserveSummary && (
+            <div className="rounded-xl px-4 py-3 border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-[13px]">
+              <div className="flex items-center justify-between">
+                <span className="text-stone-600 dark:text-stone-300">Mindestbestand (Rücklagen)</span>
+                <span className="tabular-nums font-medium">{eur(totalReserved)}</span>
+              </div>
+              <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">
+                So viel ist für bereits laufende Quartals-/Jahresrücklagen angespart und sollte auf dem Konto bleiben.
+              </p>
+              <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-stone-100 dark:border-stone-700">
+                <span className="text-stone-600 dark:text-stone-300">Davon diesen Monat neu zurückzulegen</span>
+                <span className="tabular-nums font-medium">{eur(totalReserveMonthly)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-stone-100 dark:border-stone-700">
+                <span className="text-stone-600 dark:text-stone-300">Frei verschiebbar</span>
+                <span className={`tabular-nums font-medium ${freeToMove < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                  {eur(freeToMove)}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       )}
