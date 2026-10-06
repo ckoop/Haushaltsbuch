@@ -43,6 +43,10 @@ export default function Konten({ accounts, categories, tags, people, balances, r
   // bisher flache Liste sonst schnell unübersichtlich. Default alle
   // aufgeklappt, aus demselben Grund wie bei collapsedParents.
   const [collapsedFrequencies, setCollapsedFrequencies] = useState(new Set());
+  // Fälligkeits-Vorschau (nächste DUE_SOON_DAYS Tage) - per Default
+  // eingeklappt, die Box belegte sonst bei mehreren fälligen Regeln viel Platz
+  // über der eigentlichen Liste. Der Kopf mit der Anzahl bleibt sichtbar.
+  const [dueSoonOpen, setDueSoonOpen] = useState(false);
   const toggleFrequency = (v) => setCollapsedFrequencies((s) => {
     const next = new Set(s);
     next.has(v) ? next.delete(v) : next.add(v);
@@ -237,10 +241,15 @@ export default function Konten({ accounts, categories, tags, people, balances, r
 
       {dueSoon.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-xl px-3.5 py-3 mb-3">
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1.5">
-            {dueSoon.length} {dueSoon.length === 1 ? "Dauerauftrag" : "Daueraufträge"} in den nächsten {DUE_SOON_DAYS} Tagen fällig
-          </p>
-          <div className="space-y-1">
+          <button onClick={() => setDueSoonOpen((o) => !o)} aria-expanded={dueSoonOpen}
+            className="w-full flex items-center gap-2 text-left">
+            <ChevronRight size={13}
+              className={`text-amber-700 dark:text-amber-400 shrink-0 transition-transform ${dueSoonOpen ? "rotate-90" : ""}`} />
+            <span className="flex-1 min-w-0 text-xs font-medium text-amber-800 dark:text-amber-300">
+              {dueSoon.length} {dueSoon.length === 1 ? "Dauerauftrag" : "Daueraufträge"} in den nächsten {DUE_SOON_DAYS} Tagen fällig
+            </span>
+          </button>
+          {dueSoonOpen && <div className="space-y-1 mt-1.5">
             {dueSoon.map((r) => {
               const isTransfer = r.type === "transfer";
               const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
@@ -256,7 +265,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
