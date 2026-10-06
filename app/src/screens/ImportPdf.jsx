@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, FileUp, AlertTriangle, Check, Undo2 } from "lucide-react";
 import * as api from "../pb.js";
+import { matchRecurringRule } from "../dauerauftraege.js";
 import * as csv from "../csv.js";
 import * as pdf from "../pdf.js";
 import {
@@ -39,6 +40,9 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
 
   const [file, setFile] = useState(null);
   const [rules, setRules] = useState([]);
+  // Aktive Daueraufträge - der Import ordnet Zeilen, die zu einem passen
+  // (Konto, Betrag, Empfänger), dessen Kategorie/Tags zu (ab 0.55.0).
+  const [recRules, setRecRules] = useState([]);
   const [runs, setRuns] = useState([]);
   const [account, setAccount] = useState(realAccounts[0]?.id ?? "");
 
@@ -64,8 +68,8 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
   const [note, setNote] = useState("");
 
   useEffect(() => {
-    Promise.all([api.listRules(), api.listImportRuns()])
-      .then(([r, u]) => { setRules(r); setRuns(u); })
+    Promise.all([api.listRules(), api.listImportRuns(), api.listRecurringRules()])
+      .then(([r, u, rr]) => { setRules(r); setRuns(u); setRecRules(rr); })
       .catch(setError);
   }, []);
 
@@ -119,8 +123,13 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
 
       setRows(built.map((r) => {
         if (!r.ok) return r;
+        // Textregeln gehen vor (ausdrücklich so angelegt), der Dauerauftrag
+        // füllt nur die Lücke - und markiert die Zeile unabhängig davon als
+        // wiederkehrend, wie die vom Dauerauftrag selbst gebuchten.
         const matched = csv.applyRules(r, rules);
-        return { ...r, category: matched?.category ?? "", tags: matched?.tags ?? [] };
+        const rec = matchRecurringRule(r, recRules, account);
+        const src = matched ?? (rec ? { category: rec.category ?? "", tags: rec.tags ?? [] } : null);
+        return { ...r, category: src?.category ?? "", tags: src?.tags ?? [], recurring: rec?.frequency ?? "" };
       }));
       setManualCats({});
       setExcluded(new Set());
@@ -199,6 +208,7 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
           amount_cents: r.cents,
           payee: r.payee || r.purpose.slice(0, 60),
           note: r.purpose,
+          recurring: r.recurring || undefined,
           import_hash: r.hash,
           import_batch: run.id,
         })),
@@ -427,6 +437,7 @@ export default function ImportPdf({ accounts, categories, tags, onBack, flash })
                         {r.category && ` · ${byId(categories, r.category, UNKNOWN_CAT).name}`}
                         {r.tags?.length > 0 && ` · ${r.tags.map((id) => byId(tags, id, UNKNOWN_TAG).name).join(", ")}`}
                         {r.batchDupeCount > 1 && " · evtl. doppelt"}
+                        {r.recurring && " · Dauerauftrag"}
                         {r.possibleDupe && " · evtl. schon vorhanden"}
                       </span>
                     </span>

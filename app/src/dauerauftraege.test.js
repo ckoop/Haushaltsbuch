@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shiftDate, findDuplicateCandidates, originOf, RULE_DUP_WINDOW_DAYS } from "./dauerauftraege.js";
+import { shiftDate, findDuplicateCandidates, originOf, matchRecurringRule, RULE_DUP_WINDOW_DAYS } from "./dauerauftraege.js";
 
 const rule = { id: "r1", type: "tx", account: "A", amount_cents: -10000, frequency: "monthly" };
 const tx = (o) => ({ id: "t1", type: "tx", account: "A", amount_cents: -10000, date: "2026-10-05 00:00:00.000Z", import_hash: "abc", ...o });
@@ -50,5 +50,30 @@ describe("originOf", () => {
   it("unterscheidet Import und manuell", () => {
     expect(originOf({ import_hash: "x" })).toBe("Import");
     expect(originOf({ import_hash: "" })).toBe("von Hand erfasst");
+  });
+});
+
+describe("matchRecurringRule", () => {
+  const rr = { id: "r1", type: "tx", account: "A", amount_cents: -12300, payee: "Beispiel Bank AG", frequency: "monthly", active: true };
+  const row = { payee: "Beispiel Bank AG", purpose: "Depot Sparplan", cents: -12300 };
+  it("trifft bei gleichem Konto, Betrag und Empfänger", () => {
+    expect(matchRecurringRule(row, [rr], "A")).toBe(rr);
+  });
+  it("Empfänger darf auch im Zwecktext stehen, Groß-/Kleinschreibung egal", () => {
+    expect(matchRecurringRule({ payee: "", purpose: "beispiel bank ag Sparplan", cents: -12300 }, [rr], "A")).toBe(rr);
+  });
+  it("anderer Betrag, anderes Konto oder anderer Empfänger trifft nicht", () => {
+    expect(matchRecurringRule({ ...row, cents: -2 }, [rr], "A")).toBeNull();
+    expect(matchRecurringRule(row, [rr], "B")).toBeNull();
+    expect(matchRecurringRule({ ...row, payee: "Anderer" , purpose: "x" }, [rr], "A")).toBeNull();
+  });
+  it("inaktive Regeln, Umbuchungen und Regeln ohne Empfänger zählen nicht", () => {
+    expect(matchRecurringRule(row, [{ ...rr, active: false }], "A")).toBeNull();
+    expect(matchRecurringRule(row, [{ ...rr, type: "transfer" }], "A")).toBeNull();
+    expect(matchRecurringRule(row, [{ ...rr, payee: "" }], "A")).toBeNull();
+  });
+  it("erster Treffer gewinnt", () => {
+    const second = { ...rr, id: "r2" };
+    expect(matchRecurringRule(row, [rr, second], "A").id).toBe("r1");
   });
 });

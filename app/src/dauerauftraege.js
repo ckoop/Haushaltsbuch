@@ -48,3 +48,25 @@ export function findDuplicateCandidates(rule, due, txs, claimed = new Set()) {
 // mit Import-Hash kommt sie aus einem CSV-/PDF-Import, ohne wurde sie von
 // Hand erfasst.
 export const originOf = (t) => ((t.import_hash ?? "") ? "Import" : "von Hand erfasst");
+
+// Passt eine Importzeile (CSV/PDF) zu einem aktiven Dauerauftrag? Der Import
+// ordnete Kategorien bisher nur über die Textregeln ("rules", applyRules() in
+// csv.js) zu und kannte die Daueraufträge nicht - eine Zahlung, die als
+// Dauerauftrag längst mit Kategorie angelegt ist, kam im Import als fremde,
+// unkategorisierte Zeile an und musste von Hand zugeordnet werden.
+// Passt nur bei gleichem Konto, gleichem Betrag (vorzeichenrichtig) und wenn
+// der Empfänger des Dauerauftrags im Empfänger-/Zwecktext der Zeile vorkommt;
+// Regeln ohne Empfänger werden bewusst nicht herangezogen (Konto+Betrag allein
+// wären zu schwach). Umbuchungen kennt der Import nicht, nur Typ "tx".
+// `recRules` ist nach next_due sortiert (listRecurringRules()), der erste
+// Treffer gewinnt.
+export function matchRecurringRule(row, recRules, accountId) {
+  const haystack = `${row.payee ?? ""} ${row.purpose ?? ""}`.toLowerCase();
+  for (const r of recRules) {
+    const payee = (r.payee ?? "").trim().toLowerCase();
+    if (!r.active || r.type !== "tx" || !payee) continue;
+    if (r.account !== accountId || r.amount_cents !== row.cents) continue;
+    if (haystack.includes(payee)) return r;
+  }
+  return null;
+}
