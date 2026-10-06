@@ -12,6 +12,8 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
   const [digits, setDigits] = useState("");
   const [kind, setKind] = useState("aus");
   const [cat, setCat] = useState(expenses[0]?.id ?? "");
+  // Optionale Kategorie einer Umbuchung - zaehlt im Budget wie eine Ausgabe (budget.js).
+  const [transferCat, setTransferCat] = useState("");
   const [from, setFrom] = useState(defaultAcc ?? accounts[0]?.id);
   const [to, setTo] = useState(() => (accounts.find((a) => a.id !== defaultAcc) ?? accounts[0])?.id);
   const [payee, setPayee] = useState("");
@@ -54,7 +56,7 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
     setBusy(true); setError(null);
     try {
       const base = kind === "um"
-        ? { type: "transfer", account: from, to_account: to, amount_cents: cents }
+        ? { type: "transfer", account: from, to_account: to, amount_cents: cents, ...(transferCat ? { category: transferCat } : {}) }
         : { type: "tx", account: from, category: kind === "ein" ? incomeCat?.id : cat,
             amount_cents: kind === "ein" ? cents : -cents };
       await api.createTransaction({ ...base, date, payee: payee.trim(), note: "", import_hash: "", recurring });
@@ -115,6 +117,12 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
           <>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-4 mb-2">Auf Konto</p>
             <AccountPicker accounts={accounts} value={to} onChange={setTo} disabledId={from} />
+            <p className="text-xs text-stone-500 dark:text-stone-400 mt-4 mb-2">Kategorie (optional)</p>
+            <select value={transferCat} onChange={(e) => setTransferCat(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-[13px]">
+              <option value="">Keine — zählt nicht im Budget</option>
+              {expenses.map((c) => <option key={c.id} value={c.id}>{c.name} — zählt im Budget</option>)}
+            </select>
           </>
         )}
 

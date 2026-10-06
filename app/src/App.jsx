@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, Tren
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
 import { reserveStatus } from "./ruecklagen.js";
+import { spentByCategory } from "./budget.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
 import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
@@ -412,11 +413,9 @@ function Shell() {
     return Math.round(total / AVG_MONTHS_BACK);
   }, [avgTx, accGroup]);
 
-  const spentByCat = useMemo(() => {
-    const o = {};
-    for (const t of real) if (t.amount_cents < 0) o[t.category] = (o[t.category] ?? 0) - t.amount_cents;
-    return o;
-  }, [real]);
+  // Umbuchungen mit Kategorie zaehlen (ab 0.56.0) aus Sicht des Quellkontos wie
+  // eine Ausgabe dieser Kategorie - Details und Begruendung in budget.js.
+  const spentByCat = useMemo(() => spentByCategory(visible, accGroup), [visible, accGroup]);
   // Tags sind quer zur Kategorie, eine Buchung kann mehrere haben - bewusst
   // keine Partition wie bei Kategorien, Mehrfachzaehlung ist hier gewollt.
   const spentByTag = useMemo(() => {
@@ -448,7 +447,7 @@ function Shell() {
   };
 
   const ruleBaseFor = (tx) => tx.type === "transfer"
-    ? { type: "transfer", account: tx.account, to_account: tx.to_account, amount_cents: tx.amount_cents }
+    ? { type: "transfer", account: tx.account, to_account: tx.to_account, category: tx.category || "", amount_cents: tx.amount_cents }
     : { type: "tx", account: tx.account, category: tx.category, amount_cents: tx.amount_cents };
 
   // Dauerauftrag nachtraeglich aus einer bereits als wiederkehrend markierten
@@ -505,6 +504,10 @@ function Shell() {
   // selbst erkennen. Die Richtung ergibt sich aus dem Vorzeichen der
   // bestehenden Buchung: eine Ausgabe wird zur Quelle (account bleibt, neues
   // to_account), eine Einnahme zum Ziel (neues account, to_account bleibt).
+  // Die Kategorie einer Ausgabe bleibt erhalten (ab 0.56.0): eine Umbuchung mit
+  // Kategorie zaehlt im Budget weiter wie die Ausgabe davor - so wird aus einer
+  // importierten "Sparen"-Abbuchung eine Umbuchung aufs Sparkonto, ohne dass
+  // sie aus dem Budget faellt. Die Kategorie einer Einnahme (Zielseite) entfaellt.
   // counterpartId ist optional gesetzt, wenn TxDetail.jsx auf dem Gegenkonto
   // schon eine passende Spiegelbuchung gefunden hat (beide Konten importiert)
   // - die wird mitgeloescht, sonst waere die Umbuchung doppelt gezaehlt.
@@ -512,7 +515,7 @@ function Shell() {
     try {
       if (counterpartId) await api.deleteTransaction(counterpartId);
       const patch = tx.amount_cents < 0
-        ? { type: "transfer", account: tx.account, to_account: otherAccountId, amount_cents: -tx.amount_cents, category: "" }
+        ? { type: "transfer", account: tx.account, to_account: otherAccountId, amount_cents: -tx.amount_cents, category: tx.category || "" }
         : { type: "transfer", account: otherAccountId, to_account: tx.account, amount_cents: tx.amount_cents, category: "" };
       const updated = await api.updateTransaction(tx.id, patch);
       setDetail(updated);
@@ -551,7 +554,7 @@ function Shell() {
   const needsSetup = !loading && !error && accounts.length === 0 && categories.length === 0;
 
   const shared = {
-    accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
+    accounts, categories, tags, people, transactions: visible, real, accGroup, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
     reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, totalReserved, reloadReserves: loadReserves,
     depotEnabled, setDepotEnabled, reloadTags,

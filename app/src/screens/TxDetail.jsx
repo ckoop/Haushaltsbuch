@@ -43,7 +43,9 @@ export default function TxDetail({
   // Einnahme/Ausgabe steht mit dem Vorzeichen schon fest (nicht nachtraeglich
   // aenderbar hier) - die Kategorie-Auswahl zeigt deshalb nur die passende Art,
   // genau wie beim Anlegen in NewEntry.jsx.
-  const catOptions = categories.filter((c) => !c.archived && c.kind === (tx.amount_cents > 0 ? "income" : "expense"));
+  // Umbuchungen sind positiv gespeichert, tragen aber nur Ausgabenkategorien
+  // (ab 0.56.0, zaehlen im Budget wie eine Ausgabe).
+  const catOptions = categories.filter((c) => !c.archived && c.kind === (!isTransfer && tx.amount_cents > 0 ? "income" : "expense"));
 
   return (
     <Sheet onClose={onClose}>
@@ -53,7 +55,9 @@ export default function TxDetail({
         </span>
         <div className="flex-1">
           <p className="text-[15px] font-medium">{tx.payee || (isTransfer ? "Umbuchung" : cat.name)}</p>
-          <p className="text-xs text-stone-500 dark:text-stone-400">{isTransfer ? "Umbuchung" : cat.name}</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            {isTransfer ? `Umbuchung${tx.category ? ` · ${byId(categories, tx.category, UNKNOWN_CAT).name}` : ""}` : cat.name}
+          </p>
         </div>
         <p className={`text-lg font-medium tabular-nums ${
           isTransfer ? "text-stone-400 dark:text-stone-500" : tx.amount_cents > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
@@ -71,19 +75,19 @@ export default function TxDetail({
         {tx.import_batch && <DetailRow label="Herkunft" value="CSV-Import" />}
       </div>
 
-      {!isTransfer && (
-        <>
-          <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Kategorie</p>
+      <>
+          <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">
+            {isTransfer ? "Kategorie (zählt im Budget wie eine Ausgabe)" : "Kategorie"}
+          </p>
           <select className={`${inputCls} mb-4`} value={tx.category}
             onChange={(e) => onUpdateCategory(tx.id, e.target.value)}>
             {/* Immer waehlbar, nicht nur wenn schon leer - sonst laesst sich
                 eine bereits gesetzte (z. B. per Auto-Regel falsch zugeordnete)
                 Kategorie ueber dieses Feld nie wieder entfernen. */}
-            <option value="">{UNKNOWN_CAT.name}</option>
+            <option value="">{isTransfer ? "Keine — zählt nicht im Budget" : UNKNOWN_CAT.name}</option>
             {catOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-        </>
-      )}
+      </>
 
       <TagEditor tx={tx} tags={tags} onAdd={onAddTag} onRemove={onRemoveTag} />
 

@@ -30,7 +30,7 @@ Feature-Rationale und Bugfix-Historie zu einzelnen Sammlungen (Wiederkehrend-Mar
 
 Beträge sind ganzzahlige Cent in `amount_cents` und `start_cents`. Niemals Fließkomma für Geld. 34,82 € ist `3482`.
 
-Umbuchungen sind eine Zeile, nicht zwei. `type = "transfer"`, `account` ist die Quelle, `to_account` das Ziel. Sie fallen aus Einnahmen, Ausgaben und Budgets heraus — Geld zwischen eigenen Konten ist kein Umsatz. Wer das aufweicht, macht jede Monatsauswertung wertlos.
+Umbuchungen sind eine Zeile, nicht zwei. `type = "transfer"`, `account` ist die Quelle, `to_account` das Ziel. Sie fallen aus Einnahmen, Ausgaben und Budgets heraus — Geld zwischen eigenen Konten ist kein Umsatz. Wer das aufweicht, macht jede Monatsauswertung wertlos. **Einzige Ausnahme (ab `0.56.0`, auf ausdrücklichen Nutzerwunsch):** eine Umbuchung kann eine Ausgabenkategorie tragen (`transactions.category`); dann zählt sie *nur im Budget* und in „Ausgaben nach Kategorie" aus Sicht des Quellkontos wie eine Ausgabe dieser Kategorie (`spentByCategory()` in `app/src/budget.js`) — z. B. eine Sparrate, die im Budget stehen, deren Sparkonto aber per Umbuchung sein Plus bekommen soll. Einnahmen, Ausgaben, Saldo, Überschuss und Sparquote rechnen weiter ohne jede Umbuchung. Umbuchungen ohne Kategorie bleiben komplett draußen. Diese Ausnahme nicht auf Summen/Saldo ausdehnen.
 
 Kein `crypto.subtle`, kein Service Worker, keine PWA-Installation. Die App läuft über `http://192.168.x.x:8090` und ist damit kein sicherer Kontext. Der Dedup-Hash ist deshalb eine FNV-Variante in reinem JavaScript. Wenn du irgendwo Web-Crypto vorschlägst, ist der Vorschlag falsch.
 
