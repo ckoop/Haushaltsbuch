@@ -64,7 +64,7 @@ Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das war 
 
 Falls Offline später doch gefordert wird, ist der richtige nächste Schritt nicht ein vollständiger Sync, sondern eine Warteschlange nur für neu erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
-Ebenfalls offen: Datenexport, Mehrwährungsfähigkeit für den Rest der App (Konten/Buchungen bleiben Euro-only, nur das Depot rechnet um), FIFO/LIFO-Berechnung im Depot (nur Durchschnittsmethode), gespeicherte/historische Depot-Kurse und -Wechselkurse (immer nur der zuletzt live abgerufene, nie in der DB), historische Wechselkurse zum Kaufzeitpunkt (Depot-Euro-Werte nutzen durchgehend den aktuellen Kurs).
+Ebenfalls offen: Mehrwährungsfähigkeit für den Rest der App (Konten/Buchungen bleiben Euro-only, nur das Depot rechnet um), FIFO/LIFO-Berechnung im Depot (nur Durchschnittsmethode), gespeicherte/historische Depot-Kurse und -Wechselkurse (immer nur der zuletzt live abgerufene, nie in der DB), historische Wechselkurse zum Kaufzeitpunkt (Depot-Euro-Werte nutzen durchgehend den aktuellen Kurs).
 
 ## CSV-Import: der heikelste Teil
 

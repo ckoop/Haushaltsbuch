@@ -1,5 +1,8 @@
 import PocketBase from "pocketbase";
 import { todayISO } from "./ui.jsx";
+import {
+  BACKUP_SCHEMA_VERSION, BACKUP_COLLECTIONS, CREATED_ORDERED, stripRecord, validateBackup, orderForCreate,
+} from "./backup.js";
 
 // Keine feste Adresse: die App spricht mit dem Server, von dem sie geladen wurde.
 // Damit funktioniert sie im WLAN und im WireGuard-Tunnel gleichermassen.
@@ -649,4 +652,81 @@ export async function seedDefaults() {
     name: "Girokonto", short: "Giro", type: "giro", start_cents: 0, sort: 0, archived: false,
   });
   await batch.send();
+}
+
+// ------------------------------------------------------------------- Sicherung
+
+// Alle Sammlungen unverändert (ohne PocketBase-Systemfelder) in einer Datei —
+// bewusst die volle Historie ohne Zeitraumfilter. Das Format teilt sich die
+// App mit haushaltsbuch-capacitor (Details in backup.js), die Datensätze
+// behalten ihre Ids, damit Relationen beim Einspielen intakt bleiben.
+export async function exportBackup() {
+  const data = {};
+  for (const name of BACKUP_COLLECTIONS) {
+    const rows = await pb.collection(name).getFullList({ sort: "id" });
+    data[name] = rows.map(stripRecord);
+  }
+  return {
+    app: "haushaltsbuch",
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString().replace("T", " "),
+    data,
+  };
+}
+
+// PocketBase begrenzt eine Sammelanfrage standardmäßig auf 50 Einträge.
+const BATCH_SIZE = 50;
+
+async function sendInChunks(items, add) {
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = pb.createBatch();
+    for (const item of items.slice(i, i + BATCH_SIZE)) add(batch, item);
+    await batch.send();
+  }
+}
+
+// Leert die in `data` vorkommenden Sammlungen und legt deren Datensätze mit
+// den Ids aus der Datei neu an. Nicht atomar über mehrere Sammlungen hinweg
+// (jede Sammelanfrage für sich schon) — deshalb der Rollback in restoreBackup().
+// Sammlungen aus CREATED_ORDERED laufen einzeln statt gebündelt, s. backup.js.
+async function replaceAll(data, onProgress) {
+  const present = BACKUP_COLLECTIONS.filter((n) => Array.isArray(data[n]));
+  const total = present.reduce((n, name) => n + data[name].length, 0);
+  let done = 0;
+  const tick = (n) => { done += n; onProgress?.(done, total); };
+
+  for (const name of [...present].reverse()) {
+    const ids = (await pb.collection(name).getFullList({ fields: "id" })).map((r) => r.id);
+    await sendInChunks(ids, (b, id) => b.collection(name).delete(id));
+  }
+  for (const name of present) {
+    const rows = orderForCreate(name, data[name]);
+    if (CREATED_ORDERED.has(name)) {
+      for (const row of rows) { await pb.collection(name).create(row); tick(1); }
+    } else {
+      await sendInChunks(rows, (b, row) => b.collection(name).create(row));
+      tick(rows.length);
+    }
+  }
+}
+
+// Ersetzt den Datenbestand durch den Inhalt einer Sicherungsdatei — nur nach
+// ausdrücklicher Bestätigung im UI. Sammlungen, die in der Datei fehlen,
+// bleiben unangetastet. Scheitert das Einspielen mitten drin, wird der vorher
+// gezogene Stand zurückgespielt, statt eine halb geleerte Datenbank zu lassen.
+export async function restoreBackup(backup, onProgress) {
+  validateBackup(backup);
+  const snapshot = await exportBackup();
+  try {
+    await replaceAll(backup.data, onProgress);
+  } catch (err) {
+    try {
+      await replaceAll(snapshot.data);
+    } catch (rollbackErr) {
+      throw new Error(
+        `Wiederherstellung fehlgeschlagen (${err.message}) und der alte Stand konnte nicht zurückgespielt werden (${rollbackErr.message}). Bitte nichts weiter ändern und die Sicherung erneut einspielen.`
+      );
+    }
+    throw new Error(`Wiederherstellung fehlgeschlagen, der vorherige Stand wurde zurückgespielt: ${err.message}`);
+  }
 }

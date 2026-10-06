@@ -420,6 +420,15 @@ bisher nur im selben `pb_data`-Volume wie die Live-Datenbank und würden
 einen Ausfall der Platte/des Servers selbst nicht überleben. Das ist die
 verbleibende Lücke.
 
+**JSON-Sicherung in der App** (ab `0.53.0`, Einstellungen → Sicherung): lädt
+alle Haushaltsdaten als eine lesbare JSON-Datei herunter und spielt sie auf
+Wunsch wieder ein. Ergänzung, kein Ersatz für die PocketBase-Backups oben —
+die JSON-Datei enthält nur die Sammlungen (keine Logins, keine
+Systemeinstellungen) und ist für den Austausch mit der Android-App gedacht.
+Ein Wiederherstellen ersetzt den Datenbestand der Instanz, auf `bumblebeee`
+deshalb vorher ein PocketBase-Backup ziehen. Setzt die aktivierte Batch-API
+voraus (*Settings → Application*), wie schon der Import.
+
 ## Buchungen eines Monats löschen
 
 Für den Fall, dass Testdaten oder ein verunglückter Import ganze Monate
