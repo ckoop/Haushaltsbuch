@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark, AlertTriangle } from "lucide-react";
 import * as api from "./pb.js";
 import { pb } from "./pb.js";
 import { reserveStatus } from "./ruecklagen.js";
@@ -12,6 +12,7 @@ import Depot from "./screens/Depot.jsx";
 import Einstellungen from "./screens/Einstellungen.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
+import RuleConflicts from "./screens/RuleConflicts.jsx";
 import { useDepotEnabled } from "./depotPref.js";
 import { useDefaultAccountPref } from "./defaultAccountPref.js";
 
@@ -93,6 +94,11 @@ function Shell() {
   const [sheet, setSheet] = useState(false);
   const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
+  // Faellige Dauerauftraege, die NICHT gebucht wurden, weil es schon eine
+  // moeglicherweise gleiche Buchung gibt - bleibt bestehen (auch wenn das Sheet
+  // geschlossen wird), bis der Nutzer jeden einzelnen entschieden hat.
+  const [ruleConflicts, setRuleConflicts] = useState([]);
+  const [resolvingRule, setResolvingRule] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState(null);
 
@@ -302,17 +308,50 @@ function Shell() {
   // Faellige Daueraufträge einmal pro Sitzung nachbuchen - nicht Teil von
   // load(), das feuert bei jedem Monatswechsel neu. Zeigt danach, welche
   // Buchungen konkret automatisch entstanden sind (nicht nur die Anzahl im
-  // Toast, der laengst wieder verschwunden waere, wenn man's verpasst).
+  // Toast, der laengst wieder verschwunden waere, wenn man's verpasst). Gibt es
+  // zu einer faelligen Periode schon eine moeglicherweise gleiche Buchung
+  // (z. B. von der Bank ausgefuehrt und importiert), wird sie nicht gebucht,
+  // sondern als Rueckfrage im selben Sheet angeboten (ab 0.54.0).
   useEffect(() => {
     api.runDueRecurringRules()
-      .then(async (rows) => {
-        if (rows.length === 0) return;
-        await load();
+      .then(async ({ created, conflicts }) => {
+        setRuleConflicts(conflicts);
+        if (created.length === 0 && conflicts.length === 0) return;
+        if (created.length > 0) await load();
         history.pushState({ tab, overlay: "autoBooked" }, "");
-        setAutoBooked({ rows, checkedAt: new Date() });
+        setAutoBooked({ rows: created, checkedAt: new Date() });
       })
       .catch(console.error);
   }, []);
+
+  // Banner-Klick: Rueckfrage erneut oeffnen, falls das Sheet ohne Entscheidung
+  // geschlossen wurde.
+  const reopenConflicts = () => {
+    history.pushState({ tab, overlay: "autoBooked" }, "");
+    setAutoBooked({ rows: [], checkedAt: new Date() });
+  };
+
+  // Entscheidung zu einem Konflikt. Danach laeuft die Pruefung erneut, weil die
+  // Regel um eine Periode weitergerueckt ist: weitere faellige Perioden werden
+  // nachgebucht oder werfen ihrerseits eine Rueckfrage, die uebrigen offenen
+  // Konflikte kommen unveraendert wieder zurueck.
+  const resolveConflict = async (conflict, decision) => {
+    setResolvingRule(true);
+    try {
+      const booked = await api.resolveRuleConflict(conflict, decision);
+      const { created, conflicts } = await api.runDueRecurringRules();
+      const newRows = [...(booked ? [booked] : []), ...created];
+      if (newRows.length > 0) await load();
+      setRuleConflicts(conflicts);
+      flash(decision === "skip" ? "Nicht erneut gebucht — Dauerauftrag auf nächste Fälligkeit gesetzt" : "Gebucht");
+      if (conflicts.length === 0 && newRows.length === 0 && autoBooked?.rows.length === 0) {
+        history.back();
+      } else {
+        setAutoBooked((prev) => prev && { ...prev, rows: [...prev.rows, ...newRows] });
+      }
+    } catch (e) { setError(e); }
+    finally { setResolvingRule(false); }
+  };
 
   const balances = useMemo(() => {
     const b = {};
@@ -635,6 +674,18 @@ function Shell() {
 
           <main className="flex-1 min-h-0 overflow-y-auto pb-28 sidebar:pb-8">
             {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
+            {ruleConflicts.length > 0 && !autoBooked && (
+              <div className="px-5 pt-4">
+                <button onClick={reopenConflicts}
+                  className="w-full flex items-start gap-2 text-left text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-xl px-3.5 py-3">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    <strong>{ruleConflicts.length === 1 ? "1 Dauerauftrag wartet" : `${ruleConflicts.length} Daueraufträge warten`} auf deine Bestätigung</strong>
+                    {" "}— es gibt schon eine möglicherweise gleiche Buchung, nichts wurde gebucht. Tippen zum Prüfen.
+                  </span>
+                </button>
+              </div>
+            )}
             {loading && <Spinner />}
 
             {needsSetup && <FirstRun onDone={load} setError={setError} />}
@@ -695,18 +746,26 @@ function Shell() {
           )}
 
           {autoBooked && (
-            <Sheet title="Automatisch gebucht" onClose={() => history.back()}>
-              <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
-                {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
-              </p>
-              <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
-                Geprüft: {autoBooked.checkedAt.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
-              </p>
-              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
-                {autoBooked.rows.map((t) => (
-                  <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
-                ))}
-              </div>
+            <Sheet title={ruleConflicts.length > 0 ? "Daueraufträge prüfen" : "Automatisch gebucht"} onClose={() => history.back()}>
+              {ruleConflicts.length > 0 && (
+                <RuleConflicts conflicts={ruleConflicts} accounts={accounts} categories={categories}
+                  busy={resolvingRule} onResolve={resolveConflict} />
+              )}
+              {autoBooked.rows.length > 0 && (
+                <>
+                  <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
+                    {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
+                  </p>
+                  <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
+                    Geprüft: {autoBooked.checkedAt.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
+                  </p>
+                  <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+                    {autoBooked.rows.map((t) => (
+                      <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+                    ))}
+                  </div>
+                </>
+              )}
             </Sheet>
           )}
         </div>

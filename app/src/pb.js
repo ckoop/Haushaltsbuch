@@ -3,6 +3,7 @@ import { todayISO } from "./ui.jsx";
 import {
   BACKUP_SCHEMA_VERSION, BACKUP_COLLECTIONS, CREATED_ORDERED, stripRecord, validateBackup, orderForCreate,
 } from "./backup.js";
+import { RULE_DUP_WINDOW_DAYS, shiftDate, findDuplicateCandidates } from "./dauerauftraege.js";
 
 // Keine feste Adresse: die App spricht mit dem Server, von dem sie geladen wurde.
 // Damit funktioniert sie im WLAN und im WireGuard-Tunnel gleichermassen.
@@ -323,13 +324,53 @@ export function addMonths(iso, months) {
   return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
 }
 
+// Eine Periode eines Dauerauftrags als Buchung anlegen. Dedup ueber den
+// bestehenden import_hash-Unique-Index, falls zwei Geraete gleichzeitig
+// pruefen - gibt bei einer Unique-Verletzung (= ein anderes Geraet hat diese
+// Periode schon gebucht) null zurueck statt zu werfen.
+async function bookRulePeriod(rule, date) {
+  try {
+    return await pb.collection("transactions").create({
+      date, type: rule.type, account: rule.account,
+      to_account: rule.to_account || undefined, category: rule.category || undefined,
+      tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
+      recurring: rule.frequency, import_hash: `rule:${rule.id}:${date}`,
+    });
+  } catch (e) {
+    if (e?.response?.data?.import_hash?.code !== "validation_not_unique") throw e;
+    return null;
+  }
+}
+
+// Gibt es zu dieser Faelligkeit schon eine Buchung, die dieselbe sein koennte
+// (z. B. von der Bank bereits ausgefuehrt und per CSV/PDF importiert)? Der
+// Dauerauftrag-Hash "rule:<id>:<datum>" kennt einen Import-Hash nicht - ohne
+// diese Pruefung wuerde dieselbe Zahlung doppelt gebucht. Die Auswahl der
+// Kandidaten steckt als reine Funktion in dauerauftraege.js (mit Tests), hier
+// nur die Abfrage: Konto + Betrag + Datumsfenster grob per Filter, der Rest
+// clientseitig.
+async function findRuleDuplicates(rule, due, claimed) {
+  const w = RULE_DUP_WINDOW_DAYS;
+  const txs = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "account = {:a} && amount_cents = {:c} && date >= {:from} && date <= {:to}",
+      { a: rule.account, c: rule.amount_cents, from: shiftDate(due, -w), to: `${shiftDate(due, w)} 23:59:59` }
+    ),
+  });
+  return findDuplicateCandidates(rule, due, txs, claimed);
+}
+
 // Faellige Daueraufträge nachbuchen - client-getriggert beim App-Start,
-// kein Server-Cron (siehe CLAUDE.md). Dedup ueber den bestehenden
-// import_hash-Unique-Index, falls zwei Geraete gleichzeitig pruefen. Bewusst
-// kein createBatch(): PocketBase-Batches sind atomar, ein Dedup-Konflikt
-// wuerde sonst auch alle anderen faelligen Regeln blockieren.
-// Gibt die neu erzeugten Buchungen zurueck (nicht nur die Anzahl), damit die
-// UI zeigen kann, was konkret automatisch gebucht wurde.
+// kein Server-Cron (siehe CLAUDE.md). Bewusst kein createBatch():
+// PocketBase-Batches sind atomar, ein Dedup-Konflikt wuerde sonst auch alle
+// anderen faelligen Regeln blockieren.
+// Gibt { created, conflicts } zurueck: created = neu erzeugte Buchungen (nicht
+// nur die Anzahl, damit die UI zeigen kann, was konkret gebucht wurde),
+// conflicts = Perioden, die NICHT gebucht wurden, weil es schon eine
+// moeglicherweise gleiche Buchung gibt (ab 0.54.0). Eine solche Regel bleibt
+// faellig und wird NICHT weitergeschoben, bis der Nutzer per
+// resolveRuleConflict() entschieden hat - und spaetere Perioden derselben
+// Regel warten, damit die Reihenfolge stimmt.
 export async function runDueRecurringRules() {
   const today = todayISO();
   // Exklusive Obergrenze statt "next_due <= today": next_due steht als
@@ -340,23 +381,21 @@ export async function runDueRecurringRules() {
   const due = await pb.collection("recurring_rules").getFullList({
     filter: pb.filter("active = true && next_due < {:tomorrow}", { tomorrow }),
   });
-  const createdRows = [];
+  const created = [];
+  const conflicts = [];
+  const claimed = new Set();
   for (const rule of due) {
     try {
       let next = dateOnly(rule.next_due);
       while (next <= today) {
-        try {
-          const row = await pb.collection("transactions").create({
-            date: next, type: rule.type, account: rule.account,
-            to_account: rule.to_account || undefined, category: rule.category || undefined,
-            tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
-            recurring: rule.frequency, import_hash: `rule:${rule.id}:${next}`,
-          });
-          createdRows.push(row);
-        } catch (e) {
-          // Unique-Verletzung = ein anderes Geraet hat diese Periode schon gebucht - ok.
-          if (e?.response?.data?.import_hash?.code !== "validation_not_unique") throw e;
+        const candidates = await findRuleDuplicates(rule, next, claimed);
+        if (candidates.length > 0) {
+          for (const c of candidates) claimed.add(c.id);
+          conflicts.push({ rule, due: next, candidates });
+          break;
         }
+        const row = await bookRulePeriod(rule, next);
+        if (row) created.push(row);
         next = addMonths(next, MONTHS_PER[rule.frequency]);
       }
       if (next !== dateOnly(rule.next_due)) {
@@ -368,7 +407,19 @@ export async function runDueRecurringRules() {
       console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
     }
   }
-  return createdRows;
+  return { created, conflicts };
+}
+
+// Entscheidung des Nutzers zu einem Konflikt aus runDueRecurringRules():
+// "skip" = die vorhandene Buchung ist dieselbe, nichts buchen; "book" = andere
+// Buchung, die Periode trotzdem anlegen. In beiden Faellen rueckt die Regel
+// um eine Periode weiter. Gibt bei "book" die neue Buchung zurueck, sonst null.
+export async function resolveRuleConflict({ rule, due }, decision) {
+  const row = decision === "book" ? await bookRulePeriod(rule, due) : null;
+  await pb.collection("recurring_rules").update(rule.id, {
+    next_due: addMonths(due, MONTHS_PER[rule.frequency]),
+  });
+  return row;
 }
 
 // ------------------------------------------------------------------- Budgets
