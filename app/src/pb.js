@@ -547,11 +547,24 @@ export async function accountBalanceAsOf(accountId, throughDate) {
 }
 
 // PocketBase kann mehrere Schreibvorgaenge in einer Anfrage buendeln.
+// Feldgrenzen aus setup/schema.mjs (transactions.payee max 120, note max 500).
+// Ueberschreitet eine einzige Zeile sie, lehnt PocketBase den ganzen Batch
+// atomar ab ("Batch transaction failed.") - aufgefallen an einer DKB-
+// Quartalsabrechnung mit über 600 Zeichen Verwendungszweck. Der Dedup-Hash wird
+// vorher aus dem vollen Text gebildet und bleibt davon unberuehrt.
+const PAYEE_MAX = 120;
+const NOTE_MAX = 500;
+const clamp = (s, max) => (typeof s === "string" && s.length > max ? s.slice(0, max - 1) + "…" : s);
+
 export async function batchCreateTransactions(rows, onProgress) {
   let done = 0;
   for (let i = 0; i < rows.length; i += 100) {
     const batch = pb.createBatch();
-    for (const r of rows.slice(i, i + 100)) batch.collection("transactions").create(r);
+    for (const r of rows.slice(i, i + 100)) {
+      batch.collection("transactions").create({
+        ...r, payee: clamp(r.payee, PAYEE_MAX), note: clamp(r.note, NOTE_MAX),
+      });
+    }
     await batch.send();
     done += Math.min(100, rows.length - i);
     onProgress?.(done, rows.length);

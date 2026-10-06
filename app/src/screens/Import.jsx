@@ -200,8 +200,12 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
 
   const runImport = async () => {
     setBusy(true); setError(null);
+    // Lauf-Datensatz entsteht vor den Buchungen - bei einem Fehler im Batch
+    // wieder entfernen, sonst steht unter "Frühere Importe" ein Lauf ohne
+    // Buchungen, der wie ein erfolgreicher aussieht.
+    let run = null;
     try {
-      const run = await api.createImportRun({
+      run = await api.createImportRun({
         account, filename: file?.name ?? "", row_count: toImport.length,
         skipped_count: dupes.length + bad.length + excluded.size,
         note: note.trim(),
@@ -237,7 +241,12 @@ export default function Import({ accounts, categories, tags, onBack, flash }) {
       flash(`${toImport.length} Buchungen importiert`
         + (newRules.size > 0 ? `, ${newRules.size} ${newRules.size === 1 ? "Regel" : "Regeln"} angelegt` : ""));
       onBack();
-    } catch (e) { setError(e); setProgress(null); }
+    } catch (e) {
+      if (run) {
+        try { await api.deleteImportRun(run.id); setRuns(await api.listImportRuns()); } catch { /* Fehler des Imports bleibt maßgeblich */ }
+      }
+      setError(e); setProgress(null);
+    }
     finally { setBusy(false); }
   };
 
