@@ -176,6 +176,16 @@ ob fällige Daueraufträge offen sind, und nachgebucht — kein Server-Cron,
 die App muss also ab und zu geöffnet werden. Wer länger nicht öffnet, bekommt
 die fehlenden Perioden beim nächsten Mal gesammelt nachgetragen.
 
+Ab `0.54.0` bucht das Nachbuchen **nicht blind**: gibt es zum Fälligkeitstag
+(±7 Tage) auf demselben Konto schon eine Buchung mit gleichem Betrag — z. B.
+weil die Bank den Dauerauftrag schon ausgeführt hat und die Zahlung per
+CSV/PDF importiert wurde —, bucht die App nichts, schiebt die Regel nicht
+weiter und fragt im Sheet „Daueraufträge prüfen“ nach (dieselbe Zahlung →
+überspringen, andere Zahlung → trotzdem buchen). Ohne Antwort bleibt die Regel
+fällig, ein Banner im Hauptbereich erinnert daran. Praktisch heißt das: nach
+einem Import erscheint beim nächsten Öffnen evtl. eine Rückfrage, bevor etwas
+doppelt gebucht wird.
+
 ⚠️ Da `recurring_rules` eine **komplett neue Sammlung** ist (nicht nur ein
 Feld), lohnt sich hier statt manueller Admin-UI-Klickerei das Setup-Skript
 erneut auszuführen — es überspringt automatisch alles Bestehende und legt
