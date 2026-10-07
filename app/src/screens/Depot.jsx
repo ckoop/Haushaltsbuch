@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, ChevronRight, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import * as api from "../pb.js";
+import { historyRangeFor, closeOnOrBefore, estimateQuantity } from "../depotRechner.js";
 import { money, ErrorNote, Spinner, Sheet, Button, Field, inputCls, todayISO } from "../ui.jsx";
 
 const fmtQty = (q) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 4 }).format(q ?? 0);
@@ -600,7 +601,7 @@ function PositionDetail({ position, trades, quote, fxRate, fxRates, setFxRates, 
       </Button>
 
       {editingTrade && (
-        <TradeEditor draft={editingTrade} onClose={() => setEditingTrade(null)}
+        <TradeEditor draft={editingTrade} position={position} onClose={() => setEditingTrade(null)}
           onSaved={(m) => { setEditingTrade(null); flash(m); onReload(); }}
           onError={setError} />
       )}
@@ -608,7 +609,7 @@ function PositionDetail({ position, trades, quote, fxRate, fxRates, setFxRates, 
   );
 }
 
-function TradeEditor({ draft, onClose, onSaved, onError }) {
+function TradeEditor({ draft, position, onClose, onSaved, onError }) {
   const isNew = !draft.id;
   const [type, setType] = useState(draft.type);
   const [date, setDate] = useState(draft.date ? api.dateOnly(draft.date) : todayISO());
@@ -618,6 +619,43 @@ function TradeEditor({ draft, onClose, onSaved, onError }) {
   const [note, setNote] = useState(draft.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Stueckzahl-Schaetzung aus Sparbetrag (nur neuer Kauf, braucht einen Ticker)
+  const [amount, setAmount] = useState("");
+  const [estimating, setEstimating] = useState(false);
+  const [estimateHint, setEstimateHint] = useState(null);
+  const canEstimate = isNew && type === "buy" && !!position?.ticker;
+
+  // Schlusskurs des gewaehlten Datums (am Wochenende: letzter Handelstag
+  // davor) aus der Yahoo-Historie, daraus Stueckzahl = Betrag / Kurs. Nur
+  // eine Schaetzung: Yahoo kennt den Boersenkurs, nicht den Ausfuehrungspreis
+  // des Brokers - Kurs und Stueckzahl bleiben deshalb ueberschreibbar.
+  const estimate = async () => {
+    const amountCents = Math.round((Number(amount) || 0) * 100);
+    if (amountCents <= 0) return setError("Sparbetrag eingeben");
+    setEstimating(true); setError(null); setEstimateHint(null);
+    try {
+      const h = await api.fetchHistory(position.ticker, historyRangeFor(date, todayISO()), "1d");
+      const hit = closeOnOrBefore(
+        h.points.map((pt) => ({ date: new Date(pt.t * 1000).toISOString().slice(0, 10), price: pt.price })), date);
+      if (!hit) throw new Error("Kein Kurs bis zu diesem Datum gefunden");
+      let eur = hit.price;
+      if (h.currency && h.currency !== "EUR") {
+        // Trade-Preise sind immer Euro: Fremdwaehrungs-Kurs mit dem AKTUELLEN
+        // Wechselkurs umrechnen (keine historische FX-Reihe, s. CLAUDE.md).
+        eur *= (await api.fetchQuote({ ticker: `${h.currency}EUR=X` })).price;
+      }
+      const priceCents = Math.round(eur * 100);
+      const qty = estimateQuantity(amountCents, priceCents);
+      if (qty == null) throw new Error("Kurs ungültig");
+      setQuantity(qty);
+      setPrice(priceCents / 100);
+      if (!note.trim()) setNote("Stückzahl geschätzt (Schlusskurs)");
+      const kursDatum = new Date(hit.date + "T12:00:00").toLocaleDateString("de-DE");
+      setEstimateHint(`Schlusskurs ${kursDatum} (${position.ticker})${h.currency !== "EUR" ? `, ${h.currency} → EUR zum aktuellen Kurs` : ""}: ${money(priceCents)}`);
+    } catch (e) {
+      setError(`Schätzung nicht möglich (${e.message || e}) — Stückzahl und Kurs von Hand eintragen.`);
+    } finally { setEstimating(false); }
+  };
 
   const submit = async () => {
     const qty = Number(quantity);
@@ -657,6 +695,24 @@ function TradeEditor({ draft, onClose, onSaved, onError }) {
       <Field label="Datum">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
       </Field>
+
+      {canEstimate && (
+        <div className="mb-4 rounded-lg border border-stone-200 dark:border-stone-700 p-3">
+          <Field label="Sparbetrag (optional, in Euro)">
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
+                placeholder="350" className={`${inputCls} tabular-nums`} />
+              <span className="text-sm text-stone-400 dark:text-stone-500 shrink-0">€</span>
+              <Button variant="ghost" onClick={estimate} disabled={estimating} className="shrink-0">
+                {estimating ? "…" : "Berechnen"}
+              </Button>
+            </div>
+          </Field>
+          <p className="text-xs text-stone-400 dark:text-stone-500 -mt-3">
+            {estimateHint ?? "Füllt Stückzahl und Kurs aus dem Schlusskurs des gewählten Datums vor. Nur eine Schätzung — die echten Werte stehen in der Abrechnung deines Brokers."}
+          </p>
+        </div>
+      )}
 
       <Field label="Stückzahl">
         <input type="number" min="0" step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)}

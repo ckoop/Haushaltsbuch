@@ -41,7 +41,13 @@ routerAdd("GET", "/api/depot/quote", (e) => {
         headers: { "User-Agent": "Mozilla/5.0" },
         timeout: 10,
       });
-      const first = searchRes.json && searchRes.json.quotes && searchRes.json.quotes[0];
+      // Xetra (Endung ".DE", Euro) bevorzugen - sonst trifft die Suche gern
+      // die Londoner USD-Notierung; der erste Treffer bleibt der Rueckfall.
+      const hits = (searchRes.json && searchRes.json.quotes) || [];
+      let first = hits[0];
+      for (let i = 0; i < hits.length; i++) {
+        if (hits[i].symbol && /\.DE$/.test(hits[i].symbol)) { first = hits[i]; break; }
+      }
       if (!first) {
         return e.json(404, { error: "Kein Ticker fuer " + isin + " gefunden" });
       }
