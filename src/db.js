@@ -139,6 +139,32 @@ const MIGRATIONS = [
     created TEXT NOT NULL
   );
   `,
+  // Version 2: Depot (Positionen + Trades), deckungsgleich mit depot_* aus
+  // setup/schema.mjs der Server-Fassung.
+  `
+  CREATE TABLE IF NOT EXISTS depot_positions (
+    id TEXT PRIMARY KEY,
+    isin TEXT NOT NULL,
+    name TEXT NOT NULL,
+    ticker TEXT,
+    currency TEXT,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_depot_pos_isin ON depot_positions (isin);
+
+  CREATE TABLE IF NOT EXISTS depot_trades (
+    id TEXT PRIMARY KEY,
+    position TEXT NOT NULL,
+    date TEXT NOT NULL,
+    type TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    price_cents INTEGER NOT NULL,
+    fees_cents INTEGER,
+    note TEXT,
+    created TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_depot_trade_position ON depot_trades (position);
+  `,
 ];
 
 let dbPromise = null;

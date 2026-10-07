@@ -1,4 +1,6 @@
+import { CapacitorHttp } from "@capacitor/core";
 import { todayISO } from "./ui.jsx";
+import { RULE_DUP_WINDOW_DAYS, shiftDate, findDuplicateCandidates } from "./dauerauftraege.js";
 import { query, run, batch, genId, nowStamp, dateStamp, isUniqueViolation } from "./db.js";
 
 // Store-App: lokale SQLite-Datenbank statt PocketBase, kein Server, keine
@@ -40,6 +42,7 @@ function encodeCol(col, v) {
 const BOOL_COLS = {
   accounts: ["archived"], categories: ["archived"],
   import_profiles: ["decimal_comma"], recurring_rules: ["active"],
+  depot_positions: ["archived"],
 };
 const JSON_COLS = {
   transactions: ["tags"], rules: ["tags"], recurring_rules: ["tags"],
@@ -369,10 +372,47 @@ export function addMonths(iso, months) {
   return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
 }
 
+// Eine Periode eines Dauerauftrags als Buchung anlegen. Dedup ueber den
+// bestehenden import_hash-Unique-Index - gibt bei einer Unique-Verletzung
+// (= diese Periode ist schon gebucht) null zurueck statt zu werfen.
+async function bookRulePeriod(rule, date) {
+  try {
+    return await createTransaction({
+      date, type: rule.type, account: rule.account,
+      to_account: rule.to_account || undefined, category: rule.category || undefined,
+      tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
+      recurring: rule.frequency, import_hash: `rule:${rule.id}:${date}`,
+    });
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    return null;
+  }
+}
+
+// Gibt es zu dieser Faelligkeit schon eine Buchung, die dieselbe sein koennte
+// (z. B. von der Bank bereits ausgefuehrt und per CSV/PDF importiert)? Der
+// Dauerauftrag-Hash "rule:<id>:<datum>" kennt einen Import-Hash nicht - ohne
+// diese Pruefung wuerde dieselbe Zahlung doppelt gebucht. Die Auswahl der
+// Kandidaten steckt als reine Funktion in dauerauftraege.js (mit Tests), hier
+// nur die Abfrage: Konto + Betrag + Datumsfenster grob per SQL, der Rest
+// in der Funktion.
+async function findRuleDuplicates(rule, due, claimed) {
+  const w = RULE_DUP_WINDOW_DAYS;
+  const rows = await query(
+    "SELECT * FROM transactions WHERE account = ? AND amount_cents = ? AND date >= ? AND date <= ?",
+    [rule.account, rule.amount_cents, `${shiftDate(due, -w)} 00:00:00`, `${shiftDate(due, w)} 23:59:59`]
+  );
+  return findDuplicateCandidates(rule, due, decodeRows("transactions", rows), claimed);
+}
+
 // Faellige Daueraufträge nachbuchen - client-getriggert beim App-Start, kein
-// Cron. Dedup ueber den bestehenden import_hash-Unique-Index. Gibt die neu
-// erzeugten Buchungen zurueck (nicht nur die Anzahl), damit die UI zeigen
-// kann, was konkret automatisch gebucht wurde.
+// Cron. Gibt { created, conflicts } zurueck: created = neu erzeugte Buchungen
+// (nicht nur die Anzahl, damit die UI zeigen kann, was konkret gebucht wurde),
+// conflicts = Perioden, die NICHT gebucht wurden, weil es schon eine
+// moeglicherweise gleiche Buchung gibt. Eine solche Regel bleibt faellig und
+// wird NICHT weitergeschoben, bis der Nutzer per resolveRuleConflict()
+// entschieden hat - und spaetere Perioden derselben Regel warten, damit die
+// Reihenfolge stimmt.
 export async function runDueRecurringRules() {
   const today = todayISO();
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -380,23 +420,21 @@ export async function runDueRecurringRules() {
     "recurring_rules",
     await query("SELECT * FROM recurring_rules WHERE active = 1 AND next_due < ?", [tomorrow])
   );
-  const createdRows = [];
+  const created = [];
+  const conflicts = [];
+  const claimed = new Set();
   for (const rule of due) {
     try {
       let next = dateOnly(rule.next_due);
       while (next <= today) {
-        try {
-          const row = await createTransaction({
-            date: next, type: rule.type, account: rule.account,
-            to_account: rule.to_account || undefined, category: rule.category || undefined,
-            tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
-            recurring: rule.frequency, import_hash: `rule:${rule.id}:${next}`,
-          });
-          createdRows.push(row);
-        } catch (e) {
-          // Unique-Verletzung = diese Periode wurde schon gebucht - ok.
-          if (!isUniqueViolation(e)) throw e;
+        const candidates = await findRuleDuplicates(rule, next, claimed);
+        if (candidates.length > 0) {
+          for (const c of candidates) claimed.add(c.id);
+          conflicts.push({ rule, due: next, candidates });
+          break;
         }
+        const row = await bookRulePeriod(rule, next);
+        if (row) created.push(row);
         next = addMonths(next, MONTHS_PER[rule.frequency]);
       }
       if (next !== dateOnly(rule.next_due)) {
@@ -408,7 +446,19 @@ export async function runDueRecurringRules() {
       console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
     }
   }
-  return createdRows;
+  return { created, conflicts };
+}
+
+// Entscheidung des Nutzers zu einem Konflikt aus runDueRecurringRules():
+// "skip" = die vorhandene Buchung ist dieselbe, nichts buchen; "book" = andere
+// Buchung, die Periode trotzdem anlegen. In beiden Faellen rueckt die Regel
+// um eine Periode weiter. Gibt bei "book" die neue Buchung zurueck, sonst null.
+export async function resolveRuleConflict({ rule, due }, decision) {
+  const row = decision === "book" ? await bookRulePeriod(rule, due) : null;
+  await run("UPDATE recurring_rules SET next_due = ? WHERE id = ?", [
+    dateStamp(addMonths(due, MONTHS_PER[rule.frequency])), rule.id,
+  ]);
+  return row;
 }
 
 // ------------------------------------------------------------------- Budgets
@@ -625,6 +675,117 @@ export async function deleteImportRun(runId) {
   return rows.length;
 }
 
+// -------------------------------------------------------------------- Depot
+
+const DEPOT_POSITION_COLS = ["isin", "name", "ticker", "currency", "archived"];
+const DEPOT_TRADE_COLS = ["position", "date", "type", "quantity", "price_cents", "fees_cents", "note"];
+
+export const listDepotPositions = async () =>
+  decodeRows("depot_positions", await query("SELECT * FROM depot_positions ORDER BY name"));
+
+export async function saveDepotPosition(p) {
+  try {
+    return await upsert("depot_positions", DEPOT_POSITION_COLS, p);
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new Error("Diese ISIN gibt es schon als Position.");
+    throw e;
+  }
+}
+
+export const deleteDepotPosition = (id) => run("DELETE FROM depot_positions WHERE id = ?", [id]);
+
+export const countDepotTradesByPosition = (positionId) =>
+  countWhere("SELECT COUNT(*) as c FROM depot_trades WHERE position = ?", [positionId]);
+
+export const listDepotTrades = () =>
+  query("SELECT * FROM depot_trades ORDER BY date DESC, created DESC");
+
+export async function saveDepotTrade(t) {
+  if (t.id) return upsert("depot_trades", DEPOT_TRADE_COLS, t);
+  const id = genId();
+  const cols = ["id", ...DEPOT_TRADE_COLS, "created"];
+  await run(
+    `INSERT INTO depot_trades (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+    [id, ...DEPOT_TRADE_COLS.map((c) => encodeCol(c, t[c])), nowStamp()]
+  );
+  return getOne("depot_trades", id);
+}
+
+export const deleteDepotTrade = (id) => run("DELETE FROM depot_trades WHERE id = ?", [id]);
+
+// Kurse direkt von Yahoo Finance. Die Server-Fassung brauchte einen Proxy
+// (Yahoo setzt keinen CORS-Header), hier laeuft die Anfrage ueber das native
+// HTTP-Plugin von Capacitor - kein WebView-fetch, also kein CORS. Abgerufen
+// wird nur, wenn der Nutzer das Depot oeffnet bzw. "Aktualisieren" tippt.
+const YAHOO = "https://query1.finance.yahoo.com";
+
+async function yahooGet(path) {
+  const res = await CapacitorHttp.get({
+    url: YAHOO + path,
+    headers: { "User-Agent": "Mozilla/5.0" },
+    connectTimeout: 10000,
+    readTimeout: 10000,
+  });
+  if (res.status !== 200) throw new Error(`Yahoo Finance antwortet mit Status ${res.status}`);
+  return typeof res.data === "string" ? JSON.parse(res.data) : res.data;
+}
+
+// Loest eine ISIN ueber die Yahoo-Suche zu einem Ticker auf. Xetra (Endung
+// ".DE", Euro) wird bevorzugt - sonst trifft die Suche gern die Londoner
+// USD-Notierung; der erste Treffer bleibt der Rueckfall.
+async function resolveIsin(isin) {
+  const data = await yahooGet(`/v1/finance/search?q=${encodeURIComponent(isin)}`);
+  const hits = data?.quotes ?? [];
+  const hit = hits.find((h) => /\.DE$/.test(h.symbol ?? "")) ?? hits[0];
+  if (!hit) throw new Error(`Kein Ticker für ${isin} gefunden`);
+  return { symbol: hit.symbol, name: hit.longname || hit.shortname || "" };
+}
+
+async function fetchChart(symbol, range, interval) {
+  let path = `/v8/finance/chart/${encodeURIComponent(symbol)}`;
+  if (range && interval) path += `?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
+  const result = (await yahooGet(path))?.chart?.result?.[0];
+  if (!result?.meta) throw new Error(`Kein Kurs für ${symbol} gefunden`);
+  return result;
+}
+
+// Entweder { isin } (loest einmalig einen Ticker auf) oder { ticker } (der
+// uebliche Fall, sobald der Ticker an der Position gespeichert ist).
+export async function fetchQuote({ isin, ticker }) {
+  let symbol = ticker;
+  let name = "";
+  if (!symbol) {
+    if (!isin) throw new Error("isin oder ticker angeben");
+    ({ symbol, name } = await resolveIsin(isin));
+  }
+  const { meta } = await fetchChart(symbol);
+  if (meta.regularMarketPrice == null) throw new Error(`Kein Kurs für ${symbol} gefunden`);
+  return {
+    symbol, name,
+    price_cents: Math.round(meta.regularMarketPrice * 100),
+    // Roher Wert zusaetzlich: price_cents rundet auf ganze Cent, das zerstoert
+    // die Genauigkeit bei Wechselkursen (z. B. 0,0068 JPY->EUR).
+    price: meta.regularMarketPrice,
+    currency: meta.currency,
+    as_of: meta.regularMarketTime,
+  };
+}
+
+// Historische Kursreihe fuer den Verlaufs-Chart und die Stueckzahl-Schaetzung
+// (range/interval z. B. "3mo"/"1d" oder "5y"/"1wk"). Antwort:
+// { symbol, currency, points: [{t, price}] }.
+export async function fetchHistory(ticker, range, interval) {
+  const result = await fetchChart(ticker, range, interval);
+  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  // Der letzte Punkt eines noch laufenden Handelstages hat oft "close: null" -
+  // rausfiltern statt eine Luecke im Chart zu erzeugen.
+  const points = [];
+  (result.timestamp ?? []).forEach((t, i) => {
+    if (closes[i] != null) points.push({ t, price: closes[i] });
+  });
+  return { symbol: ticker, currency: result.meta.currency, points };
+}
+
 // ------------------------------------------------------------------- Erstbefüllung
 
 export const DEFAULT_CATEGORIES = [
@@ -686,7 +847,15 @@ const BACKUP_TABLES = {
     "id", "type", "account", "to_account", "category", "tags", "amount_cents",
     "payee", "note", "frequency", "next_due", "active", "created",
   ],
+  depot_positions: ["id", "isin", "name", "ticker", "currency", "archived"],
+  depot_trades: [
+    "id", "position", "date", "type", "quantity", "price_cents", "fees_cents", "note", "created",
+  ],
 };
+
+// Aeltere Sicherungen (vor dem Depot) kennen diese Tabellen nicht - dann
+// bleibt das Depot beim Wiederherstellen unveraendert, statt geleert zu werden.
+const OPTIONAL_BACKUP_TABLES = new Set(["depot_positions", "depot_trades"]);
 
 // Eine JSON-Datei mit allen Tabellen - Grundlage fuer den Android-"Teilen"-
 // Dialog (Einstellungen.jsx). Bewusst die volle, unveraenderte Historie ohne
@@ -720,7 +889,8 @@ export async function restoreBackup(backup) {
     throw new Error("Diese Sicherung stammt aus einer neueren App-Version und kann hier nicht eingelesen werden.");
   }
 
-  const tables = Object.keys(BACKUP_TABLES);
+  const tables = Object.keys(BACKUP_TABLES)
+    .filter((t) => !OPTIONAL_BACKUP_TABLES.has(t) || backup.data[t] !== undefined);
   await batch(tables.map((table) => ({ sql: `DELETE FROM ${table}`, params: [] })));
 
   for (const table of tables) {

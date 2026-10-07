@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, Landmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark, AlertTriangle } from "lucide-react";
 import * as api from "./pb.js";
 import { reserveStatus } from "./ruecklagen.js";
+import { spentByCategory } from "./budget.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
 import Buchungen from "./screens/Buchungen.jsx";
 import Auswertung from "./screens/Auswertung.jsx";
 import BudgetScreen from "./screens/Budgets.jsx";
+import Depot from "./screens/Depot.jsx";
 import Konten from "./screens/Konten.jsx";
 import Einstellungen from "./screens/Einstellungen.jsx";
 import NewEntry from "./screens/NewEntry.jsx";
 import TxDetail from "./screens/TxDetail.jsx";
+import RuleConflicts from "./screens/RuleConflicts.jsx";
 import { useDefaultAccountPref } from "./defaultAccountPref.js";
+import { useDepotEnabled } from "./depotPref.js";
 
 // Wie viele volle Vormonate die Einkommens-Hochrechnung in Buchungen.jsx
 // fuer den Ausgaben-Durchschnitt heranzieht (s. avgExpense in Shell()).
@@ -23,6 +27,7 @@ export default function App() {
 
 function Shell() {
   const { defaultAccount, setDefaultAccount } = useDefaultAccountPref();
+  const { depotEnabled, setDepotEnabled } = useDepotEnabled();
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [tab, setTab] = useState("buchungen");
@@ -50,6 +55,11 @@ function Shell() {
   const [sheet, setSheet] = useState(false);
   const [detail, setDetail] = useState(null); // per Klick geoeffnete Buchung, egal aus welchem Screen
   const [autoBooked, setAutoBooked] = useState(null); // gerade automatisch erzeugte Buchungen
+  // Faellige Daueraufträge, die NICHT gebucht wurden, weil es schon eine
+  // moeglicherweise gleiche Buchung gibt - bleibt bestehen (auch wenn das Sheet
+  // geschlossen wird), bis der Nutzer jeden einzelnen entschieden hat.
+  const [ruleConflicts, setRuleConflicts] = useState([]);
+  const [resolvingRule, setResolvingRule] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState(null);
 
@@ -138,6 +148,13 @@ function Shell() {
     .map((r) => ({ rule: r.rule, status: reserveStatus(r.rule, r.txs, key) }));
   const reserveMonthlyOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.monthly, 0);
   const withdrawnThisMonthOf = (cid) => reservesFor(cid).reduce((s, r) => s + r.status.withdrawn, 0);
+  // Summe aller aktuell in Ruecklagen-Toepfen angesparten Betraege,
+  // kategorieuebergreifend (anders als reservesFor/reserveMonthlyOf, die nach
+  // einer einzelnen Kategorie filtern) - Grundlage fuer den Mindestbestand in
+  // Budgets.jsx: so viel vom Kontostand ist fuer bereits laufende Quartals-/
+  // Jahresruecklagen gebunden, der Rest waere ohne die naechste Faelligkeit
+  // zu gefaehrden z.B. aufs Sparkonto verschiebbar.
+  const totalReserved = reserves.reduce((s, r) => s + reserveStatus(r.rule, r.txs, key).saved, 0);
   const effectiveLimitOf = (cid) =>
     (budgets.find((b) => b.category === cid)?.amount_cents ?? 0) + reserveMonthlyOf(cid);
 
@@ -252,17 +269,50 @@ function Shell() {
   // Faellige Daueraufträge einmal pro Sitzung nachbuchen - nicht Teil von
   // load(), das feuert bei jedem Monatswechsel neu. Zeigt danach, welche
   // Buchungen konkret automatisch entstanden sind (nicht nur die Anzahl im
-  // Toast, der laengst wieder verschwunden waere, wenn man's verpasst).
+  // Toast, der laengst wieder verschwunden waere, wenn man's verpasst). Gibt es
+  // zu einer faelligen Periode schon eine moeglicherweise gleiche Buchung
+  // (z. B. von der Bank ausgefuehrt und importiert), wird sie nicht gebucht,
+  // sondern als Rueckfrage im selben Sheet angeboten.
   useEffect(() => {
     api.runDueRecurringRules()
-      .then(async (rows) => {
-        if (rows.length === 0) return;
-        await load();
+      .then(async ({ created, conflicts }) => {
+        setRuleConflicts(conflicts);
+        if (created.length === 0 && conflicts.length === 0) return;
+        if (created.length > 0) await load();
         history.pushState({ tab, overlay: "autoBooked" }, "");
-        setAutoBooked({ rows, checkedAt: new Date() });
+        setAutoBooked({ rows: created, checkedAt: new Date() });
       })
       .catch(console.error);
   }, []);
+
+  // Banner-Klick: Rueckfrage erneut oeffnen, falls das Sheet ohne Entscheidung
+  // geschlossen wurde.
+  const reopenConflicts = () => {
+    history.pushState({ tab, overlay: "autoBooked" }, "");
+    setAutoBooked({ rows: [], checkedAt: new Date() });
+  };
+
+  // Entscheidung zu einem Konflikt. Danach laeuft die Pruefung erneut, weil die
+  // Regel um eine Periode weitergerueckt ist: weitere faellige Perioden werden
+  // nachgebucht oder werfen ihrerseits eine Rueckfrage, die uebrigen offenen
+  // Konflikte kommen unveraendert wieder zurueck.
+  const resolveConflict = async (conflict, decision) => {
+    setResolvingRule(true);
+    try {
+      const booked = await api.resolveRuleConflict(conflict, decision);
+      const { created, conflicts } = await api.runDueRecurringRules();
+      const newRows = [...(booked ? [booked] : []), ...created];
+      if (newRows.length > 0) await load();
+      setRuleConflicts(conflicts);
+      flash(decision === "skip" ? "Nicht erneut gebucht — Dauerauftrag auf nächste Fälligkeit gesetzt" : "Gebucht");
+      if (conflicts.length === 0 && newRows.length === 0 && autoBooked?.rows.length === 0) {
+        history.back();
+      } else {
+        setAutoBooked((prev) => prev && { ...prev, rows: [...prev.rows, ...newRows] });
+      }
+    } catch (e) { setError(e); }
+    finally { setResolvingRule(false); }
+  };
 
   const balances = useMemo(() => {
     const b = {};
@@ -323,11 +373,9 @@ function Shell() {
     return Math.round(total / AVG_MONTHS_BACK);
   }, [avgTx, accGroup]);
 
-  const spentByCat = useMemo(() => {
-    const o = {};
-    for (const t of real) if (t.amount_cents < 0) o[t.category] = (o[t.category] ?? 0) - t.amount_cents;
-    return o;
-  }, [real]);
+  // Umbuchungen mit Kategorie zaehlen aus Sicht des Quellkontos wie eine
+  // Ausgabe dieser Kategorie - Details und Begruendung in budget.js.
+  const spentByCat = useMemo(() => spentByCategory(visible, accGroup), [visible, accGroup]);
   // Tags sind quer zur Kategorie, eine Buchung kann mehrere haben - bewusst
   // keine Partition wie bei Kategorien, Mehrfachzaehlung ist hier gewollt.
   const spentByTag = useMemo(() => {
@@ -359,7 +407,7 @@ function Shell() {
   };
 
   const ruleBaseFor = (tx) => tx.type === "transfer"
-    ? { type: "transfer", account: tx.account, to_account: tx.to_account, amount_cents: tx.amount_cents }
+    ? { type: "transfer", account: tx.account, to_account: tx.to_account, category: tx.category || "", amount_cents: tx.amount_cents }
     : { type: "tx", account: tx.account, category: tx.category, amount_cents: tx.amount_cents };
 
   // Dauerauftrag nachtraeglich aus einer bereits als wiederkehrend markierten
@@ -416,6 +464,10 @@ function Shell() {
   // selbst erkennen. Die Richtung ergibt sich aus dem Vorzeichen der
   // bestehenden Buchung: eine Ausgabe wird zur Quelle (account bleibt, neues
   // to_account), eine Einnahme zum Ziel (neues account, to_account bleibt).
+  // Die Kategorie einer Ausgabe bleibt erhalten: eine Umbuchung mit Kategorie
+  // zaehlt im Budget weiter wie die Ausgabe davor - so wird aus einer
+  // importierten "Sparen"-Abbuchung eine Umbuchung aufs Sparkonto, ohne dass
+  // sie aus dem Budget faellt. Die Kategorie einer Einnahme (Zielseite) entfaellt.
   // counterpartId ist optional gesetzt, wenn TxDetail.jsx auf dem Gegenkonto
   // schon eine passende Spiegelbuchung gefunden hat (beide Konten importiert)
   // - die wird mitgeloescht, sonst waere die Umbuchung doppelt gezaehlt.
@@ -423,7 +475,7 @@ function Shell() {
     try {
       if (counterpartId) await api.deleteTransaction(counterpartId);
       const patch = tx.amount_cents < 0
-        ? { type: "transfer", account: tx.account, to_account: otherAccountId, amount_cents: -tx.amount_cents, category: "" }
+        ? { type: "transfer", account: tx.account, to_account: otherAccountId, amount_cents: -tx.amount_cents, category: tx.category || "" }
         : { type: "transfer", account: otherAccountId, to_account: tx.account, amount_cents: tx.amount_cents, category: "" };
       const updated = await api.updateTransaction(tx.id, patch);
       setDetail(updated);
@@ -462,10 +514,10 @@ function Shell() {
   const needsSetup = !loading && !error && accounts.length === 0 && categories.length === 0;
 
   const shared = {
-    accounts, categories, tags, people, transactions: visible, real, spentByCat, spentByTag, budgets,
+    accounts, categories, tags, people, transactions: visible, real, accGroup, spentByCat, spentByTag, budgets,
     incomeEntries, avgExpense, balances, combinedBalances, acc, setAcc, monthKey: key, reload: load, flash, setError, openDetail,
-    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, reloadReserves: loadReserves,
-    reloadTags,
+    reservesFor, reserveMonthlyOf, withdrawnThisMonthOf, effectiveLimitOf, totalReserved, reloadReserves: loadReserves,
+    depotEnabled, setDepotEnabled, reloadTags,
     defaultAccount, setDefaultAccount: setDefaultAccountAndApply,
     query, setQuery, searchResults, searching,
     minAmount, setMinAmount, maxAmount, setMaxAmount, dateFrom, setDateFrom, dateTo, setDateTo,
@@ -473,7 +525,7 @@ function Shell() {
   };
 
   // Nur diese drei Screens werten den Monat/Jahr-Zustand (ym) ueberhaupt aus -
-  // der Rest (Konten/Einstellungen) zeigt in der Kopfzeile sonst Pfeile
+  // der Rest (Konten/Depot/Einstellungen) zeigt in der Kopfzeile sonst Pfeile
   // ohne jede Wirkung.
   const MONTH_NAV_TABS = ["buchungen", "auswertung", "budgets"];
 
@@ -481,6 +533,7 @@ function Shell() {
     { id: "buchungen", label: "Buchungen", Icon: List },
     { id: "auswertung", label: "Auswertung", Icon: PieChart },
     { id: "budgets", label: "Budgets", Icon: Target },
+    ...(depotEnabled ? [{ id: "depot", label: "Depot", Icon: TrendingUp }] : []),
     { id: "konten", label: "Konten", Icon: Landmark },
     { id: "einstellungen", label: "Einstellungen", Icon: Settings },
   ];
@@ -489,6 +542,18 @@ function Shell() {
   // zieht dort stattdessen in ein Zahnrad-Icon in der Kopfzeile um (siehe
   // unten), auf dem Desktop bleibt die Sidebar unveraendert vollstaendig.
   const mobileNavItems = navItems.filter((i) => i.id !== "einstellungen");
+
+  // Wer das Depot gerade offen hat und es dann in den Einstellungen
+  // ausschaltet, landet sonst auf einem Tab, der aus der Navigation
+  // verschwunden ist.
+  useEffect(() => {
+    if (!depotEnabled && tab === "depot") {
+      // Programmierte Korrektur, keine Nutzer-Navigation - den aktuellen
+      // History-Eintrag ersetzen statt einen neuen zu pushen.
+      history.replaceState({ tab: "buchungen" }, "");
+      setTab("buchungen");
+    }
+  }, [depotEnabled, tab]);
 
   // Kontextinfo je Tab, analog zu den Sidebar-/Bottom-Nav-Badges im epoch-Projekt.
   const navBadges = accounts.length > 0 ? {
@@ -579,6 +644,18 @@ function Shell() {
 
           <main className="flex-1 min-h-0 overflow-y-auto pb-28 sidebar:pb-8">
             {error && <div className="px-5 pt-4"><ErrorNote error={error} /></div>}
+            {ruleConflicts.length > 0 && !autoBooked && (
+              <div className="px-5 pt-4">
+                <button onClick={reopenConflicts}
+                  className="w-full flex items-start gap-2 text-left text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-xl px-3.5 py-3">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    <strong>{ruleConflicts.length === 1 ? "1 Dauerauftrag wartet" : `${ruleConflicts.length} Daueraufträge warten`} auf deine Bestätigung</strong>
+                    {" "}— es gibt schon eine möglicherweise gleiche Buchung, nichts wurde gebucht. Tippen zum Prüfen.
+                  </span>
+                </button>
+              </div>
+            )}
             {loading && <Spinner />}
 
             {needsSetup && <FirstRun onDone={load} setError={setError} />}
@@ -588,6 +665,7 @@ function Shell() {
                 {tab === "buchungen" && <Buchungen {...shared} />}
                 {tab === "auswertung" && <Auswertung {...shared} />}
                 {tab === "budgets" && <BudgetScreen {...shared} />}
+                {tab === "depot" && <Depot {...shared} />}
                 {tab === "konten" && <Konten {...shared} />}
                 {tab === "einstellungen" && <Einstellungen {...shared} />}
               </>
@@ -638,18 +716,26 @@ function Shell() {
           )}
 
           {autoBooked && (
-            <Sheet title="Automatisch gebucht" onClose={() => history.back()}>
-              <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
-                {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
-              </p>
-              <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
-                Geprüft: {autoBooked.checkedAt.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
-              </p>
-              <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
-                {autoBooked.rows.map((t) => (
-                  <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
-                ))}
-              </div>
+            <Sheet title={ruleConflicts.length > 0 ? "Daueraufträge prüfen" : "Automatisch gebucht"} onClose={() => history.back()}>
+              {ruleConflicts.length > 0 && (
+                <RuleConflicts conflicts={ruleConflicts} accounts={accounts} categories={categories}
+                  busy={resolvingRule} onResolve={resolveConflict} />
+              )}
+              {autoBooked.rows.length > 0 && (
+                <>
+                  <p className="text-sm text-stone-600 dark:text-stone-300 mb-1">
+                    {autoBooked.rows.length} {autoBooked.rows.length === 1 ? "wiederkehrende Buchung wurde" : "wiederkehrende Buchungen wurden"} beim Öffnen aus fälligen Daueraufträgen nachgebucht:
+                  </p>
+                  <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
+                    Geprüft: {autoBooked.checkedAt.toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
+                  </p>
+                  <div className="bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 divide-y divide-stone-100 dark:divide-stone-700">
+                    {autoBooked.rows.map((t) => (
+                      <TxRow key={t.id} tx={t} accounts={accounts} categories={categories} showAccount />
+                    ))}
+                  </div>
+                </>
+              )}
             </Sheet>
           )}
         </div>

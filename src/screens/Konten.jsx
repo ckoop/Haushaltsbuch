@@ -43,6 +43,10 @@ export default function Konten({ accounts, categories, tags, people, balances, r
   // bisher flache Liste sonst schnell unübersichtlich. Default alle
   // aufgeklappt, aus demselben Grund wie bei collapsedParents.
   const [collapsedFrequencies, setCollapsedFrequencies] = useState(new Set());
+  // Fälligkeits-Vorschau (nächste DUE_SOON_DAYS Tage) - per Default
+  // eingeklappt, die Box belegte sonst bei mehreren fälligen Regeln viel Platz
+  // über der eigentlichen Liste. Der Kopf mit der Anzahl bleibt sichtbar.
+  const [dueSoonOpen, setDueSoonOpen] = useState(false);
   const toggleFrequency = (v) => setCollapsedFrequencies((s) => {
     const next = new Set(s);
     next.has(v) ? next.delete(v) : next.add(v);
@@ -237,10 +241,15 @@ export default function Konten({ accounts, categories, tags, people, balances, r
 
       {dueSoon.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded-xl px-3.5 py-3 mb-3">
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1.5">
-            {dueSoon.length} {dueSoon.length === 1 ? "Dauerauftrag" : "Daueraufträge"} in den nächsten {DUE_SOON_DAYS} Tagen fällig
-          </p>
-          <div className="space-y-1">
+          <button onClick={() => setDueSoonOpen((o) => !o)} aria-expanded={dueSoonOpen}
+            className="w-full flex items-center gap-2 text-left">
+            <ChevronRight size={13}
+              className={`text-amber-700 dark:text-amber-400 shrink-0 transition-transform ${dueSoonOpen ? "rotate-90" : ""}`} />
+            <span className="flex-1 min-w-0 text-xs font-medium text-amber-800 dark:text-amber-300">
+              {dueSoon.length} {dueSoon.length === 1 ? "Dauerauftrag" : "Daueraufträge"} in den nächsten {DUE_SOON_DAYS} Tagen fällig
+            </span>
+          </button>
+          {dueSoonOpen && <div className="space-y-1 mt-1.5">
             {dueSoon.map((r) => {
               const isTransfer = r.type === "transfer";
               const cat = isTransfer ? null : byId(categories, r.category, UNKNOWN_CAT);
@@ -256,7 +265,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
@@ -281,7 +290,7 @@ export default function Konten({ accounts, categories, tags, people, balances, r
                 const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
                 const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
                 const from = byId(accounts, r.account, { name: "?" });
-                const sub = (isTransfer ? `${from.name} → ${byId(accounts, r.to_account, { name: "?" }).name}` : `${cat.name} · ${from.name}`)
+                const sub = (isTransfer ? `${from.name} → ${byId(accounts, r.to_account, { name: "?" }).name}${r.category ? ` · ${byId(categories, r.category, UNKNOWN_CAT).name}` : ""}` : `${cat.name} · ${from.name}`)
                   + (r.active ? ` · ab ${new Date(api.dateOnly(r.next_due) + "T12:00:00").toLocaleDateString("de-DE")}` : " · pausiert");
                 return (
                   <button key={r.id} onClick={() => setEditingRule(r)}
@@ -720,6 +729,9 @@ function RuleEditor({ draft, accounts, categories, tags, onClose, onSaved, onErr
   // <select> ohne passende Option) und beim Speichern keine Kategorie gesetzt
   // wuerde, obwohl eine ausgewaehlt aussah.
   const [cat, setCat] = useState((draft.type === "tx" && kind === "aus" && draft.category) ? draft.category : (expenses[0]?.id ?? ""));
+  // Optionale Kategorie einer Umbuchungs-Regel - die davon gebuchten Umbuchungen
+  // zaehlen im Budget wie eine Ausgabe dieser Kategorie (budget.js).
+  const [transferCat, setTransferCat] = useState(draft.type === "transfer" ? (draft.category || "") : "");
   const [amount, setAmount] = useState(draft.amount_cents ? Math.abs(draft.amount_cents) / 100 : "");
   const [payee, setPayee] = useState(draft.payee ?? "");
   const [tagIds, setTagIds] = useState(draft.tags ?? []);
@@ -756,7 +768,7 @@ function RuleEditor({ draft, accounts, categories, tags, onClose, onSaved, onErr
     setBusy(true); setError(null);
     try {
       const base = kind === "um"
-        ? { type: "transfer", account, to_account: toAccount, category: "", amount_cents: cents }
+        ? { type: "transfer", account, to_account: toAccount, category: transferCat, amount_cents: cents }
         : { type: "tx", account, to_account: "", category: kind === "ein" ? incomeCat?.id : cat,
             amount_cents: kind === "ein" ? cents : -cents };
       await api.saveRecurringRule({
@@ -795,6 +807,12 @@ function RuleEditor({ draft, accounts, categories, tags, onClose, onSaved, onErr
         <>
           <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Auf Konto</p>
           <div className="mb-4"><AccountPicker accounts={accounts} value={toAccount} onChange={setToAccount} disabledId={account} /></div>
+          <Field label="Kategorie (optional)">
+            <select value={transferCat} onChange={(e) => setTransferCat(e.target.value)} className={inputCls}>
+              <option value="">Keine — zählt nicht im Budget</option>
+              {expenses.map((c) => <option key={c.id} value={c.id}>{c.name} — zählt im Budget</option>)}
+            </select>
+          </Field>
         </>
       )}
 

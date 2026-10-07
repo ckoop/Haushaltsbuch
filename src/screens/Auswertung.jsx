@@ -10,7 +10,7 @@ const monthIdx = (dateStr) => Number(dateStr.slice(5, 7)) - 1;
 const RULE_FREQUENCIES = RECURRING.filter(([v]) => v);
 
 export default function Auswertung({
-  categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc, monthKey, openDetail,
+  categories, tags, accounts, transactions, real, spentByCat, spentByTag, acc, accGroup, monthKey, openDetail,
   effectiveLimitOf, withdrawnThisMonthOf,
 }) {
   const [mode, setMode] = useState("monat");
@@ -59,8 +59,9 @@ export default function Auswertung({
           {transfers > 0 && (
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-5 flex items-start gap-1.5">
               <ArrowLeftRight size={13} className="mt-0.5 shrink-0" />
-              {transfers} {transfers === 1 ? "Umbuchung ist" : "Umbuchungen sind"} nicht enthalten —
+              {transfers} {transfers === 1 ? "Umbuchung ist" : "Umbuchungen sind"} nicht in den Summen enthalten —
               Geld zwischen eigenen Konten ist weder Einnahme noch Ausgabe.
+              {" "}Hat eine Umbuchung eine Kategorie (z. B. Sparen), zählt sie im Budget und in „Ausgaben nach Kategorie“ mit.
             </p>
           )}
 
@@ -138,8 +139,12 @@ export default function Auswertung({
 
           {openCat !== null && (() => {
             const cat = byId(categories, openCat, UNKNOWN_CAT);
-            const catTx = real
-              .filter((t) => t.category === openCat && t.amount_cents < 0)
+            // Wie spentByCategory() (budget.js): Ausgaben plus Umbuchungen mit
+            // dieser Kategorie aus Sicht des Quellkontos - sonst stimmt die
+            // Liste nicht mit dem Balken ueberein, auf den man geklickt hat.
+            const catTx = transactions
+              .filter((t) => t.category === openCat
+                && (t.type === "transfer" ? (!accGroup || accGroup.has(t.account)) : t.amount_cents < 0))
               .sort((a, b) => b.date.localeCompare(a.date));
             return (
               <Sheet title={cat.name} onClose={() => setOpenCat(null)}>

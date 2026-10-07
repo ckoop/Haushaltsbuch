@@ -262,8 +262,11 @@ export function TxRow({ tx, accounts, categories, showAccount, onClick }) {
   const Icon = isTransfer ? ArrowLeftRight : catIcon(cat.icon);
   const [bg, fg] = isTransfer ? ["bg-stone-100 dark:bg-stone-700", "text-stone-500 dark:text-stone-400"] : colorOf(cat.color);
 
+  // Eine Umbuchung kann eine Budget-Kategorie tragen - dann im Untertitel mit
+  // anzeigen, sonst waere sie von einer normalen nicht zu unterscheiden.
+  const cat0 = isTransfer && tx.category ? byId(categories, tx.category, UNKNOWN_CAT) : null;
   const sub = (isTransfer
-    ? `${from.short || shortName(from.name)} → ${byId(accounts, tx.to_account, UNKNOWN_ACC).short}`
+    ? `${from.short || shortName(from.name)} → ${byId(accounts, tx.to_account, UNKNOWN_ACC).short}${tx.category ? ` · ${cat0.name}` : ""}`
     : showAccount ? `${cat.name} · ${from.short || shortName(from.name)}` : cat.name)
     + (tx.recurring ? ` · ${recurringLabel(tx.recurring)}` : "");
 

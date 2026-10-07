@@ -6,7 +6,7 @@ import { useTheme } from "../theme.js";
 import { inputCls, todayISO, Button, Sheet, ErrorNote } from "../ui.jsx";
 import * as api from "../pb.js";
 
-export default function Einstellungen({ accounts, defaultAccount, setDefaultAccount }) {
+export default function Einstellungen({ depotEnabled, setDepotEnabled, accounts, defaultAccount, setDefaultAccount }) {
   const { theme, setTheme } = useTheme();
   // Virtuelle Unterkonten (Toepfe) sind auch als Startkonto nicht waehlbar -
   // gleiche Einschraenkung wie bei den Konto-Chips in Buchungen/Budgets,
@@ -82,7 +82,23 @@ export default function Einstellungen({ accounts, defaultAccount, setDefaultAcco
     <div className="px-5 py-4">
       <p className="text-xs text-stone-500 dark:text-stone-400 mb-2.5">Einstellungen</p>
 
-      <p className="text-xs text-stone-500 dark:text-stone-400 mt-2 mb-2.5">Darstellung</p>
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-2 mb-2.5">Funktionen</p>
+      <div className="inline-flex mb-1 rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
+        {[[true, "Depot an"], [false, "Depot aus"]].map(([v, label], i) => (
+          <button key={String(v)} onClick={() => setDepotEnabled(v)}
+            className={`px-3.5 py-1.5 ${i ? "border-l border-stone-300 dark:border-stone-600" : ""} ${
+              depotEnabled === v ? "bg-stone-900 dark:bg-emerald-600 text-white" : "text-stone-600 dark:text-stone-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
+        Ausgeschaltet verschwindet nur der Reiter — Positionen und Trades bleiben erhalten.
+        Kurse werden nur beim Öffnen des Depots bzw. über „Aktualisieren" von Yahoo Finance
+        geholt; sonst nimmt die App keine Verbindung ins Internet auf.
+      </p>
+
+      <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Darstellung</p>
       <div className="inline-flex rounded-lg border border-stone-300 dark:border-stone-600 overflow-hidden text-[13px]">
         {[["light", "Hell"], ["dark", "Dunkel"], ["system", "System"]].map(([v, label], i) => (
           <button key={v} onClick={() => setTheme(v)}
@@ -117,8 +133,8 @@ export default function Einstellungen({ accounts, defaultAccount, setDefaultAcco
       </div>
       <ErrorNote error={exportError} />
       <p className="text-xs text-stone-400 dark:text-stone-500 mt-1.5 max-w-xs">
-        Die Sicherung ist eine einzelne JSON-Datei mit allen Konten, Kategorien
-        und Buchungen. Über "Teilen" landet sie z. B. in Nextcloud, per Mail
+        Die Sicherung ist eine einzelne JSON-Datei mit allen Konten, Kategorien,
+        Buchungen und dem Depot. Über "Teilen" landet sie z. B. in Nextcloud, per Mail
         oder im Dateien-Ordner – nur die App selbst läuft ohne Server.
       </p>
 
