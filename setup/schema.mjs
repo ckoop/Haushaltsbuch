@@ -1,6 +1,6 @@
 // Legt alle Sammlungen in PocketBase an.
 //
-//   npm i pocketbase
+//   npm install --prefix setup   (einmalig, aus dem Projekt-Root)
 //   PB_URL=https://haushalt.example.de PB_EMAIL=... PB_PASSWORD=... node setup/schema.mjs
 //
 // Das Skript ist wiederholbar: vorhandene Sammlungen werden uebersprungen,

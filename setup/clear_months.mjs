@@ -4,7 +4,7 @@
 // Erst ansehen, dann erst wirklich loeschen - standardmaessig ein
 // Trockenlauf, der nur zaehlt und auflistet:
 //
-//   npm i pocketbase
+//   npm install --prefix setup   (einmalig, aus dem Projekt-Root)
 //   PB_URL=http://192.168.178.55:8090 PB_EMAIL=... PB_PASSWORD=... \
 //     MONTHS=2026-09,2026-04 node setup/clear_months.mjs
 //

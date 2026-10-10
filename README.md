@@ -73,7 +73,7 @@ Danach unter `http://<server-ip>:8090/_/` den Superuser anlegen und das
 Schema erzeugen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 \
 PB_EMAIL=du@example.de \
 PB_PASSWORD=... \

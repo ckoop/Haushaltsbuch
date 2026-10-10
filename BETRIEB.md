@@ -19,7 +19,7 @@ Beim ersten Aufruf von `http://<server-ip>:8090/_/` legst du das
 Superuser-Konto an. Danach das Schema erzeugen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 \
 PB_EMAIL=du@example.de \
 PB_PASSWORD=... \
@@ -137,7 +137,7 @@ Admin-Oberfläche allein nachziehen (Feld hinzufügen, *dann* den alten Index
 Skript, das die `budgets`-Sammlung einmalig patcht:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/migrate_budgets_account.mjs
 ```
@@ -192,7 +192,7 @@ erneut auszuführen — es überspringt automatisch alles Bestehende und legt
 nur die fehlende Sammlung neu an:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
@@ -205,7 +205,7 @@ Kategorie-Bezug (ein Datensatz pro Monat/Dauer-Eintrag).
 ⚠️ Ebenfalls eine **komplett neue Sammlung** — Setup-Skript erneut ausführen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
@@ -219,7 +219,7 @@ Gesamtbetrag. Neues Feld `label`, außerdem entfällt der alte Unique-Index auf
 die Admin-Oberfläche allein nachziehen — per Skript patchen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/migrate_income_label.mjs
 ```
@@ -232,7 +232,7 @@ erhalten (leeres `label`) und zählen weiterhin normal in die Summe mit.
 oben — dasselbe Setup-Skript erneut ausführen, um sie nachzuziehen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
@@ -322,7 +322,7 @@ einem konkret ausgewählten Konto.
 ⚠️ Ebenfalls eine **komplett neue Sammlung** — Setup-Skript erneut ausführen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
@@ -352,7 +352,7 @@ gleich mit demselben Schritt mit. Lässt sich genau wie eine neue Sammlung per
 erneutem Skriptlauf nachziehen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/schema.mjs
 ```
@@ -369,7 +369,7 @@ nicht sauber über die Admin-Oberfläche allein nachziehen — per Skript
 patchen:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/migrate_income_account.mjs
 ```
@@ -384,7 +384,7 @@ Kontostand-Abweichung, ohne den Kontext des Imports erst wieder rekonstruieren
 zu müssen. Reines Zusatzfeld, kein Index, per Skript nachziehbar:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   node setup/migrate_imports_note.mjs
 ```
@@ -457,7 +457,7 @@ Standardmäßig ein Trockenlauf, der nur zählt und Beispielzeilen zeigt,
 nichts löscht:
 
 ```bash
-npm i pocketbase
+npm install --prefix setup
 PB_URL=http://<server-ip>:8090 PB_EMAIL=du@example.de PB_PASSWORD=... \
   MONTHS=2026-09,2026-04 node setup/clear_months.mjs
 ```

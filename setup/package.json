@@ -1,0 +1,8 @@
+{
+  "name": "haushaltsbuch-setup",
+  "private": true,
+  "description": "Schema- und Migrationsskripte fuer die Server-Fassung (PocketBase) - nicht Teil der App",
+  "dependencies": {
+    "pocketbase": "^0.28.1"
+  }
+}
