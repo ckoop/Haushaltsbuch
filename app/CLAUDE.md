@@ -15,3 +15,11 @@ Ohne eigenes Routing hatte die App bis `0.22.1` keinerlei Browser-History-Eintr�
 ## App.jsx: zentrales Buchungs-Detail-Sheet
 
 `App.jsx` hält das Buchungs-Detail-Sheet (State + Handler) zentral statt in `Buchungen.jsx`, damit jeder Screen es über `openDetail()` öffnen kann, nicht nur die Buchungsliste. Darstellung des Sheets selbst steckt in `app/src/screens/TxDetail.jsx`.
+
+## Zwei Build-Ziele (Server und Android)
+
+Ab `0.58.0` ist das frühere Android-Repo (`haushaltsbuch-android`, Capacitor) hier eingegliedert — Git-Historie per `merge -s ours` übernommen, der Inhalt von Hand in die bestehende Struktur gezogen. Beide Fassungen hatten vorher denselben UI-Code als Kopie; die tatsächlichen Unterschiede waren nur das Datenbackend (`pb.js` + `db.js`), der fehlende Login, die Safe-Area-Ränder, der Abmelden-Knopf und die Art, die Sicherungsdatei zu speichern. Alles andere war Kommentar-Drift.
+
+**Wie die Unterschiede aufgelöst sind** (statt `if (android)` in den Screens): beide Backends exportieren eine kleine gemeinsame Schnittstelle — `needsLogin`, `isAuthed()`, `onAuthChange()`, `login`/`logout`, `saveBackupFile(dateiname, json)`. `App.jsx` überspringt den Login bei `!needsLogin`, `Konten.jsx` blendet „Abmelden" dort aus, `Einstellungen.jsx` ruft nur `saveBackupFile()` (Blob-Download im Browser, Teilen-Dialog in der App). Die Safe-Area-Ränder (`env(safe-area-inset-*)`) gelten in beiden Fassungen; im Browser sind sie 0. `@backend` ist ein Vite-Alias, kein Paket — Vitest löst ihn über dieselbe `vite.config.js` auf, die Tests importieren aber nie ein Backend.
+
+**Bewusst nicht vereinheitlicht:** `restoreBackup()` — die Server-Fassung spielt über die PocketBase-API ein (mit Fortschritt und Rollback-Snapshot), die Android-Fassung per SQL (eine Transaktion pro Block). Gemeinsam sind das Dateiformat und `validateBackup()` aus `backup.js`. Die Kursabfrage fürs Depot läuft auf dem Server über den Proxy `/api/depot/quote`, in der App direkt über das native HTTP-Plugin von Capacitor (kein CORS auf dem Gerät).

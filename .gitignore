@@ -5,3 +5,17 @@ pb_public/
 dist/
 import-reports/
 deploy/
+
+# Android-Huelle (app/android): Build-Ausgaben, lokale Konfiguration und
+# Signierschluessel nie einchecken. Steht hier zusaetzlich zu app/android/.gitignore,
+# weil deploy/sync_to_server.sh (rsync --exclude-from) nur diese Datei kennt.
+app/android/.gradle/
+app/android/build/
+app/android/app/build/
+app/android/local.properties
+app/android/keystore/
+app/android/keystore.properties
+*.apk
+*.aab
+*.jks
+*.keystore

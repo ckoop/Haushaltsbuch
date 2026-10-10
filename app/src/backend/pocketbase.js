@@ -1,0 +1,817 @@
+import PocketBase from "pocketbase";
+import { todayISO } from "../ui.jsx";
+import {
+  BACKUP_SCHEMA_VERSION, BACKUP_COLLECTIONS, CREATED_ORDERED, stripRecord, validateBackup, orderForCreate,
+} from "../backup.js";
+import { RULE_DUP_WINDOW_DAYS, shiftDate, findDuplicateCandidates } from "../dauerauftraege.js";
+
+// Keine feste Adresse: die App spricht mit dem Server, von dem sie geladen wurde.
+// Damit funktioniert sie im WLAN und im WireGuard-Tunnel gleichermassen.
+export const pb = new PocketBase(import.meta.env.VITE_PB_URL || window.location.origin);
+pb.autoCancellation(false);
+
+// ------------------------------------------------------------------- Anmeldung
+
+export const login = (email, password) =>
+  pb.collection("users").authWithPassword(email, password);
+export const logout = () => pb.authStore.clear();
+export const currentUser = () => pb.authStore.record;
+
+// Gemeinsame Schnittstelle beider Backends (s. backend/sqlite.js): die Screens
+// fragen nur "braucht diese Fassung eine Anmeldung?", nie das SDK selbst.
+export const needsLogin = true;
+export const isAuthed = () => pb.authStore.isValid;
+export const onAuthChange = (cb) => pb.authStore.onChange(cb);
+
+// Sicherungsdatei an den Nutzer ausliefern: Download ueber einen Blob-Link statt
+// Server-Route - die Daten kommen ohnehin schon ueber die angemeldete API, ein
+// eigener Endpunkt waere nur ein zweiter Zugriffsweg. Funktioniert auch ohne
+// sicheren Kontext (http://192.168.x.x).
+export async function saveBackupFile(filename, json) {
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ------------------------------------------------------------------- Zeitraum
+
+export const monthRange = (y, m) => {
+  const start = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  const ny = m === 11 ? y + 1 : y;
+  const nm = m === 11 ? 0 : m + 1;
+  const end = `${ny}-${String(nm + 1).padStart(2, "0")}-01`;
+  return { start, end, key: start.slice(0, 7) };
+};
+
+// PocketBase liefert Datumsfelder als "2026-08-31 00:00:00.000Z" zurueck.
+export const dateOnly = (v) => (v ?? "").slice(0, 10);
+
+// ------------------------------------------------------------------- Stammdaten
+
+export const listAccounts = () =>
+  pb.collection("accounts").getFullList({ sort: "sort,name" });
+
+export const saveAccount = (a) =>
+  a.id
+    ? pb.collection("accounts").update(a.id, a)
+    : pb.collection("accounts").create(a);
+
+export const deleteAccount = (id) => pb.collection("accounts").delete(id);
+
+export const listCategories = () =>
+  pb.collection("categories").getFullList({ sort: "sort,name" });
+
+export const saveCategory = (c) =>
+  c.id
+    ? pb.collection("categories").update(c.id, c)
+    : pb.collection("categories").create(c);
+
+export const deleteCategory = (id) => pb.collection("categories").delete(id);
+
+// Nur ein Label an Konten, kein eigener Login - siehe CLAUDE.md.
+export const listPeople = () => pb.collection("people").getFullList({ sort: "name" });
+
+export const savePerson = (p) =>
+  p.id
+    ? pb.collection("people").update(p.id, p)
+    : pb.collection("people").create(p);
+
+export const deletePerson = (id) => pb.collection("people").delete(id);
+
+export const countAccountsByPerson = async (personId) => {
+  const r = await pb.collection("accounts").getList(1, 1, {
+    filter: pb.filter("person = {:id}", { id: personId }),
+  });
+  return r.totalItems;
+};
+
+// Virtuelle Unterkonten (mehrere Sparziele auf einem echten Sparkonto, s.
+// accounts.parent_account) - fuer die gruppierte Anzeige im Konten-Tab und
+// den kombinierten Kontostand-Check beim CSV-Import.
+export const listChildAccounts = (parentId) =>
+  pb.collection("accounts").getFullList({
+    filter: pb.filter("parent_account = {:id}", { id: parentId }),
+  });
+
+export const countChildAccounts = async (accountId) => {
+  const r = await pb.collection("accounts").getList(1, 1, {
+    filter: pb.filter("parent_account = {:id}", { id: accountId }),
+  });
+  return r.totalItems;
+};
+
+export const countByCategory = async (categoryId) => {
+  const r = await pb.collection("transactions").getList(1, 1, {
+    filter: pb.filter("category = {:id}", { id: categoryId }),
+  });
+  return r.totalItems;
+};
+
+export const listRules = () =>
+  pb.collection("rules").getFullList({ sort: "-priority" });
+
+// ------------------------------------------------------------------- Tags
+
+export const listTags = () => pb.collection("tags").getFullList({ sort: "name" });
+export const createTag = (name) => pb.collection("tags").create({ name });
+
+export const saveRule = (r) =>
+  r.id
+    ? pb.collection("rules").update(r.id, r)
+    : pb.collection("rules").create(r);
+
+export const deleteRule = (id) => pb.collection("rules").delete(id);
+
+// ------------------------------------------------------------------- Buchungen
+
+export function listTransactions(y, m) {
+  const { start, end } = monthRange(y, m);
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date >= {:start} && date < {:end}", { start, end }),
+    sort: "-date,-created",
+  });
+}
+
+// Fuer den Kontostand: alles bis zum Monatsende, nicht nur der Monat selbst.
+export function listTransactionsUntil(y, m) {
+  const { end } = monthRange(y, m);
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date < {:end}", { end }),
+    fields: "id,type,account,to_account,amount_cents",
+  });
+}
+
+// Fuer die Jahresansicht in der Auswertung: ein Kalenderjahr auf einmal statt
+// zwoelf Einzelaufrufen. Personendaten sind klein genug, dass Client-seitige
+// Aggregation reicht - keine eigene Server-Aggregation noetig.
+export function listTransactionsForYear(y) {
+  const start = `${y}-01-01`;
+  const end = `${y + 1}-01-01`;
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date >= {:start} && date < {:end}", { start, end }),
+    sort: "-date,-created",
+  });
+}
+
+// Fuer die Einkommens-Hochrechnung in Buchungen.jsx: Buchungen der
+// vorherigen `monthsBack` VOLLEN Monate vor y/m in einem Rutsch statt
+// monthsBack Einzelabfragen - der aktuelle Monat selbst ist nicht enthalten,
+// der laeuft ja gerade erst und waere als Vergleichswert fuer sich selbst
+// sinnlos. Ein Durchschnitt ueber ganze Monate ist unabhaengig davon, an
+// welchem Tag einzelne grosse Buchungen (Miete, Versicherungen) landen -
+// anders als eine Tagesdurchschnitt-Hochrechnung des laufenden, erst
+// teilweise vergangenen Monats, die genau dadurch verzerrt wird.
+export function listTransactionsForAverage(y, m, monthsBack = 3) {
+  const { start: end } = monthRange(y, m);
+  const start = addMonths(end, -monthsBack);
+  return pb.collection("transactions").getFullList({
+    filter: pb.filter("date >= {:start} && date < {:end}", { start, end }),
+    fields: "date,type,amount_cents,account,to_account",
+  });
+}
+
+// Suche ueber Empfaenger/Verwendungszweck, bewusst ueber die komplette
+// Historie statt nur den gerade sichtbaren Monat - eine gesuchte Buchung
+// liegt so gut wie nie zufaellig im aktuellen Zeitraum. "~" ist PocketBase/
+// SQLite LIKE, dadurch automatisch case-insensitiv (ASCII).
+// Kategorie/Tags sind Relationen, kein Text - ein Treffer auf ihrem Namen
+// laeuft deshalb ueber vom Aufrufer schon client-seitig aufgeloeste IDs
+// (Name-Abgleich gegen die eh schon geladene Kategorie-/Tag-Liste), nicht
+// ueber einen eigenen Server-Textvergleich. "?=" ist der PocketBase-Operator
+// fuer "mindestens einer der Werte trifft" auf der Mehrfachauswahl-Relation
+// tags; category ist eine einfache Relation, dafuer reicht "=" pro ID.
+// minCents/maxCents/dateFrom/dateTo (ab 0.50.0) erweitern die reine
+// Textsuche um Betrags- und Datumsbereich, UND-verknuepft mit der bisherigen
+// Text/Kategorie/Tag-ODER-Gruppe - eine leere Suchanfrage mit gesetztem
+// Bereich ist damit erlaubt (z. B. "alle Buchungen zwischen 40 und 60 Euro"
+// ganz ohne Text). amount_cents behaelt sein Vorzeichen wie ueberall sonst
+// (Ausgaben negativ) - min/max werden deshalb nicht auf den Betrag ohne
+// Vorzeichen angewendet, um die Filterlogik einfach zu halten.
+export function searchTransactions(query, { categoryIds = [], tagIds = [], minCents, maxCents, dateFrom, dateTo } = {}) {
+  const q = query.trim();
+  const orParts = [
+    ...(q ? [pb.filter("payee ~ {:q}", { q }), pb.filter("note ~ {:q}", { q })] : []),
+    ...categoryIds.map((id, i) => pb.filter(`category = {:c${i}}`, { [`c${i}`]: id })),
+    ...tagIds.map((id, i) => pb.filter(`tags ?= {:t${i}}`, { [`t${i}`]: id })),
+  ];
+  const andParts = [];
+  if (orParts.length > 0) andParts.push(`(${orParts.join(" || ")})`);
+  if (minCents !== undefined) andParts.push(pb.filter("amount_cents >= {:minC}", { minC: minCents }));
+  if (maxCents !== undefined) andParts.push(pb.filter("amount_cents <= {:maxC}", { maxC: maxCents }));
+  if (dateFrom) andParts.push(pb.filter("date >= {:dFrom}", { dFrom: `${dateFrom} 00:00:00` }));
+  if (dateTo) andParts.push(pb.filter("date <= {:dTo}", { dTo: `${dateTo} 23:59:59` }));
+  // Kein frueher Abbruch mehr bei leeren andParts (anders als vor 0.50.0):
+  // der "Nur ohne Budget"-Filter (App.jsx) kann als einziges Kriterium
+  // aktiv sein, ganz ohne Text/Betrag/Datum - dann muss die komplette
+  // Historie geholt werden, damit der Client-seitige Budget-Abgleich darauf
+  // laufen kann. Der Aufrufer entscheidet bereits vorher (hasFilters-Gate),
+  // ob ueberhaupt gesucht wird - hier also kein zusaetzliches "leer = nichts
+  // tun" mehr noetig.
+  return pb.collection("transactions").getFullList({
+    filter: andParts.length > 0 ? andParts.join(" && ") : "",
+    sort: "-date,-created",
+  });
+}
+
+// Ungefiltert alle Budgets - fuer den "Nur ohne Budget"-Suchfilter
+// (App.jsx), der Treffer ueber mehrere Konten/Monate hinweg gegen die
+// jeweils passenden Budgets abgleichen muss, anders als listBudgets() oben,
+// das immer nur ein Konto/einen Monat kennt.
+export const listAllBudgets = () => pb.collection("budgets").getFullList();
+
+export const createTransaction = (t) => pb.collection("transactions").create(t);
+export const updateTransaction = (id, patch) => pb.collection("transactions").update(id, patch);
+export const deleteTransaction = (id) => pb.collection("transactions").delete(id);
+
+// Sucht auf dem gewaehlten Gegenkonto eine Buchung, die zu einer nachtraeglich
+// in eine Umbuchung umzuwandelnden Buchung passen wuerde - gleicher Tag,
+// spiegelverkehrter Betrag (die Ausgabe auf dem einen Konto = die Einnahme auf
+// dem anderen). Kommt vor, wenn beide Konten importiert wurden und der Import
+// die Verbindung zwischen ihnen naturgemaess nicht erkennt (er sieht pro Datei
+// immer nur ein Konto). Nur ein Hinweis fuers UI (TxDetail.jsx) - wird dort
+// zum Loeschen vorgeschlagen, nicht automatisch entfernt.
+export async function findTransferCounterpart(accountId, date, amountCents, excludeId) {
+  const d = dateOnly(date);
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "account = {:acc} && date >= {:d0} && date <= {:d1} && amount_cents = {:amt} && type != 'transfer' && id != {:ex}",
+      { acc: accountId, d0: `${d} 00:00:00`, d1: `${d} 23:59:59`, amt: amountCents, ex: excludeId }
+    ),
+    fields: "id,date,amount_cents,payee",
+  });
+  return rows[0] ?? null;
+}
+
+export const countByAccount = async (accountId) => {
+  const r = await pb.collection("transactions").getList(1, 1, {
+    filter: pb.filter("account = {:id} || to_account = {:id}", { id: accountId }),
+  });
+  return r.totalItems;
+};
+
+// ------------------------------------------------------------- Daueraufträge
+
+export const listRecurringRules = () =>
+  pb.collection("recurring_rules").getFullList({ sort: "next_due" });
+
+// Sucht eine bereits bestehende aktive Regel, die zu den angegebenen Eckdaten
+// passen wuerde - gleiches Matching wie der Duplikat-Schutz in
+// saveRecurringRule() (Konto/Betrag/Rhythmus/Empfaenger und je nach Typ
+// gleiche Kategorie bzw. gleiches Zielkonto). Von dort fuer den Duplikat-
+// Check verwendet, zusaetzlich von TxDetail.jsx genutzt, um das "Automatisch
+// weiterbuchen"-Haekchen aus den echten Daten abzuleiten statt nur aus
+// sitzungslokalem State (das Haekchen erkannte vorher eine schon bestehende
+// Regel beim erneuten Oeffnen des Sheets nicht).
+export const findRecurringRuleFor = async (r) => {
+  const candidates = await pb.collection("recurring_rules").getFullList({
+    filter: pb.filter("account = {:a} && type = {:t} && amount_cents = {:amt} && frequency = {:f} && active = true",
+      { a: r.account, t: r.type, amt: r.amount_cents, f: r.frequency }),
+  });
+  const payee = (r.payee || "").trim().toLowerCase();
+  return candidates.find((c) =>
+    (c.payee || "").trim().toLowerCase() === payee &&
+    (r.type === "transfer" ? c.to_account === r.to_account : c.category === r.category)) ?? null;
+};
+
+// Verhindert doppelt angelegte Daueraufträge (kein Unique-Index auf
+// recurring_rules moeglich - "gleich" ist hier eine Kombination aus
+// mehreren Feldern, kein einzelner Schluessel). Zwei aktive Regeln gelten
+// als derselbe Dauerauftrag bei gleichem Konto/Betrag/Rhythmus/Empfaenger
+// und (je nach Typ) gleicher Kategorie bzw. gleichem Zielkonto - genau die
+// Kombination, die bisher an allen drei Erfassungswegen (NewEntry.jsx,
+// TxDetail.jsx, Konten.jsx) unbemerkt zweimal entstehen konnte. Nur gegen
+// aktive Regeln geprueft, eine deaktivierte darf durch eine neue ersetzt
+// werden. Betrifft nur das Anlegen, nicht das Bearbeiten (r.id gesetzt).
+export const saveRecurringRule = async (r) => {
+  if (r.id) return pb.collection("recurring_rules").update(r.id, r);
+  const dup = await findRecurringRuleFor(r);
+  if (dup) throw new Error("Dieser Dauerauftrag existiert schon (gleiches Konto, Betrag, Rhythmus und Empfänger).");
+  return pb.collection("recurring_rules").create(r);
+};
+
+export const deleteRecurringRule = (id) => pb.collection("recurring_rules").delete(id);
+
+export const countRecurringRulesByAccount = async (accountId) => {
+  const r = await pb.collection("recurring_rules").getList(1, 1, {
+    filter: pb.filter("account = {:id} || to_account = {:id}", { id: accountId }),
+  });
+  return r.totalItems;
+};
+
+export const countRecurringRulesByCategory = async (categoryId) => {
+  const r = await pb.collection("recurring_rules").getList(1, 1, {
+    filter: pb.filter("category = {:id}", { id: categoryId }),
+  });
+  return r.totalItems;
+};
+
+// Aktive Dauerauftraege mit unregelmaessiger Faelligkeit - Grundlage fuer die
+// Ruecklagen-Anzeige in Budgets.jsx (siehe ruecklagen.js). Kein Filter auf
+// "category": eine Regel ohne Kategorie matcht dort ohnehin keine echte
+// Kategorie-ID und wird beim Rendern implizit ignoriert.
+export const listReserveRules = (accountId) =>
+  pb.collection("recurring_rules").getFullList({
+    filter: pb.filter(
+      "account = {:a} && active = true && type = 'tx' && (frequency = 'quarterly' || frequency = 'yearly')",
+      { a: accountId }
+    ),
+  });
+
+// Alle bisher aus einer Regel automatisch entstandenen Buchungen (Hash-Praefix
+// "rule:<id>:", s. runDueRecurringRules) - Grundlage, um den Ruecklagen-Saldo
+// ueber mehrere Monate hinweg rein aus vorhandenen Daten abzuleiten, ohne
+// einen eigenen fortgeschriebenen Saldo zu speichern.
+export const listRuleTransactions = (ruleId) =>
+  pb.collection("transactions").getFullList({
+    filter: pb.filter("import_hash ~ {:p}", { p: `rule:${ruleId}:` }),
+    sort: "date", fields: "date,amount_cents",
+  });
+
+const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
+
+// Naechstes Datum nach n Monaten, auf gueltigen Kalendertag begrenzt -
+// 31. Jan + 1 Monat -> 28./29. Feb, nicht 3. Maerz.
+export function addMonths(iso, months) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const total = m - 1 + months;
+  const ny = y + Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  const lastDay = new Date(ny, nm, 0).getDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
+}
+
+// Eine Periode eines Dauerauftrags als Buchung anlegen. Dedup ueber den
+// bestehenden import_hash-Unique-Index, falls zwei Geraete gleichzeitig
+// pruefen - gibt bei einer Unique-Verletzung (= ein anderes Geraet hat diese
+// Periode schon gebucht) null zurueck statt zu werfen.
+async function bookRulePeriod(rule, date) {
+  try {
+    return await pb.collection("transactions").create({
+      date, type: rule.type, account: rule.account,
+      to_account: rule.to_account || undefined, category: rule.category || undefined,
+      tags: rule.tags ?? [], amount_cents: rule.amount_cents, payee: rule.payee, note: rule.note,
+      recurring: rule.frequency, import_hash: `rule:${rule.id}:${date}`,
+    });
+  } catch (e) {
+    if (e?.response?.data?.import_hash?.code !== "validation_not_unique") throw e;
+    return null;
+  }
+}
+
+// Gibt es zu dieser Faelligkeit schon eine Buchung, die dieselbe sein koennte
+// (z. B. von der Bank bereits ausgefuehrt und per CSV/PDF importiert)? Der
+// Dauerauftrag-Hash "rule:<id>:<datum>" kennt einen Import-Hash nicht - ohne
+// diese Pruefung wuerde dieselbe Zahlung doppelt gebucht. Die Auswahl der
+// Kandidaten steckt als reine Funktion in dauerauftraege.js (mit Tests), hier
+// nur die Abfrage: Konto + Betrag + Datumsfenster grob per Filter, der Rest
+// clientseitig.
+async function findRuleDuplicates(rule, due, claimed) {
+  const w = RULE_DUP_WINDOW_DAYS;
+  const txs = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "account = {:a} && amount_cents = {:c} && date >= {:from} && date <= {:to}",
+      { a: rule.account, c: rule.amount_cents, from: shiftDate(due, -w), to: `${shiftDate(due, w)} 23:59:59` }
+    ),
+  });
+  return findDuplicateCandidates(rule, due, txs, claimed);
+}
+
+// Faellige Daueraufträge nachbuchen - client-getriggert beim App-Start,
+// kein Server-Cron (siehe CLAUDE.md). Bewusst kein createBatch():
+// PocketBase-Batches sind atomar, ein Dedup-Konflikt wuerde sonst auch alle
+// anderen faelligen Regeln blockieren.
+// Gibt { created, conflicts } zurueck: created = neu erzeugte Buchungen (nicht
+// nur die Anzahl, damit die UI zeigen kann, was konkret gebucht wurde),
+// conflicts = Perioden, die NICHT gebucht wurden, weil es schon eine
+// moeglicherweise gleiche Buchung gibt (ab 0.54.0). Eine solche Regel bleibt
+// faellig und wird NICHT weitergeschoben, bis der Nutzer per
+// resolveRuleConflict() entschieden hat - und spaetere Perioden derselben
+// Regel warten, damit die Reihenfolge stimmt.
+export async function runDueRecurringRules() {
+  const today = todayISO();
+  // Exklusive Obergrenze statt "next_due <= today": next_due steht als
+  // "2026-09-05 00:00:00.000Z" (Text) in der DB, ein Vergleich mit dem reinen
+  // Datumsstring "2026-09-05" waere lexikographisch groesser (laengerer
+  // String) - ein heute faelliger Auftrag wuerde so erst morgen erkannt.
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const due = await pb.collection("recurring_rules").getFullList({
+    filter: pb.filter("active = true && next_due < {:tomorrow}", { tomorrow }),
+  });
+  const created = [];
+  const conflicts = [];
+  const claimed = new Set();
+  for (const rule of due) {
+    try {
+      let next = dateOnly(rule.next_due);
+      while (next <= today) {
+        const candidates = await findRuleDuplicates(rule, next, claimed);
+        if (candidates.length > 0) {
+          for (const c of candidates) claimed.add(c.id);
+          conflicts.push({ rule, due: next, candidates });
+          break;
+        }
+        const row = await bookRulePeriod(rule, next);
+        if (row) created.push(row);
+        next = addMonths(next, MONTHS_PER[rule.frequency]);
+      }
+      if (next !== dateOnly(rule.next_due)) {
+        await pb.collection("recurring_rules").update(rule.id, { next_due: next });
+      }
+    } catch (e) {
+      // Eine kaputte Regel (z. B. Konto zwischenzeitlich geloescht) soll die
+      // anderen nicht blockieren - naechster Versuch beim naechsten App-Start.
+      console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
+    }
+  }
+  return { created, conflicts };
+}
+
+// Entscheidung des Nutzers zu einem Konflikt aus runDueRecurringRules():
+// "skip" = die vorhandene Buchung ist dieselbe, nichts buchen; "book" = andere
+// Buchung, die Periode trotzdem anlegen. In beiden Faellen rueckt die Regel
+// um eine Periode weiter. Gibt bei "book" die neue Buchung zurueck, sonst null.
+export async function resolveRuleConflict({ rule, due }, decision) {
+  const row = decision === "book" ? await bookRulePeriod(rule, due) : null;
+  await pb.collection("recurring_rules").update(rule.id, {
+    next_due: addMonths(due, MONTHS_PER[rule.frequency]),
+  });
+  return row;
+}
+
+// ------------------------------------------------------------------- Budgets
+
+// Budgets gelten pro Konto, nicht kontouebergreifend - ohne ein konkretes
+// Konto gibt es deshalb keine Budgets zu zeigen ("Alle Konten"-Ansicht).
+export async function listBudgets(monthKey, accountId) {
+  if (!accountId || accountId === "alle") return [];
+  const rows = await pb.collection("budgets").getFullList({
+    filter: pb.filter("account = {:a} && (month = {:m} || month = '*')", { a: accountId, m: monthKey }),
+  });
+  // Ein Monatsbudget schlaegt das Dauerbudget derselben Kategorie.
+  const out = new Map();
+  for (const b of rows) {
+    const prev = out.get(b.category);
+    if (!prev || (prev.month === "*" && b.month !== "*")) out.set(b.category, b);
+  }
+  return [...out.values()];
+}
+
+export async function setBudget(accountId, categoryId, month, cents) {
+  const found = await pb.collection("budgets").getFullList({
+    filter: pb.filter("account = {:a} && category = {:c} && month = {:m}", { a: accountId, c: categoryId, m: month }),
+  });
+  if (cents <= 0) {
+    if (found[0]) await pb.collection("budgets").delete(found[0].id);
+    return null;
+  }
+  return found[0]
+    ? pb.collection("budgets").update(found[0].id, { amount_cents: cents })
+    : pb.collection("budgets").create({ account: accountId, category: categoryId, month, amount_cents: cents });
+}
+
+// ------------------------------------------------------------- Einnahmenziel
+
+// Einnahmen setzen sich aus mehreren Posten zusammen (z. B. "Gehalt" +
+// "Nebenmieteinnahmen"), jeder mit eigener Beschriftung. Ein Monatsposten
+// schlaegt die Dauerposten als Ganzes, gleiches Prinzip wie bei Budgets, nur
+// ohne Kategorie zum Abgleichen pro Posten - entweder alle Dauerposten oder
+// alle Monatsposten zaehlen, nicht gemischt.
+// Gilt seit 0.34.0 pro Konto, nicht kontouebergreifend - gleicher Grund wie
+// bei budgets.account: ohne ein konkretes Konto gibt es kein sinnvolles
+// Einnahmenziel ("Alle Konten"-Ansicht).
+export async function listIncomeEntries(monthKey, accountId) {
+  if (!accountId || accountId === "alle") return [];
+  // Kein sort: income_targets hat anders als z. B. transactions kein
+  // created-Feld, "id" ist die einzige stabile, immer vorhandene Sortierung.
+  const rows = await pb.collection("income_targets").getFullList({
+    filter: pb.filter("account = {:a} && (month = {:m} || month = '*')", { a: accountId, m: monthKey }),
+    sort: "id",
+  });
+  const specific = rows.filter((r) => r.month === monthKey);
+  return specific.length ? specific : rows.filter((r) => r.month === "*");
+}
+
+export async function createIncomeEntry(accountId, month, label, cents) {
+  return pb.collection("income_targets").create({ account: accountId, month, label, amount_cents: cents });
+}
+
+export async function updateIncomeEntry(id, label, cents) {
+  return pb.collection("income_targets").update(id, { label, amount_cents: cents });
+}
+
+export async function deleteIncomeEntry(id) {
+  return pb.collection("income_targets").delete(id);
+}
+
+// Fuer den "Vorschlag"-Button im Budgets-Tab: tatsaechlich gebuchte Einnahmen
+// eines Monats auf einem konkreten Konto, nur auf Anfrage geladen (nicht bei
+// jedem Tab-Aufruf), damit das Eintragen des Einnahmenziels nicht jedes Mal
+// komplett neu geschaetzt werden muss.
+export async function actualIncomeForMonth(y, m, accountId) {
+  const { start, end } = monthRange(y, m);
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter(
+      "date >= {:start} && date < {:end} && account = {:a} && type != 'transfer' && amount_cents > 0",
+      { start, end, a: accountId }
+    ),
+    fields: "amount_cents",
+  });
+  return rows.reduce((s, t) => s + t.amount_cents, 0);
+}
+
+// -------------------------------------------------------- Monatsabschluss
+
+// Pro Konto, nicht global - siehe schema.mjs. Gibt ein Set von "JJJJ-MM"
+// zurueck, praktischer als die rohen Datensaetze fuer den .has()-Check in
+// der Jahresansicht.
+export async function listClosedMonths(accountId) {
+  if (!accountId) return new Set();
+  const rows = await pb.collection("closed_months").getFullList({
+    filter: pb.filter("account = {:a}", { a: accountId }),
+    fields: "month",
+  });
+  return new Set(rows.map((r) => r.month));
+}
+
+export const closeMonth = (accountId, month) =>
+  pb.collection("closed_months").create({ account: accountId, month });
+
+export async function reopenMonth(accountId, month) {
+  const found = await pb.collection("closed_months").getFullList({
+    filter: pb.filter("account = {:a} && month = {:m}", { a: accountId, m: month }),
+  });
+  if (found[0]) await pb.collection("closed_months").delete(found[0].id);
+}
+
+// ------------------------------------------------------------------- Import
+
+export const listProfiles = () => pb.collection("import_profiles").getFullList();
+
+export const saveProfile = (p) =>
+  p.id
+    ? pb.collection("import_profiles").update(p.id, p)
+    : pb.collection("import_profiles").create(p);
+
+export const createImportRun = (r) => pb.collection("imports").create(r);
+export const listImportRuns = () =>
+  pb.collection("imports").getFullList({ sort: "-created", expand: "account" });
+
+// Welche dieser Hashes gibt es schon? Wird in Bloecken abgefragt, weil ein
+// Filter mit tausend ODER-Zweigen die URL sprengt.
+export async function existingHashes(hashes) {
+  const found = new Set();
+  for (let i = 0; i < hashes.length; i += 40) {
+    const chunk = hashes.slice(i, i + 40);
+    const filter = chunk.map((h) => pb.filter("import_hash = {:h}", { h })).join(" || ");
+    const rows = await pb.collection("transactions").getFullList({
+      filter, fields: "import_hash",
+    });
+    for (const r of rows) found.add(r.import_hash);
+  }
+  return found;
+}
+
+// Weicher Duplikat-Check gegen den exakten Hash-Vergleich oben: derselbe
+// Bank-Umsatz kann in zwei Export-Formaten unterschiedlich formatierten
+// Empfaenger-/Zwecktext haben ("Supermarkt XY Filiale 123" vs. "Supermarkt XY") - dann
+// weicht der Hash ab und existingHashes() erkennt die Dublette nicht. Datum
+// und Betrag allein sind dagegen stabil, deshalb hier als reiner Hinweis
+// (nicht blockierend, siehe Import.jsx) fuer alle Buchungen im Datumsbereich
+// der Datei auf dem Zielkonto.
+export async function existingByDateAmount(account, minDate, maxDate) {
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter("account = {:account} && date >= {:min} && date <= {:max}", {
+      account, min: minDate, max: `${maxDate} 23:59:59`,
+    }),
+    fields: "date,amount_cents",
+  });
+  return new Set(rows.map((r) => `${r.date.slice(0, 10)}|${r.amount_cents}`));
+}
+
+// Kontostand eines Kontos zu einem Stichtag, fuer den Kontostand-Sanity-Check
+// beim CSV-Import (Import.jsx) - dieselbe Formel wie `balances` in App.jsx
+// (Anfangssaldo + alle Buchungen bis zu diesem Datum, Umbuchungen richtig
+// verrechnet), nur als eigener Request statt aus dem schon geladenen
+// App-weiten State, weil Import.jsx dessen "running"-Liste nicht haelt.
+export async function accountBalanceAsOf(accountId, throughDate) {
+  const acc = await pb.collection("accounts").getOne(accountId, { fields: "start_cents" });
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter("date <= {:end} && (account = {:id} || to_account = {:id})", {
+      end: `${throughDate} 23:59:59`, id: accountId,
+    }),
+    fields: "type,account,to_account,amount_cents",
+  });
+  let b = acc.start_cents ?? 0;
+  for (const t of rows) {
+    if (t.type === "transfer") {
+      if (t.account === accountId) b -= t.amount_cents;
+      if (t.to_account === accountId) b += t.amount_cents;
+    } else if (t.account === accountId) {
+      b += t.amount_cents;
+    }
+  }
+  return b;
+}
+
+// PocketBase kann mehrere Schreibvorgaenge in einer Anfrage buendeln.
+// Feldgrenzen aus setup/schema.mjs (transactions.payee max 120, note max 500).
+// Ueberschreitet eine einzige Zeile sie, lehnt PocketBase den ganzen Batch
+// atomar ab ("Batch transaction failed.") - aufgefallen an einer DKB-
+// Quartalsabrechnung mit über 600 Zeichen Verwendungszweck. Der Dedup-Hash wird
+// vorher aus dem vollen Text gebildet und bleibt davon unberuehrt.
+const PAYEE_MAX = 120;
+const NOTE_MAX = 500;
+const clamp = (s, max) => (typeof s === "string" && s.length > max ? s.slice(0, max - 1) + "…" : s);
+
+export async function batchCreateTransactions(rows, onProgress) {
+  let done = 0;
+  for (let i = 0; i < rows.length; i += 100) {
+    const batch = pb.createBatch();
+    for (const r of rows.slice(i, i + 100)) {
+      batch.collection("transactions").create({
+        ...r, payee: clamp(r.payee, PAYEE_MAX), note: clamp(r.note, NOTE_MAX),
+      });
+    }
+    await batch.send();
+    done += Math.min(100, rows.length - i);
+    onProgress?.(done, rows.length);
+  }
+  return done;
+}
+
+// Sobald mindestens eine Buchung des Imports in einem fuer das Import-Konto
+// abgeschlossenen Monat liegt, ist der ganze Ruecknahme-Vorgang gesperrt -
+// lieber komplett blockiert als nur einzelne Zeilen still uebrig zu lassen.
+export async function deleteImportRun(runId) {
+  const run = await pb.collection("imports").getOne(runId, { fields: "id,account" });
+  const rows = await pb.collection("transactions").getFullList({
+    filter: pb.filter("import_batch = {:id}", { id: runId }),
+    fields: "id,date",
+  });
+  const months = new Set(rows.map((r) => dateOnly(r.date).slice(0, 7)));
+  if (months.size > 0) {
+    const closed = await listClosedMonths(run.account);
+    if ([...months].some((m) => closed.has(m))) {
+      throw new Error(
+        "Dieser Import betrifft einen abgeschlossenen Monat und kann nicht mehr zurückgenommen werden."
+      );
+    }
+  }
+  for (let i = 0; i < rows.length; i += 100) {
+    const batch = pb.createBatch();
+    for (const r of rows.slice(i, i + 100)) batch.collection("transactions").delete(r.id);
+    await batch.send();
+  }
+  await pb.collection("imports").delete(runId);
+  return rows.length;
+}
+
+// -------------------------------------------------------------------- Depot
+
+export const listDepotPositions = () =>
+  pb.collection("depot_positions").getFullList({ sort: "name" });
+
+export const saveDepotPosition = (p) =>
+  p.id
+    ? pb.collection("depot_positions").update(p.id, p)
+    : pb.collection("depot_positions").create(p);
+
+export const deleteDepotPosition = (id) => pb.collection("depot_positions").delete(id);
+
+export const countDepotTradesByPosition = async (positionId) => {
+  const r = await pb.collection("depot_trades").getList(1, 1, {
+    filter: pb.filter("position = {:id}", { id: positionId }),
+  });
+  return r.totalItems;
+};
+
+export const listDepotTrades = () =>
+  pb.collection("depot_trades").getFullList({ sort: "-date,-created" });
+
+export const saveDepotTrade = (t) =>
+  t.id
+    ? pb.collection("depot_trades").update(t.id, t)
+    : pb.collection("depot_trades").create(t);
+
+export const deleteDepotTrade = (id) => pb.collection("depot_trades").delete(id);
+
+// Server-seitiger Kurs-Proxy (pb_hooks/main.pb.js) - Yahoo Finance setzt
+// keinen CORS-Header, ein fetch() direkt aus dem Browser wuerde scheitern.
+// Entweder { isin } (loest einmalig einen Ticker auf) oder { ticker } (der
+// uebliche Fall, sobald der Ticker an der Position gespeichert ist).
+export const fetchQuote = ({ isin, ticker }) =>
+  pb.send("/api/depot/quote", isin ? { isin } : { ticker });
+
+// Historische Kursreihe fuer den Verlaufs-Chart im Depot - dieselbe Route,
+// range/interval werden unveraendert an Yahoo weitergereicht (z. B.
+// "3mo"/"1d" oder "5y"/"1wk"). Antwort: { symbol, currency, points: [{t, price}] }.
+export const fetchHistory = (ticker, range, interval) =>
+  pb.send("/api/depot/quote", { ticker, range, interval });
+
+// ------------------------------------------------------------------- Erstbefüllung
+
+export const DEFAULT_CATEGORIES = [
+  { name: "Lebensmittel", icon: "cart",      kind: "expense", color: "emerald" },
+  { name: "Restaurant",   icon: "utensils",  kind: "expense", color: "orange" },
+  { name: "Mobilität",    icon: "bus",       kind: "expense", color: "violet" },
+  { name: "Wohnen",       icon: "home",      kind: "expense", color: "sky" },
+  { name: "Energie",      icon: "zap",       kind: "expense", color: "yellow" },
+  { name: "Freizeit",     icon: "film",      kind: "expense", color: "pink" },
+  { name: "Gesundheit",   icon: "heart",     kind: "expense", color: "rose" },
+  { name: "Kleidung",     icon: "shirt",     kind: "expense", color: "amber" },
+  { name: "Abos",         icon: "phone",     kind: "expense", color: "teal" },
+  { name: "Sonstiges",    icon: "dots",      kind: "expense", color: "stone" },
+  { name: "Einkommen",    icon: "income",    kind: "income",  color: "lime" },
+];
+
+export async function seedDefaults() {
+  const batch = pb.createBatch();
+  DEFAULT_CATEGORIES.forEach((c, i) =>
+    batch.collection("categories").create({ ...c, sort: i, archived: false }));
+  batch.collection("accounts").create({
+    name: "Girokonto", short: "Giro", type: "giro", start_cents: 0, sort: 0, archived: false,
+  });
+  await batch.send();
+}
+
+// ------------------------------------------------------------------- Sicherung
+
+// Alle Sammlungen unverändert (ohne PocketBase-Systemfelder) in einer Datei —
+// bewusst die volle Historie ohne Zeitraumfilter. Das Format teilt sich die
+// App mit haushaltsbuch-capacitor (Details in backup.js), die Datensätze
+// behalten ihre Ids, damit Relationen beim Einspielen intakt bleiben.
+export async function exportBackup() {
+  const data = {};
+  for (const name of BACKUP_COLLECTIONS) {
+    const rows = await pb.collection(name).getFullList({ sort: "id" });
+    data[name] = rows.map(stripRecord);
+  }
+  return {
+    app: "haushaltsbuch",
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString().replace("T", " "),
+    data,
+  };
+}
+
+// PocketBase begrenzt eine Sammelanfrage standardmäßig auf 50 Einträge.
+const BATCH_SIZE = 50;
+
+async function sendInChunks(items, add) {
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = pb.createBatch();
+    for (const item of items.slice(i, i + BATCH_SIZE)) add(batch, item);
+    await batch.send();
+  }
+}
+
+// Leert die in `data` vorkommenden Sammlungen und legt deren Datensätze mit
+// den Ids aus der Datei neu an. Nicht atomar über mehrere Sammlungen hinweg
+// (jede Sammelanfrage für sich schon) — deshalb der Rollback in restoreBackup().
+// Sammlungen aus CREATED_ORDERED laufen einzeln statt gebündelt, s. backup.js.
+async function replaceAll(data, onProgress) {
+  const present = BACKUP_COLLECTIONS.filter((n) => Array.isArray(data[n]));
+  const total = present.reduce((n, name) => n + data[name].length, 0);
+  let done = 0;
+  const tick = (n) => { done += n; onProgress?.(done, total); };
+
+  for (const name of [...present].reverse()) {
+    const ids = (await pb.collection(name).getFullList({ fields: "id" })).map((r) => r.id);
+    await sendInChunks(ids, (b, id) => b.collection(name).delete(id));
+  }
+  for (const name of present) {
+    const rows = orderForCreate(name, data[name]);
+    if (CREATED_ORDERED.has(name)) {
+      for (const row of rows) { await pb.collection(name).create(row); tick(1); }
+    } else {
+      await sendInChunks(rows, (b, row) => b.collection(name).create(row));
+      tick(rows.length);
+    }
+  }
+}
+
+// Ersetzt den Datenbestand durch den Inhalt einer Sicherungsdatei — nur nach
+// ausdrücklicher Bestätigung im UI. Sammlungen, die in der Datei fehlen,
+// bleiben unangetastet. Scheitert das Einspielen mitten drin, wird der vorher
+// gezogene Stand zurückgespielt, statt eine halb geleerte Datenbank zu lassen.
+export async function restoreBackup(backup, onProgress) {
+  validateBackup(backup);
+  const snapshot = await exportBackup();
+  try {
+    await replaceAll(backup.data, onProgress);
+  } catch (err) {
+    try {
+      await replaceAll(snapshot.data);
+    } catch (rollbackErr) {
+      throw new Error(
+        `Wiederherstellung fehlgeschlagen (${err.message}) und der alte Stand konnte nicht zurückgespielt werden (${rollbackErr.message}). Bitte nichts weiter ändern und die Sicherung erneut einspielen.`
+      );
+    }
+    throw new Error(`Wiederherstellung fehlgeschlagen, der vorherige Stand wurde zurückgespielt: ${err.message}`);
+  }
+}

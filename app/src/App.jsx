@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus, List, PieChart, Target, Settings, TrendingUp, Landmark, AlertTriangle } from "lucide-react";
 import * as api from "./pb.js";
-import { pb } from "./pb.js";
 import { reserveStatus } from "./ruecklagen.js";
 import { spentByCategory } from "./budget.js";
 import { MONTHS, Spinner, Toast, ErrorNote, Button, Field, inputCls, byId, UNKNOWN_ACC, Sheet, TxRow } from "./ui.jsx";
@@ -22,8 +21,14 @@ import { useDefaultAccountPref } from "./defaultAccountPref.js";
 const AVG_MONTHS_BACK = 3;
 
 export default function App() {
-  const [authed, setAuthed] = useState(pb.authStore.isValid);
-  useEffect(() => pb.authStore.onChange(() => setAuthed(pb.authStore.isValid)), []);
+  // Die Android-Fassung hat lokale Daten und keinen Login (api.needsLogin).
+  if (!api.needsLogin) return <Shell />;
+  return <AuthGate />;
+}
+
+function AuthGate() {
+  const [authed, setAuthed] = useState(api.isAuthed());
+  useEffect(() => api.onAuthChange(() => setAuthed(api.isAuthed())), []);
   return authed ? <Shell /> : <Login />;
 }
 
@@ -641,7 +646,14 @@ function Shell() {
           )}
         </aside>
 
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden">
+        {/* Insets fuer Notch/Statusleiste oben und die Geste-/Navigationsleiste
+            unten (env(safe-area-inset-*), noetig in der Android-App seit
+            targetSdk 35 - Android zeichnet dort Edge-to-Edge). Im Browser sind
+            die Werte 0. FAB und Bottom-Nav sind absolut mit bottom:0/var(--nav-h)
+            positioniert - bei absolut positionierten Kindern zaehlt bottom:0
+            relativ zur Padding-Box, das Padding schiebt sie also automatisch
+            ueber die Geste-/Nav-Leiste, ohne --nav-h anzufassen. */}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col relative overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
           <header className="pt-5 pb-3 border-b border-stone-200 dark:border-stone-700 px-5 relative">
             {/* Mobil: Monatsnavigation ruecken eng an den Titel, damit rechts
                 Platz fuers Einstellungen-Zahnrad frei bleibt - vorher sass

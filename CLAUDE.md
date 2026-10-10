@@ -19,6 +19,7 @@ Produktionsdatenbank wird dabei nie überschrieben).
 ### Stack
 
 - Build geht nach `pb_public/`, PocketBase liefert es aus — ein Ursprung, keine CORS-Fragen. Versionen/Ports/Abhängigkeiten: `docker-compose.yml`, `app/package.json`.
+- **Zwei Ziele, eine Codebasis** (ab `0.58.0`): dieselbe App läuft entweder als Docker-Container (PocketBase, Standard) oder als Android-App (Capacitor, lokale SQLite-Datenbank, kein Server, kein Login). Die Screens importieren nur `app/src/pb.js`; das ist eine Weiche, die beim Build (`HB_TARGET`, `app/vite.config.js`) auf `app/src/backend/pocketbase.js` oder `app/src/backend/sqlite.js` zeigt. Android-Hülle, Bauanleitung und F-Droid-Stand: [ANDROID.md](ANDROID.md).
 
 ### Sammlungen
 
@@ -61,6 +62,8 @@ Siehe [CHANGELOG.md](CHANGELOG.md) — wird bei jedem Versions-Bump um einen neu
 ## Bewusst nicht gebaut
 
 Kein Offline-Betrieb, keine lokale Datenbank auf dem Gerät, kein Sync. Das war eine ausdrückliche Entscheidung gegen Komplexität: die Daten liegen an genau einem Ort, damit fallen `dirty`-Flags, Grabsteine, Cursor, Zeitstempel-Konflikte und UUID-Kollisionen alle weg.
+
+**Gilt für die Server-Fassung.** Die Android-Fassung (`0.58.0`, früher eigenes Repo `haushaltsbuch-android`) ist bewusst das Gegenteil: lokale Datenbank auf dem Gerät, einziger Speicherort, **kein Sync zwischen beiden Fassungen** — Daten wandern nur über die JSON-Sicherung (Einstellungen), deren Format beide teilen. Das ist keine Aufweichung der Regel oben, sondern zwei getrennte Betriebsarten mit je einem Speicherort.
 
 Falls Offline später doch gefordert wird, ist der richtige nächste Schritt nicht ein vollständiger Sync, sondern eine Warteschlange nur für neu erfasste Buchungen — eine Richtung, ein Bruchteil des Aufwands.
 
@@ -108,6 +111,7 @@ Zweiter, bewusst getrennter Import-Weg (`ImportPdf.jsx`, ab `0.45.0`) für DKB-K
 - Konkrete Dateien und Diffs statt allgemeiner Ratschläge
 - Bei mehreren Wegen: kurz die Abwägung nennen, dann eine Empfehlung geben, nicht die Entscheidung zurückspielen
 - Bestehende Muster fortführen — `pb.js` kapselt jeden Datenzugriff, Screens sprechen nie direkt mit dem SDK
+- **Zwei Backends synchron halten:** jede neue oder geänderte Datenfunktion braucht ihr Gegenstück in *beiden* `app/src/backend/pocketbase.js` und `app/src/backend/sqlite.js` (gleicher Name, gleiche Rückgabeform), jedes neue Feld zusätzlich in `setup/schema.mjs` (+ Migrationsskript) **und** als neue nummerierte Migration in `app/src/backend/sqlite-db.js`. Sonst baut die eine Fassung, die andere bricht erst zur Laufzeit. Nach Änderungen an Daten-Code beide Ziele bauen (`npm run build`, `npm run build:android`)
 - Neue Abhängigkeiten nur mit Begründung; das Projekt kommt bewusst mit wenigen aus
 - Warnen, wenn ein Vorschlag eine der oben genannten festen Regeln verletzt
 

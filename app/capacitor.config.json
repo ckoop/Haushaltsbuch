@@ -1,0 +1,8 @@
+{
+  "appId": "de.christiankoop.haushaltsbuch",
+  "appName": "Haushaltsbuch",
+  "webDir": "dist",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
+}

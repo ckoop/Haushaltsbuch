@@ -376,10 +376,12 @@ export default function Konten({ accounts, categories, tags, people, balances, r
         <FileText size={16} /> PDF-Kontoauszug importieren
       </Button>
 
-      <button onClick={api.logout}
-        className="w-full mt-8 py-3 text-sm text-stone-500 dark:text-stone-400 flex items-center justify-center gap-2">
-        <LogOut size={15} /> Abmelden
-      </button>
+      {api.needsLogin && (
+        <button onClick={api.logout}
+          className="w-full mt-8 py-3 text-sm text-stone-500 dark:text-stone-400 flex items-center justify-center gap-2">
+          <LogOut size={15} /> Abmelden
+        </button>
+      )}
 
       {editing && (
         <AccountEditor draft={editing} accounts={accounts} people={people} onClose={() => setEditing(null)}

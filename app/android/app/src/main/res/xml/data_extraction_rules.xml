@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup (Cloud-Backup zu Google) und Geraetewechsel (Device
+  Transfer) sichern bewusst ausschliesslich die SQLite-Datenbank - die
+  einzige Stelle mit echten Nutzerdaten (Konten, Kategorien, Buchungen,
+  siehe docs/ANDROID.md). WebView-lokale Praeferenzen (Theme, Startkonto)
+  sind nicht enthalten: sie fallen beim Wiederherstellen auf ihre
+  Standardwerte zurueck, kein Datenverlust. Das manuelle JSON-Backup
+  (Einstellungen) bleibt der Weg fuer einen bewussten Export/Umzug.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

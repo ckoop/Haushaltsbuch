@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aeltere Backup-API (bis API 30) - gleiche Regel wie
+     data_extraction_rules.xml (API 31+), s. dort. -->
+<full-backup-content>
+    <include domain="database" path="." />
+</full-backup-content>

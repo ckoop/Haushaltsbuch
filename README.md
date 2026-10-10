@@ -11,6 +11,12 @@ funktionieren mit den üblichen Fallstricken deutscher Bank-Exporte out of
 the box — Windows-1252-Kodierung, Komma als Dezimaltrennzeichen,
 Vorspann-Zeilen, alles wird erkannt.
 
+## Als Android-App
+
+Dieselbe App gibt es auch als eigenständige Android-App mit lokaler Datenbank,
+ganz ohne Server — Bauanleitung in [ANDROID.md](ANDROID.md). Container und App
+haben getrennte Daten; Umziehen geht über die JSON-Sicherung.
+
 ## Screenshots
 
 | Buchungen | Auswertung |

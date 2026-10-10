@@ -26,22 +26,13 @@ export default function Einstellungen({ depotEnabled, setDepotEnabled, accounts,
   const [restoreProgress, setRestoreProgress] = useState(null); // { done, total }
   const [restoreError, setRestoreError] = useState(null);
 
-  // Download über einen Blob-Link statt Server-Route: die Daten kommen ohnehin
-  // schon über die angemeldete API, ein eigener Endpunkt wäre nur ein zweiter
-  // Zugriffsweg. Funktioniert auch ohne sicheren Kontext (http://192.168.x.x).
+  // Wie die Datei beim Nutzer landet, bestimmt das Backend (pb.js): Blob-
+  // Download im Browser, Android-"Teilen"-Dialog in der App.
   const handleExport = async () => {
     setExportBusy(true); setExportError(null);
     try {
       const backup = await api.exportBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `haushaltsbuch-sicherung-${todayISO()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await api.saveBackupFile(`haushaltsbuch-sicherung-${todayISO()}.json`, JSON.stringify(backup, null, 2));
     } catch (e) {
       setExportError(e.message || String(e));
     } finally {
@@ -96,6 +87,8 @@ export default function Einstellungen({ depotEnabled, setDepotEnabled, accounts,
       </div>
       <p className="text-xs text-stone-400 dark:text-stone-500 mb-4">
         Ausgeschaltet verschwindet nur der Reiter — Positionen und Trades bleiben erhalten.
+        Kurse werden nur beim Öffnen des Depots bzw. über „Aktualisieren" von Yahoo Finance
+        geholt; sonst wird nichts ins Internet gesendet.
       </p>
 
       <p className="text-xs text-stone-500 dark:text-stone-400 mt-8 mb-2.5">Darstellung</p>
