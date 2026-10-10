@@ -8,7 +8,7 @@ import { version } from "./package.json";
 //   server  (Standard)  Build nach ../pb_public, PocketBase liefert es aus,
 //                       Daten ueber backend/pocketbase.js.
 //   android             Build nach dist/, daraus macht "cap sync" die
-//                       Android-Huelle (s. ANDROID.md), Daten lokal in SQLite
+//                       Android-Huelle (s. docs/ANDROID.md), Daten lokal in SQLite
 //                       ueber backend/sqlite.js.
 // Die Screens importieren nur ../pb.js; "@backend" biegt dort aufs jeweilige
 // Backend um. Im Dev-Modus laeuft die App auf 5173 und leitet /api an den

@@ -1,6 +1,6 @@
 # ACHTUNG: Stand aus dem frueheren Repo haushaltsbuch-android - Repo-URL, commit, subdir und
 # Init-Zeile passen noch nicht zur Struktur dieses Repos (App unter app/, Android-Huelle unter
-# app/android). Anpassung offen, siehe ANDROID.md "F-Droid".
+# app/android). Anpassung offen, siehe docs/ANDROID.md "F-Droid".
 Categories:
   - Money
 License: MIT

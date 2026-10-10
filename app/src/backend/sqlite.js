@@ -10,7 +10,7 @@ import { DEFAULT_CATEGORIES } from "../defaults.js";
 import { query, run, batch, genId, nowStamp, dateStamp, isUniqueViolation } from "./sqlite-db.js";
 
 // Android-Backend: lokale SQLite-Datenbank statt PocketBase, kein Server, keine
-// Anmeldung (siehe ANDROID.md). Diese Datei hat bewusst dieselben Funktionsnamen
+// Anmeldung (siehe docs/ANDROID.md). Diese Datei hat bewusst dieselben Funktionsnamen
 // und Rueckgabeformen wie backend/pocketbase.js - die Screens importieren
 // ausschliesslich ../pb.js (waehlt beim Build eines von beiden, s.
 // vite.config.js) und merken vom Unterschied nichts. Wer hier eine Funktion

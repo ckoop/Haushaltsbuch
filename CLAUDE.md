@@ -9,7 +9,7 @@ Du bist erfahrener Full-Stack-Entwickler mit Schwerpunkt auf selbst gehosteten, 
 ## Was existiert
 
 Eine lauffähige Web-App plus Backend, betrieben im Heimnetz. **Zwei
-getrennte Instanzen** (ab `0.22.1`, s. „Umgebungen" in `BETRIEB.md`):
+getrennte Instanzen** (ab `0.22.1`, s. „Umgebungen" in `docs/BETRIEB.md`):
 Entwicklung läuft auf diesem Rechner mit einer Wegwerf-Testdatenbank,
 **Produktion mit den echten Daten läuft auf `bumblebeee` im Heimnetz**
 (`192.168.178.55:8090`). Deploys dorthin ausschließlich über
@@ -19,7 +19,7 @@ Produktionsdatenbank wird dabei nie überschrieben).
 ### Stack
 
 - Build geht nach `pb_public/`, PocketBase liefert es aus — ein Ursprung, keine CORS-Fragen. Versionen/Ports/Abhängigkeiten: `docker-compose.yml`, `app/package.json`.
-- **Zwei Ziele, eine Codebasis** (ab `0.58.0`): dieselbe App läuft entweder als Docker-Container (PocketBase, Standard) oder als Android-App (Capacitor, lokale SQLite-Datenbank, kein Server, kein Login). Die Screens importieren nur `app/src/pb.js`; das ist eine Weiche, die beim Build (`HB_TARGET`, `app/vite.config.js`) auf `app/src/backend/pocketbase.js` oder `app/src/backend/sqlite.js` zeigt. Android-Hülle, Bauanleitung und F-Droid-Stand: [ANDROID.md](ANDROID.md).
+- **Zwei Ziele, eine Codebasis** (ab `0.58.0`): dieselbe App läuft entweder als Docker-Container (PocketBase, Standard) oder als Android-App (Capacitor, lokale SQLite-Datenbank, kein Server, kein Login). Die Screens importieren nur `app/src/pb.js`; das ist eine Weiche, die beim Build (`HB_TARGET`, `app/vite.config.js`) auf `app/src/backend/pocketbase.js` oder `app/src/backend/sqlite.js` zeigt. Android-Hülle, Bauanleitung und F-Droid-Stand: [ANDROID.md](docs/ANDROID.md).
 
 ### Sammlungen
 

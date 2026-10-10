@@ -1,6 +1,6 @@
 # Android-App
 
-Dieselbe App wie der Docker-Container, als eigenständige Android-App: Capacitor-Hülle, Daten in einer lokalen SQLite-Datenbank auf dem Gerät, kein Server, kein Login. Die Codebasis ist `app/` — nur das Backend dahinter unterscheidet sich (`app/src/backend/`, Details in [app/CLAUDE.md](app/CLAUDE.md)).
+Dieselbe App wie der Docker-Container, als eigenständige Android-App: Capacitor-Hülle, Daten in einer lokalen SQLite-Datenbank auf dem Gerät, kein Server, kein Login. Die Codebasis ist `app/` — nur das Backend dahinter unterscheidet sich (`app/src/backend/`, Details in [app/CLAUDE.md](../app/CLAUDE.md)).
 
 **Kein Sync zwischen App und Server.** Beide haben eigene Daten. Umziehen geht über die JSON-Sicherung (Einstellungen → Sichern/Wiederherstellen): das Dateiformat ist dasselbe, eine Android-Sicherung lässt sich im Server einspielen und umgekehrt. Bereiche, die in der Datei fehlen, bleiben beim Einspielen unverändert.
 
@@ -15,7 +15,7 @@ npm run android:apk      # Frontend bauen, in die Hülle kopieren, Release-APK b
 
 Ergebnis: `app/android/app/build/outputs/apk/release/app-release.apk`. Einzelschritte: `npm run build:android` (nur Frontend nach `app/dist/`), `npm run android:sync` (zusätzlich `cap sync`). Für den Debug-Build ohne Schlüssel reicht `./gradlew assembleDebug` in `app/android/`.
 
-Beim Arbeiten mit Claude passiert das automatisch: ein Stop-Hook baut nach jeder Änderung beide Ziele und legt die APK in `~/haushaltsbuch-apk/` ab (`haushaltsbuch-<Version>.apk` und `haushaltsbuch-latest.apk`), Details in [CLAUDE.md](CLAUDE.md#automatischer-build-beider-ziele). Von Hand: `scripts/build_all.sh --force`.
+Beim Arbeiten mit Claude passiert das automatisch: ein Stop-Hook baut nach jeder Änderung beide Ziele und legt die APK in `~/haushaltsbuch-apk/` ab (`haushaltsbuch-<Version>.apk` und `haushaltsbuch-latest.apk`), Details in [CLAUDE.md](../CLAUDE.md#automatischer-build-beider-ziele). Von Hand: `scripts/build_all.sh --force`.
 
 Installieren auf einem angeschlossenen Gerät:
 
@@ -33,7 +33,7 @@ Release-Builds werden mit `app/android/keystore/release.keystore` signiert; Zuga
 
 ## Datenbank-Schema
 
-SQLite-Schema und Migrationen: `app/src/backend/sqlite-db.js` (Version über `PRAGMA user_version`). Es muss zu `setup/schema.mjs` (PocketBase) passen — neue Felder in **beiden** Welten anlegen, s. Arbeitsweise in [CLAUDE.md](CLAUDE.md).
+SQLite-Schema und Migrationen: `app/src/backend/sqlite-db.js` (Version über `PRAGMA user_version`). Es muss zu `setup/schema.mjs` (PocketBase) passen — neue Felder in **beiden** Welten anlegen, s. Arbeitsweise in [CLAUDE.md](../CLAUDE.md).
 
 ## Depot-Kurse
 

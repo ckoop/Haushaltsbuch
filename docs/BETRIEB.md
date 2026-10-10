@@ -1,7 +1,7 @@
 # Haushaltsbuch — Betrieb
 
 Technische Referenz für Aufsetzen und Administration. Für den Überblick über
-Funktionen und eine kurze Installationsanleitung siehe [README.md](README.md).
+Funktionen und eine kurze Installationsanleitung siehe [README.md](../README.md).
 
 Ein Container im Heimnetz: PocketBase liefert Datenbank, Login, REST-API und
 das Web-Frontend aus. Kein Reverse Proxy, kein Zertifikat, keine Domain.

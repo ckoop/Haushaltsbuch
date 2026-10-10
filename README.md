@@ -14,7 +14,7 @@ Vorspann-Zeilen, alles wird erkannt.
 ## Als Android-App
 
 Dieselbe App gibt es auch als eigenständige Android-App mit lokaler Datenbank,
-ganz ohne Server — Bauanleitung in [ANDROID.md](ANDROID.md). Container und App
+ganz ohne Server — Bauanleitung in [ANDROID.md](docs/ANDROID.md). Container und App
 haben getrennte Daten; Umziehen geht über die JSON-Sicherung.
 
 ## Screenshots
@@ -90,4 +90,4 @@ npm run build          # baut direkt nach ../pb_public
 
 Die App ist danach unter `http://<server-ip>:8090` erreichbar. Für Details
 zu Zugriffsmodell, Backups, Schema-Entscheidungen und Betrieb ohne HTTPS im
-Heimnetz siehe [BETRIEB.md](BETRIEB.md).
+Heimnetz siehe [BETRIEB.md](docs/BETRIEB.md).
