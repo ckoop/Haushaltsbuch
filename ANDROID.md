@@ -15,6 +15,8 @@ npm run android:apk      # Frontend bauen, in die Hülle kopieren, Release-APK b
 
 Ergebnis: `app/android/app/build/outputs/apk/release/app-release.apk`. Einzelschritte: `npm run build:android` (nur Frontend nach `app/dist/`), `npm run android:sync` (zusätzlich `cap sync`). Für den Debug-Build ohne Schlüssel reicht `./gradlew assembleDebug` in `app/android/`.
 
+Beim Arbeiten mit Claude passiert das automatisch: ein Stop-Hook baut nach jeder Änderung beide Ziele und legt die APK in `~/haushaltsbuch-apk/` ab (`haushaltsbuch-<Version>.apk` und `haushaltsbuch-latest.apk`), Details in [CLAUDE.md](CLAUDE.md#automatischer-build-beider-ziele). Von Hand: `scripts/build_all.sh --force`.
+
 Installieren auf einem angeschlossenen Gerät:
 
 ```bash

@@ -55,6 +55,10 @@ Die Version wird unaufgefordert im selben Commit wie die Codeänderung erhöht, 
 
 Der Identifier liegt in `app/package.json` (`version`), wird über `vite.config.js` (`define: { __APP_VERSION__ }`) in den Build eingebunden und erscheint unten in der Desktop-Sidebar (`App.jsx`). Im mobilen Layout ist er nicht sichtbar, dort ist kein Platz dafür vorgesehen.
 
+## Automatischer Build beider Ziele
+
+Ein Stop-Hook (`.claude/settings.json`) ruft nach jeder Claude-Antwort `scripts/build_all.sh`. Hat sich seit dem letzten erfolgreichen Lauf etwas an `app/src`, `app/public`, den Gradle-/Manifest-Dateien oder `pb_hooks` geändert (Inhalts-Hash, `.build-stamp`), läuft: Tests → Server-Frontend nach `pb_public/` (der lokale Container liefert es direkt aus; Neustart nur bei geänderten `pb_hooks`) → signierte Release-APK, abgelegt als `~/haushaltsbuch-apk/haushaltsbuch-<Version>.apk` und `haushaltsbuch-latest.apk` (anderer Ort: `HB_APK_DIR`). Ohne Änderung endet das Skript sofort. Ein roter Test oder Build-Fehler wird als Hook-Fehler an Claude zurückgemeldet und muss behoben werden. **Deployt nicht** auf bumblebeee — das bleibt `deploy/deploy_bumblebeee.sh` auf ausdrückliche Anfrage. Von Hand: `scripts/build_all.sh --force`.
+
 ## Änderungsprotokoll
 
 Siehe [CHANGELOG.md](CHANGELOG.md) — wird bei jedem Versions-Bump um einen neuen Eintrag ergänzt (neueste zuerst), nicht rückwirkend über die Git-Historie hinaus vervollständigt. Ausgelagert aus dieser Datei, damit die Historie offline lesbar bleibt, ohne bei jeder Session mitgeladen zu werden.

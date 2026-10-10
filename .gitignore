@@ -19,3 +19,7 @@ app/android/keystore.properties
 *.aab
 *.jks
 *.keystore
+
+# Stempel/Sperre von scripts/build_all.sh
+.build-stamp
+.build.lock
