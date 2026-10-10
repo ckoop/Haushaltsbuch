@@ -3,7 +3,11 @@ import { todayISO } from "../ui.jsx";
 import {
   BACKUP_SCHEMA_VERSION, BACKUP_COLLECTIONS, CREATED_ORDERED, stripRecord, validateBackup, orderForCreate,
 } from "../backup.js";
-import { RULE_DUP_WINDOW_DAYS, shiftDate, findDuplicateCandidates } from "../dauerauftraege.js";
+import {
+  RULE_DUP_WINDOW_DAYS, MONTHS_PER, shiftDate, findDuplicateCandidates, processDueRules,
+} from "../dauerauftraege.js";
+import { monthRange, dateOnly, addMonths } from "../dates.js";
+import { DEFAULT_CATEGORIES } from "../defaults.js";
 
 // Keine feste Adresse: die App spricht mit dem Server, von dem sie geladen wurde.
 // Damit funktioniert sie im WLAN und im WireGuard-Tunnel gleichermassen.
@@ -37,19 +41,6 @@ export async function saveBackupFile(filename, json) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-
-// ------------------------------------------------------------------- Zeitraum
-
-export const monthRange = (y, m) => {
-  const start = `${y}-${String(m + 1).padStart(2, "0")}-01`;
-  const ny = m === 11 ? y + 1 : y;
-  const nm = m === 11 ? 0 : m + 1;
-  const end = `${ny}-${String(nm + 1).padStart(2, "0")}-01`;
-  return { start, end, key: start.slice(0, 7) };
-};
-
-// PocketBase liefert Datumsfelder als "2026-08-31 00:00:00.000Z" zurueck.
-export const dateOnly = (v) => (v ?? "").slice(0, 10);
 
 // ------------------------------------------------------------------- Stammdaten
 
@@ -332,19 +323,6 @@ export const listRuleTransactions = (ruleId) =>
     sort: "date", fields: "date,amount_cents",
   });
 
-const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
-
-// Naechstes Datum nach n Monaten, auf gueltigen Kalendertag begrenzt -
-// 31. Jan + 1 Monat -> 28./29. Feb, nicht 3. Maerz.
-export function addMonths(iso, months) {
-  const [y, m, d] = iso.split("-").map(Number);
-  const total = m - 1 + months;
-  const ny = y + Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  const lastDay = new Date(ny, nm, 0).getDate();
-  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(d, lastDay)).padStart(2, "0")}`;
-}
-
 // Eine Periode eines Dauerauftrags als Buchung anlegen. Dedup ueber den
 // bestehenden import_hash-Unique-Index, falls zwei Geraete gleichzeitig
 // pruefen - gibt bei einer Unique-Verletzung (= ein anderes Geraet hat diese
@@ -393,7 +371,6 @@ async function findRuleDuplicates(rule, due, claimed) {
 // resolveRuleConflict() entschieden hat - und spaetere Perioden derselben
 // Regel warten, damit die Reihenfolge stimmt.
 export async function runDueRecurringRules() {
-  const today = todayISO();
   // Exklusive Obergrenze statt "next_due <= today": next_due steht als
   // "2026-09-05 00:00:00.000Z" (Text) in der DB, ein Vergleich mit dem reinen
   // Datumsstring "2026-09-05" waere lexikographisch groesser (laengerer
@@ -402,33 +379,11 @@ export async function runDueRecurringRules() {
   const due = await pb.collection("recurring_rules").getFullList({
     filter: pb.filter("active = true && next_due < {:tomorrow}", { tomorrow }),
   });
-  const created = [];
-  const conflicts = [];
-  const claimed = new Set();
-  for (const rule of due) {
-    try {
-      let next = dateOnly(rule.next_due);
-      while (next <= today) {
-        const candidates = await findRuleDuplicates(rule, next, claimed);
-        if (candidates.length > 0) {
-          for (const c of candidates) claimed.add(c.id);
-          conflicts.push({ rule, due: next, candidates });
-          break;
-        }
-        const row = await bookRulePeriod(rule, next);
-        if (row) created.push(row);
-        next = addMonths(next, MONTHS_PER[rule.frequency]);
-      }
-      if (next !== dateOnly(rule.next_due)) {
-        await pb.collection("recurring_rules").update(rule.id, { next_due: next });
-      }
-    } catch (e) {
-      // Eine kaputte Regel (z. B. Konto zwischenzeitlich geloescht) soll die
-      // anderen nicht blockieren - naechster Versuch beim naechsten App-Start.
-      console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
-    }
-  }
-  return { created, conflicts };
+  return processDueRules(due, todayISO(), {
+    findDuplicates: findRuleDuplicates,
+    book: bookRulePeriod,
+    saveNextDue: (rule, next) => pb.collection("recurring_rules").update(rule.id, { next_due: next }),
+  });
 }
 
 // Entscheidung des Nutzers zu einem Konflikt aus runDueRecurringRules():
@@ -714,20 +669,6 @@ export const fetchHistory = (ticker, range, interval) =>
   pb.send("/api/depot/quote", { ticker, range, interval });
 
 // ------------------------------------------------------------------- Erstbefüllung
-
-export const DEFAULT_CATEGORIES = [
-  { name: "Lebensmittel", icon: "cart",      kind: "expense", color: "emerald" },
-  { name: "Restaurant",   icon: "utensils",  kind: "expense", color: "orange" },
-  { name: "Mobilität",    icon: "bus",       kind: "expense", color: "violet" },
-  { name: "Wohnen",       icon: "home",      kind: "expense", color: "sky" },
-  { name: "Energie",      icon: "zap",       kind: "expense", color: "yellow" },
-  { name: "Freizeit",     icon: "film",      kind: "expense", color: "pink" },
-  { name: "Gesundheit",   icon: "heart",     kind: "expense", color: "rose" },
-  { name: "Kleidung",     icon: "shirt",     kind: "expense", color: "amber" },
-  { name: "Abos",         icon: "phone",     kind: "expense", color: "teal" },
-  { name: "Sonstiges",    icon: "dots",      kind: "expense", color: "stone" },
-  { name: "Einkommen",    icon: "income",    kind: "income",  color: "lime" },
-];
 
 export async function seedDefaults() {
   const batch = pb.createBatch();

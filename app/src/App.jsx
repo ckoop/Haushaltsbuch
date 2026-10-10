@@ -463,7 +463,7 @@ function Shell() {
     try {
       await api.saveRecurringRule({
         ...ruleBaseFor(tx), payee: tx.payee, note: tx.note, frequency: tx.recurring,
-        next_due: api.addMonths(api.dateOnly(tx.date), { monthly: 1, quarterly: 3, yearly: 12 }[tx.recurring]),
+        next_due: api.addMonths(api.dateOnly(tx.date), api.MONTHS_PER[tx.recurring]),
         active: true,
       });
       flash("Dauerauftrag angelegt");

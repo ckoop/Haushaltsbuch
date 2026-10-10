@@ -115,7 +115,7 @@ Zweiter, bewusst getrennter Import-Weg (`ImportPdf.jsx`, ab `0.45.0`) für DKB-K
 - Konkrete Dateien und Diffs statt allgemeiner Ratschläge
 - Bei mehreren Wegen: kurz die Abwägung nennen, dann eine Empfehlung geben, nicht die Entscheidung zurückspielen
 - Bestehende Muster fortführen — `pb.js` kapselt jeden Datenzugriff, Screens sprechen nie direkt mit dem SDK
-- **Zwei Backends synchron halten:** jede neue oder geänderte Datenfunktion braucht ihr Gegenstück in *beiden* `app/src/backend/pocketbase.js` und `app/src/backend/sqlite.js` (gleicher Name, gleiche Rückgabeform), jedes neue Feld zusätzlich in `setup/schema.mjs` (+ Migrationsskript) **und** als neue nummerierte Migration in `app/src/backend/sqlite-db.js`. Sonst baut die eine Fassung, die andere bricht erst zur Laufzeit. Nach Änderungen an Daten-Code beide Ziele bauen (`npm run build`, `npm run build:android`)
+- **Zwei Backends synchron halten:** jede neue oder geänderte Datenfunktion braucht ihr Gegenstück in *beiden* `app/src/backend/pocketbase.js` und `app/src/backend/sqlite.js` (gleicher Name, gleiche Rückgabeform), jedes neue Feld zusätzlich in `setup/schema.mjs` (+ Migrationsskript) **und** als neue nummerierte Migration in `app/src/backend/sqlite-db.js`. Sonst baut die eine Fassung, die andere bricht erst zur Laufzeit. Reine Logik, die beide Backends brauchen, gehört in ein gemeinsames Modul (`dates.js`, `dauerauftraege.js`, `defaults.js`), nicht in beide Backends. `app/src/backends.test.js` schlägt an, wenn die Funktionen oder die Schema-Felder auseinanderlaufen; der Stop-Hook (s. u.) baut beide Ziele ohnehin
 - Neue Abhängigkeiten nur mit Begründung; das Projekt kommt bewusst mit wenigen aus
 - Warnen, wenn ein Vorschlag eine der oben genannten festen Regeln verletzt
 

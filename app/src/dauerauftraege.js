@@ -1,6 +1,12 @@
 // Reine Logik rund um das Nachbuchen fälliger Daueraufträge - ohne
-// PocketBase-Zugriff, wie csv.js/ruecklagen.js, damit sie ohne Browser testbar
-// bleibt. Der Datenzugriff (Kandidaten laden, buchen) lebt in pb.js.
+// Datenzugriff, wie csv.js/ruecklagen.js, damit sie ohne Browser testbar
+// bleibt. Der Datenzugriff (Kandidaten laden, buchen) lebt in den Backends
+// (backend/pocketbase.js, backend/sqlite.js) und wird hier hineingereicht.
+
+import { addMonths } from "./dates.js";
+
+// Monate pro Wiederholung einer Regel (recurring_rules.frequency).
+export const MONTHS_PER = { monthly: 1, quarterly: 3, yearly: 12 };
 
 // Wie weit vom Fälligkeitstag entfernt eine schon vorhandene Buchung liegen
 // darf und trotzdem als "evtl. dieselbe" gilt. Banken buchen Daueraufträge
@@ -69,4 +75,43 @@ export function matchRecurringRule(row, recRules, accountId) {
     if (haystack.includes(payee)) return r;
   }
   return null;
+}
+
+// Der Ablauf von "fällige Daueraufträge nachbuchen", für beide Backends
+// derselbe - nur das Laden der fälligen Regeln und die drei Zugriffe in `io`
+// unterscheiden sich:
+//   io.findDuplicates(rule, due, claimed) -> Kandidaten (findDuplicateCandidates)
+//   io.book(rule, date)                   -> neue Buchung oder null, wenn der
+//                                            eindeutige Hash sie schon kennt
+//   io.saveNextDue(rule, nextISO)         -> Regel auf den neuen Termin setzen
+// Hat eine Regel einen Treffer in findDuplicates, wird sie NICHT gebucht,
+// sondern landet als Rückfrage in `conflicts` (ab 0.54.0); ihr next_due bleibt
+// dann stehen, bis der Nutzer entschieden hat.
+export async function processDueRules(dueRules, today, io) {
+  const created = [];
+  const conflicts = [];
+  const claimed = new Set();
+  for (const rule of dueRules) {
+    try {
+      const start = (rule.next_due ?? "").slice(0, 10);
+      let next = start;
+      while (next <= today) {
+        const candidates = await io.findDuplicates(rule, next, claimed);
+        if (candidates.length > 0) {
+          for (const c of candidates) claimed.add(c.id);
+          conflicts.push({ rule, due: next, candidates });
+          break;
+        }
+        const row = await io.book(rule, next);
+        if (row) created.push(row);
+        next = addMonths(next, MONTHS_PER[rule.frequency]);
+      }
+      if (next !== start) await io.saveNextDue(rule, next);
+    } catch (e) {
+      // Eine kaputte Regel (z. B. Konto zwischenzeitlich geloescht) soll die
+      // anderen nicht blockieren - naechster Versuch beim naechsten App-Start.
+      console.error("Dauerauftrag fehlgeschlagen:", rule.id, e);
+    }
+  }
+  return { created, conflicts };
 }

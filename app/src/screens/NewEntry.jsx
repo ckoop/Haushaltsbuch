@@ -71,7 +71,7 @@ export default function NewEntry({ accounts, categories, defaultAcc, onClose, on
         try {
           await api.saveRecurringRule({
             ...base, payee: payee.trim(), note: "", frequency: recurring,
-            next_due: api.addMonths(date, { monthly: 1, quarterly: 3, yearly: 12 }[recurring]),
+            next_due: api.addMonths(date, api.MONTHS_PER[recurring]),
             active: true,
           });
         } catch (e) { msg += ` (${e.message})`; }
